@@ -3,7 +3,7 @@
 > Estado medido em 2026-09-12: o App **`elevcrm-release`** (App ID `4914675`)
 > existe na conta Elevstudio-Dev, está instalado só em `ElevCRM` (instalação
 > `161026683`), e `gh secret list --repo Elevstudio-Dev/ElevCRM` lista
-> `RELEASE_APP_ID` e `RELEASE_APP_PRIVATE_KEY`. **O ciclo inteiro foi ensaiado
+> `RELEASE_APP_CLIENT_ID` e `RELEASE_APP_PRIVATE_KEY`. **O ciclo inteiro foi ensaiado
 > em 2026-09-12:** o [PR #2 — Release 1.16.0](https://github.com/Elevstudio-Dev/ElevCRM/pull/2)
 > nasceu do bot, o merge criou a tag `v1.16.0` e o
 > [release](https://github.com/Elevstudio-Dev/ElevCRM/releases/tag/v1.16.0), e
@@ -48,13 +48,19 @@ mesmo token, acorda o `publish-image.yml`.
      (`elevcrm-release.AAAA-MM-DD.private-key.pem`) antes de supor a pasta.
 3. **Instalar o App no repositório:** *Install App* → Elevstudio-Dev → *Only
    select repositories* → `ElevCRM`.
-4. **Gravar os dois secrets.** O App ID não é segredo e pode ir pela linha de
-   comando; a chave vai direto do arquivo para o `gh`, sem passar por tela:
+4. **Gravar os dois secrets.** O Client ID (página *General* do App, começa
+   com `Iv23`) não é segredo e pode ir pela linha de comando; a chave vai
+   direto do arquivo para o `gh`, sem passar por tela:
 
    ```bash
-   gh secret set RELEASE_APP_ID --repo Elevstudio-Dev/ElevCRM --body 4914675
+   gh secret set RELEASE_APP_CLIENT_ID --repo Elevstudio-Dev/ElevCRM --body Iv23liXGhbxFNltHU6Rk
    gh secret set RELEASE_APP_PRIVATE_KEY --repo Elevstudio-Dev/ElevCRM < /mnt/d/Usuario/Downloads/elevcrm-release.AAAA-MM-DD.private-key.pem
    ```
+
+   (Até 2026-09-13 o secret era `RELEASE_APP_ID` com o App ID numérico
+   `4914675`, lido pelo input `app-id` — depreciado na v3 da action. O
+   workflow passou a ler `client-id`; o App ID continua valendo como valor
+   se um dia for preciso, mas o nome do secret é este.)
 
    O script `C:\Users\dudu8\elev-gravar-chave.sh` faz o segundo comando com o
    caminho já preenchido: `wsl -- bash /mnt/c/Users/dudu8/elev-gravar-chave.sh`.
@@ -101,10 +107,12 @@ cliente que a imagem não existe.
   `fix(shell)` do dia anterior. Regra que fica: **antes de disparar o ato 1,
   conferir `gh run list --workflow e2e --branch main --limit 3`**. O PR de
   release não é o lugar de descobrir vermelho.
-- **`app-id` está depreciado** no `actions/create-github-app-token@v3`
-  ("Use 'client-id' instead"). Ainda funciona. Quando trocar, o Client ID do App
-  está na página *General* (`Iv23liXGhbxFNltHU6Rk`) e não é segredo — mas o
-  nome do secret muda, e `release.yml` tem dois lugares que o leem.
+- **`app-id` estava depreciado** no `actions/create-github-app-token@v3`
+  ("Use 'client-id' instead") — trocado em 2026-09-13 pelo `client-id` com o
+  secret `RELEASE_APP_CLIENT_ID`, nos dois jobs. A guarda
+  `tag-so-nasce-da-main` reprova se `app-id` voltar. A troca só se prova no
+  próximo *Run workflow*: se o primeiro passo (`create-github-app-token`)
+  falhar, é este o lugar para olhar.
 - **O número da versão colide com o upstream.** O CHANGELOG anuncia `1.15.0`
   porque o merge de setembro trouxe a release *deles*; nossa última tag é
   `v1.14.0`, e a próxima sai `v1.16.0` — número que o upstream também tem, com

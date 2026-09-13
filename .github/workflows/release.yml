@@ -38,7 +38,11 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: token
         with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
+          # `client-id`, não `app-id`: o segundo está depreciado na v3 da action
+          # (aviso em toda execução desde o primeiro ensaio, 2026-09-12). O valor
+          # é o Client ID do App (`Iv23…`, página General) — público, mas vive
+          # em secret para não amarrar o workflow a um App específico.
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v7
@@ -97,7 +101,11 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: token
         with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
+          # `client-id`, não `app-id`: o segundo está depreciado na v3 da action
+          # (aviso em toda execução desde o primeiro ensaio, 2026-09-12). O valor
+          # é o Client ID do App (`Iv23…`, página General) — público, mas vive
+          # em secret para não amarrar o workflow a um App específico.
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v7
