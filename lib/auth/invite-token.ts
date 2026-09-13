@@ -9,11 +9,29 @@
  * Secret resolution: INVITE_TOKEN_SECRET → INTERNAL_SECRET → "dev-fallback".
  * Production deployments MUST set one of the first two. Verification uses
  * `timingSafeEqual` to avoid timing oracles.
+ *
+ * ⚠️ O "dev-fallback" NÃO vale em produção. `lib/env.ts` já exige
+ * `INTERNAL_SECRET` no boot quando NODE_ENV=production, então numa instalação
+ * normal esta linha nunca chega ao fallback — mas um token assinado com uma
+ * string que está no repositório público é um token que qualquer um forja, e
+ * a última linha de defesa não pode depender de um módulo de validação que
+ * alguém pode deixar de importar. Em produção, sem segredo, recusa alto.
+ * Fora de produção o fallback fica: os unitários assinam sem ambiente.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-const SECRET = (): string =>
-  process.env.INVITE_TOKEN_SECRET ?? process.env.INTERNAL_SECRET ?? "dev-fallback";
+const SECRET = (): string => {
+  // `||`, e não `??`: variável VAZIA (como vem no `.env.example`) é ausência,
+  // não um segredo de zero caracteres.
+  const configurado = process.env.INVITE_TOKEN_SECRET || process.env.INTERNAL_SECRET;
+  if (configurado) return configurado;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Token de convite sem segredo: defina INTERNAL_SECRET (ou INVITE_TOKEN_SECRET) em produção.",
+    );
+  }
+  return "dev-fallback";
+};
 
 export interface InvitePayload {
   invite_id: string;
