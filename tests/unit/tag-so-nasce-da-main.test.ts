@@ -62,8 +62,9 @@ describe("a tag nasce no CI, e nunca do GITHUB_TOKEN", () => {
     // GitHub). Se a tag nascesse dele, `publish-image.yml` nunca rodaria: a tag
     // existiria, nenhum erro apareceria, e NENHUMA VPS receberia a atualização.
     expect(release).toContain("actions/create-github-app-token");
-    // `client-id` (o Client ID do App), e não o `app-id` depreciado na v3.
-    expect(release).toContain("client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}");
+    // `client-id` (o input; o valor é o App ID, que ele aceita), e não o
+    // `app-id` depreciado na v3.
+    expect(release).toContain("client-id: ${{ secrets.RELEASE_APP_ID }}");
     expect(release, "app-id está depreciado na action; a troca foi em 2026-09-13").not.toMatch(
       /^\s+app-id:/m,
     );
