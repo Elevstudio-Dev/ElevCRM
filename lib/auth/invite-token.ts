@@ -6,32 +6,37 @@
  *   - body = base64url(JSON({invite_id, email, organization_id, role, exp}))
  *   - sig  = base64url(HMAC_SHA256(secret, body))
  *
- * Secret resolution: INVITE_TOKEN_SECRET → INTERNAL_SECRET → "dev-fallback".
- * Production deployments MUST set one of the first two. Verification uses
- * `timingSafeEqual` to avoid timing oracles.
+ * Secret resolution: INVITE_TOKEN_SECRET → INTERNAL_SECRET → "dev-fallback"
+ * (o último SÓ fora de produção). Verification uses `timingSafeEqual` to
+ * avoid timing oracles.
  *
- * ⚠️ O "dev-fallback" NÃO vale em produção. `lib/env.ts` já exige
- * `INTERNAL_SECRET` no boot quando NODE_ENV=production, então numa instalação
- * normal esta linha nunca chega ao fallback — mas um token assinado com uma
- * string que está no repositório público é um token que qualquer um forja, e
- * a última linha de defesa não pode depender de um módulo de validação que
- * alguém pode deixar de importar. Em produção, sem segredo, recusa alto.
- * Fora de produção o fallback fica: os unitários assinam sem ambiente.
+ * O segredo vem do `env` validado por `lib/env.ts`, e não de `process.env`
+ * cru — era o item (b) do risco T4 do threat model: lendo cru, este módulo não
+ * herdava garantia nenhuma do schema. Com `env`, em produção o boot já recusa
+ * subir sem `INTERNAL_SECRET`, e é essa a primeira defesa.
+ *
+ * A segunda, aqui: o "dev-fallback" é uma string do repositório público — um
+ * token assinado com ela é um token que qualquer um forja, e convite dá acesso
+ * a uma organização inteira. Em produção, sem segredo, ASSINAR lança (quem
+ * assina precisa saber) e VERIFICAR devolve `null` (nenhum token é válido) —
+ * sem lançar, porque `verifyInviteToken` roda no render da página pública de
+ * cadastro, e um throw ali é 500 para qualquer visitante com `?invite=`.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-const SECRET = (): string => {
-  // `||`, e não `??`: variável VAZIA (como vem no `.env.example`) é ausência,
-  // não um segredo de zero caracteres.
-  const configurado = process.env.INVITE_TOKEN_SECRET || process.env.INTERNAL_SECRET;
+import { env } from "@/lib/env";
+
+/**
+ * O segredo em vigor, ou `null` quando não há nenhum e estamos em produção.
+ * `||`, e não `??`: variável VAZIA (como vem no `.env.example`) é ausência,
+ * não um segredo de zero caracteres.
+ */
+function segredoConfigurado(): string | null {
+  const configurado = env.INVITE_TOKEN_SECRET || env.INTERNAL_SECRET;
   if (configurado) return configurado;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "Token de convite sem segredo: defina INTERNAL_SECRET (ou INVITE_TOKEN_SECRET) em produção.",
-    );
-  }
+  if (process.env.NODE_ENV === "production") return null;
   return "dev-fallback";
-};
+}
 
 export interface InvitePayload {
   invite_id: string;
@@ -46,19 +51,28 @@ function b64url(buf: Buffer): string {
 }
 
 export function signInviteToken(payload: InvitePayload): string {
+  const secret = segredoConfigurado();
+  if (secret === null) {
+    throw new Error(
+      "Token de convite sem segredo: defina INTERNAL_SECRET (ou INVITE_TOKEN_SECRET) em produção.",
+    );
+  }
   const json = JSON.stringify(payload);
   const body = b64url(Buffer.from(json, "utf8"));
-  const sig = b64url(createHmac("sha256", SECRET()).update(body).digest());
+  const sig = b64url(createHmac("sha256", secret).update(body).digest());
   return `${body}.${sig}`;
 }
 
 export function verifyInviteToken(token: string): InvitePayload | null {
+  const secret = segredoConfigurado();
+  if (secret === null) return null;
+
   const parts = token.split(".");
   if (parts.length !== 2) return null;
   const [body, sig] = parts;
   if (!body || !sig) return null;
 
-  const expected = b64url(createHmac("sha256", SECRET()).update(body).digest());
+  const expected = b64url(createHmac("sha256", secret).update(body).digest());
   if (sig.length !== expected.length) return null;
 
   try {

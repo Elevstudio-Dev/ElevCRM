@@ -7,12 +7,16 @@ pnpm elev:testar            # a Definition of Done inteira, ~55 min
 pnpm elev:testar --sem-e2e  # só as camadas rápidas, ~20 min — para mudança sem UI
 ```
 
-`scripts/elev-testar-tudo.sh` roda, nesta ordem, **gov:verify → test:db →
-test:shell → E2E** (build, seeds do CI, e as duas listas do CI, lidas do
-`e2e.yml`), guarda um log por camada em `.superpowers/testar-tudo/<data>/` e
-termina com um veredito. Existe porque `pnpm gov:verify` **não** cobre
-`test:db` nem `test:e2e` (CLAUDE.md), e em setembro a `main` ficou quatro dias
-com a E2E vermelha enquanto cada sessão rodava só "o recorte relevante".
+`scripts/elev-testar-tudo.sh` roda **gov:verify e test:db em paralelo, depois
+test:shell, depois a E2E** (build, seeds do CI, e as duas listas do CI, lidas
+por `scripts/listas-do-ci.ts` — o mesmo parser do gate
+`e2e-cobertura-completa` — com o mesmo `env` do passo do CI), guarda um log
+por camada, sem cor, em `.superpowers/testar-tudo/<data-hora>/` e termina com
+um veredito. Se o build ou o seed da E2E falhar, as partes **não rodam** — o
+Playwright serviria o `.next` da rodada anterior. Existe porque
+`pnpm gov:verify` **não** cobre `test:db` nem `test:e2e` (CLAUDE.md), e em
+setembro a `main` ficou quatro dias com a E2E vermelha enquanto cada sessão
+rodava só "o recorte relevante".
 
 As seções abaixo explicam cada camada — para rodar uma só, ou para ler o
 vermelho.

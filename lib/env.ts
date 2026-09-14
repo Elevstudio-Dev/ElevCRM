@@ -74,6 +74,12 @@ const schema = z.object({
   INTERNAL_SECRET: required("INTERNAL_SECRET"),
   /** Optional dedicated secret for cron endpoints (S-06.07 onwards). */
   INTERNAL_CRON_SECRET: z.string().optional().default(""),
+  /**
+   * Segredo dedicado OPCIONAL do token de convite de equipe; vazio cai em
+   * `INTERNAL_SECRET`. Declarado aqui para `lib/auth/invite-token.ts` ler o
+   * `env` validado em vez de `process.env` cru (threat model, T4b).
+   */
+  INVITE_TOKEN_SECRET: z.string().optional().default(""),
 
   /**
    * Retenção do arquivo do corpo cru dos webhooks (`webhook_events_log`).

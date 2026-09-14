@@ -626,15 +626,12 @@ export function AgendaClient({
         </SheetContent>
       </Sheet>
 
-      {/* `shrink-0` É CINTO DE SEGURANÇA. Com `min-h-full` na raiz a coluna
-          nunca fica menor que o conteúdo e nada encolhe. Mas se a raiz voltar
-          a `h-full` (caixa fixa), quem encolhe abaixo do conteúdo é só quem
-          tem `min-h-0` — e o histórico era o único filho com `min-h-0` SEM
-          `flex-1`: cabeçalho + histórico maiores que a janela, e ele absorvia
-          o excesso inteiro, até 0px. No CI (1280x720, banco limpo) nascia
-          invisível e `agenda-tela-do-produto` reprovava; localmente, em janela
-          alta, passava. Com `shrink-0` ele mede o conteúdo (até 320px) e rola
-          por dentro em qualquer caixa. */}
+      {/* `shrink-0` é cinto de segurança, OPCIONAL: o contrato desta tela é o
+          `min-h-full` da raiz (guarda `agenda-historico-nao-encolhe`), e com
+          ele nada encolhe. O cinto só age se a raiz voltar a `h-full` (caixa
+          fixa): aí quem encolhe abaixo do conteúdo é só quem tem `min-h-0`, e
+          o histórico era o único filho com `min-h-0` sem `flex-1` — absorvia o
+          excesso inteiro, até 0px. Pode sair num redesign; a guarda não o cobra. */}
       <HistoricoDaAgenda
         agendamentos={agendamentos}
         pessoas={pessoas}

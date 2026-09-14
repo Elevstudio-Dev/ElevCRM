@@ -18,5 +18,6 @@ Rode a Definition of Done inteira nesta máquina e reporte o resultado por camad
    specs vermelhas pelo nome com a causa, e o que você consertou. Nunca diga
    "passou" sem ter lido a linha `TUDO VERDE` deste run — resultado de rodada
    anterior não vale (`verification-before-completion`).
-5. Depois da E2E, o servidor da 3100 fica derrubado: suba de novo com
-   `wsl -- bash /mnt/c/Users/dudu8/elev-serve.sh` se o Carlos for testar pela tela.
+5. Depois da E2E, o servidor de teste local fica derrubado: suba de novo (o
+   script de subir fica fora do repositório — pergunte ou veja a memória) se
+   alguém for testar pela tela.

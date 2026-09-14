@@ -319,12 +319,12 @@ export function AgendaInterativa({
         pessoas={pessoas}
         agendamentos={desenhados}
         onAbrirAgendamento={onAbrirAgendamento}
-        // Piso de 240px NA GRADE, e não na raiz deste componente: a barra de
-        // tipos acima quebra linha quando há muitos tipos (medido: 134px com o
-        // banco de desenvolvimento), e um piso na raiz seria dividido com ela.
-        // A raiz, sem `min-h-0`, mede o conteúdo (barra + este piso) e, quando
-        // a coluna da tela não tem essa altura, é a página que rola — nunca a
-        // grade que some.
+        // Piso de 240px: cinto de segurança OPCIONAL — o contrato da tela é o
+        // `min-h-full` da raiz de `app/app/agenda/_client.tsx` (guarda
+        // `agenda-historico-nao-encolhe`), e com ele a grade nunca é
+        // espremida. O piso só age numa coluna de altura fixa, e fica NA GRADE
+        // e não na raiz deste componente porque a barra de tipos acima quebra
+        // linha com muitos tipos (medido: 134px) e dividiria um piso na raiz.
         className="min-h-[240px] flex-1"
         interacao={
           tipo

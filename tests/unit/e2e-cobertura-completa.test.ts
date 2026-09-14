@@ -44,28 +44,14 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { WORKFLOW_E2E as WORKFLOW, listaDoWorkflow } from "@/scripts/listas-do-ci";
+
 const RAIZ = process.cwd();
-const WORKFLOW = path.join(RAIZ, ".github", "workflows", "e2e.yml");
 const DIR_SPECS = path.join(RAIZ, "tests", "e2e");
 
-/**
- * Lê uma variável de bloco YAML (`CHAVE: >-`) e devolve os nomes.
- *
- * Parser deliberadamente estreito: casa só a forma que o arquivo usa. Um parser
- * de YAML de verdade aceitaria formas que ninguém escreveu e esconderia uma
- * reescrita do bloco — aqui, se a forma mudar, o controle positivo abaixo estoura
- * em vez de devolver lista vazia.
- */
-function listaDoWorkflow(yml: string, chave: string): string[] {
-  const re = new RegExp(`^\\s*${chave}:\\s*>-\\s*\\n((?:\\s{8,}\\S.*\\n)+)`, "m");
-  const m = re.exec(yml);
-  if (m === null) return [];
-  return m[1]!
-    .split(/\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.endsWith(".spec.ts"));
-}
-
+// O parser das listas mora em `scripts/listas-do-ci.ts` — o mesmo que
+// `scripts/elev-testar-tudo.sh` chama para rodar local o que o CI roda. Um
+// parser só: se a forma do bloco mudar, os dois enxergam a mesma coisa.
 const yml = readFileSync(WORKFLOW, "utf8");
 const parte1 = listaDoWorkflow(yml, "SPECS_PARTE_1");
 const parte2 = listaDoWorkflow(yml, "SPECS_PARTE_2");

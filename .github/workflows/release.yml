@@ -104,13 +104,8 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: token
         with:
-          # `client-id`, não `app-id`: o segundo está depreciado na v3 da action
-          # (aviso em toda execução desde o primeiro ensaio, 2026-09-12). O
-          # VALOR continua sendo o App ID numérico: o input aceita App ID ou
-          # Client ID (é o `iss` do JWT, e o GitHub aceita os dois). Em
-          # 2026-09-13 um Client ID copiado de screenshot deu "Integration not
-          # found" e derrubou o `cortar-tag` — o App ID vem da API, não de
-          # imagem, e é o que fica.
+          # `client-id` com o App ID: ver o comentário do mesmo passo em
+          # `abrir-pr-de-release`, acima — é a mesma decisão, escrita uma vez.
           client-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 

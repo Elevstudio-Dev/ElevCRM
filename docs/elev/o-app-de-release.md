@@ -42,10 +42,9 @@ mesmo token, acorda o `publish-image.yml`.
 2. **Gerar a chave privada:** na página do App, *Private keys* → *Generate a
    private key*. Baixa um `.pem`. **Guarde-o fora do repositório** e não o cole
    em chat nenhum. **A instalação (passo 3) só é liberada depois deste passo** —
-   o GitHub avisa no topo da página.
-   - Nesta máquina o Chrome baixa em `D:\Usuario\Downloads`, não em
-     `C:\Users\dudu8\Downloads`. Procurar pelo nome
-     (`elevcrm-release.AAAA-MM-DD.private-key.pem`) antes de supor a pasta.
+   o GitHub avisa no topo da página. O navegador pode não baixar na pasta que
+   você supõe: procure pelo nome (`elevcrm-release.<data>.private-key.pem`)
+   antes de supor a pasta.
 3. **Instalar o App no repositório:** *Install App* → Elevstudio-Dev → *Only
    select repositories* → `ElevCRM`.
 4. **Gravar os dois secrets.** O App ID (número, página *General* do App)
@@ -54,7 +53,7 @@ mesmo token, acorda o `publish-image.yml`.
 
    ```bash
    gh secret set RELEASE_APP_ID --repo Elevstudio-Dev/ElevCRM --body 4914675
-   gh secret set RELEASE_APP_PRIVATE_KEY --repo Elevstudio-Dev/ElevCRM < /mnt/d/Usuario/Downloads/elevcrm-release.AAAA-MM-DD.private-key.pem
+   gh secret set RELEASE_APP_PRIVATE_KEY --repo Elevstudio-Dev/ElevCRM < caminho/da/chave.pem
    ```
 
    O workflow lê esse valor pelo input `client-id` da action (o `app-id`
@@ -64,11 +63,13 @@ mesmo token, acorda o `publish-image.yml`.
    2026-09-13 um Client ID copiado de screenshot (`l` × `I`) deu
    `Integration not found` e derrubou o `cortar-tag` de um push.
 
-   O script `C:\Users\dudu8\elev-gravar-chave.sh` faz o segundo comando com o
-   caminho já preenchido: `wsl -- bash /mnt/c/Users/dudu8/elev-gravar-chave.sh`.
-   **Não** rode o comando cru no Prompt de Comando: o `cmd.exe` engole o `<` e
-   o `|` antes de entregar ao WSL e responde "O sistema não pode encontrar o
-   arquivo especificado" — a chave nunca chega ao `gh`. O script existe por isso.
+   Se o `gh` vive no WSL e você está no Windows, **não** rode o comando cru
+   no Prompt de Comando: o `cmd.exe` engole o `<` e o `|` antes de entregar
+   ao WSL e responde "O sistema não pode encontrar o arquivo especificado" —
+   a chave nunca chega ao `gh`. Ponha o comando num script `.sh` fora do
+   repositório e rode `wsl -- bash /mnt/c/.../esse-script.sh`. (Onde esse
+   script e a chave ficam nesta máquina não é assunto deste repositório, que
+   é público.)
 5. **Reativar o workflow `release`** se ele estiver `disabled_manually` (foi
    desligado à mão enquanto não havia App, para não falhar a cada push):
 

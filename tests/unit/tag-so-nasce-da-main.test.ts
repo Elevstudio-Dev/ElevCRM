@@ -62,11 +62,16 @@ describe("a tag nasce no CI, e nunca do GITHUB_TOKEN", () => {
     // GitHub). Se a tag nascesse dele, `publish-image.yml` nunca rodaria: a tag
     // existiria, nenhum erro apareceria, e NENHUMA VPS receberia a atualização.
     expect(release).toContain("actions/create-github-app-token");
-    // `client-id` (o input; o valor é o App ID, que ele aceita), e não o
-    // `app-id` depreciado na v3.
-    expect(release).toContain("client-id: ${{ secrets.RELEASE_APP_ID }}");
-    expect(release, "app-id está depreciado na action; a troca foi em 2026-09-13").not.toMatch(
-      /^\s+app-id:/m,
+    // `client-id` (o input; o valor pode ser o App ID ou o Client ID, os dois
+    // são aceitos como `iss`), e não o `app-id` depreciado na v3. O secret
+    // pode chamar RELEASE_APP_ID ou RELEASE_APP_CLIENT_ID — o que se cobra é
+    // que o token venha de um secret do App, não que o nome seja este.
+    expect(release).toMatch(/client-id: \$\{\{ secrets\.RELEASE_APP_(ID|CLIENT_ID) \}\}/);
+    // Sem comentários antes de procurar: `# ... app-id ...` é prosa, não input.
+    // E em qualquer posição, inclusive `with: { app-id: … }` inline.
+    const semComentarios = release.replace(/#.*$/gm, "");
+    expect(semComentarios, "app-id está depreciado na action; a troca foi em 2026-09-13").not.toMatch(
+      /\bapp-id\s*:/,
     );
     expect(release).toContain("secrets.RELEASE_APP_PRIVATE_KEY");
   });
