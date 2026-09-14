@@ -97,6 +97,13 @@ const EM_PORTUGUES_DE_PROPOSITO: { arquivo: string; texto: string; motivo: strin
       "é o error boundary da RAIZ: renderiza fora de qualquer provider, quando o app já falhou. Chamar um hook de contexto ali é justamente o que não pode falhar de novo",
   },
   {
+    arquivo: "app/global-error.tsx",
+    texto:
+      "Esta aba ficou aberta durante uma atualização e o que ela carregou não bate mais com o servidor. Recarregar resolve; nada do que você fez se perde.",
+    motivo:
+      "mesmo boundary da raiz, o caso 'o sistema foi atualizado com a aba aberta' — pelo mesmo motivo, sem hook de contexto",
+  },
+  {
     arquivo: "app/app/settings/tenant/pipelines/_stages.tsx",
     texto: "nenhum",
     motivo: "valor de wire do papel da etapa; o rótulo visível já sai por t(ROTULO_DO_PAPEL[p])",

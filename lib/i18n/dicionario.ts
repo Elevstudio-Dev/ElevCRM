@@ -5708,6 +5708,9 @@ export const DICIONARIO: Traducoes = {
   "Escanear o QR": { es: "Escanear el QR" },
   "Ver conexões": { es: "Ver conexiones" },
   "Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.": { es: "Inténtalo de nuevo en unos instantes. Si persiste, contacta al soporte con el ID de abajo." },
+  "O sistema foi atualizado": { es: "El sistema fue actualizado" },
+  "Esta aba ficou aberta durante uma atualização e o que ela carregou não bate mais com o servidor. Recarregar resolve; nada do que você fez se perde.": { es: "Esta pestaña quedó abierta durante una actualización y lo que cargó ya no coincide con el servidor. Recargar lo resuelve; nada de lo que hiciste se pierde." },
+  "Recarregar": { es: "Recargar" },
   "Nada encontrado para": { es: "Nada encontrado para" },
   "Seguir o idioma da empresa": { es: "Seguir el idioma de la empresa" },
   "Não foi possível trocar o idioma. Tente de novo.": {
