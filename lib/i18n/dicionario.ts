@@ -5709,6 +5709,8 @@ export const DICIONARIO: Traducoes = {
   "Ver conexões": { es: "Ver conexiones" },
   "Tente novamente em instantes. Se persistir, contate o suporte com o ID abaixo.": { es: "Inténtalo de nuevo en unos instantes. Si persiste, contacta al soporte con el ID de abajo." },
   "O sistema foi atualizado": { es: "El sistema fue actualizado" },
+  "Não verificado: o transporte do WhatsApp recusou a chave de API (401). Confira a chave no .env da instalação.": { es: "No verificado: el transporte de WhatsApp rechazó la clave de API (401). Revisa la clave en el .env de la instalación." },
+  "Não verificado: o transporte do WhatsApp não respondeu. O status é o último conhecido.": { es: "No verificado: el transporte de WhatsApp no respondió. El estado es el último conocido." },
   "Esta aba ficou aberta durante uma atualização e o que ela carregou não bate mais com o servidor. Recarregar resolve; nada do que você fez se perde.": { es: "Esta pestaña quedó abierta durante una actualización y lo que cargó ya no coincide con el servidor. Recargar lo resuelve; nada de lo que hiciste se pierde." },
   "Recarregar": { es: "Recargar" },
   "Nada encontrado para": { es: "Nada encontrado para" },

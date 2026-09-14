@@ -36,6 +36,7 @@ import {
   Warning,
 } from "@/lib/ui/icons";
 import { lerEstadoDoCanal } from "@/lib/channels/estado";
+import { TEXTO_DO_MOTIVO, ehMotivoDeVerificacao } from "@/lib/channels/verificacao-de-saude";
 import { useT } from "@/hooks/i18n/useT";
 
 type Variant = "success" | "warning" | "error" | "neutral";
@@ -327,11 +328,21 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                   </div>
                   <Badge variant={info.variant}>{info.label}</Badge>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {c.last_health_check_at
-                    ? `${t("Verificado")} ${new Date(c.last_health_check_at).toLocaleString(tagDoIdioma)}`
-                    : t("Ainda não verificado")}
-                </p>
+                {/* "Verificado" só quando a verificação PASSOU. Se o transporte
+                    recusou a pergunta, o status acima é o último conhecido — e
+                    a linha diz isso e por quê, em vez de carimbar a hora em
+                    cima de um estado que ninguém confirmou. */}
+                {ehMotivoDeVerificacao(c.status_reason) ? (
+                  <p className="text-[11px] text-warning-fg" data-testid="canal-nao-verificado">
+                    {t(TEXTO_DO_MOTIVO[c.status_reason])}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    {c.last_health_check_at
+                      ? `${t("Verificado")} ${new Date(c.last_health_check_at).toLocaleString(tagDoIdioma)}`
+                      : t("Ainda não verificado")}
+                  </p>
+                )}
                 <div className="mt-auto flex gap-2">
                   {/* Some no canal oficial em vez de aparecer desabilitado: não é
                       indisponibilidade passageira (como o Excluir sem o serviço no

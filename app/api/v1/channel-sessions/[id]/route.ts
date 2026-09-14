@@ -26,6 +26,11 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
 import { numeroObservadoDaSessao } from "@/lib/channels/numero-observado";
+import {
+  classificarFalhaDeVerificacao,
+  ehMotivoDeVerificacao,
+  type MotivoDeVerificacao,
+} from "@/lib/channels/verificacao-de-saude";
 import { isChannelStatus } from "@/lib/schemas/channels";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -135,7 +140,7 @@ export async function GET(
   const supabase = await createClient();
   const { data: session } = await supabase
     .from("channel_sessions")
-    .select("id, provider, waha_session_name, display_name, phone_number, status")
+    .select("id, provider, waha_session_name, display_name, phone_number, status, status_reason")
     .eq("organization_id", activeOrg.orgId)
     .eq("id", id)
     .maybeSingle();
@@ -161,6 +166,14 @@ export async function GET(
 
   let liveStatus = session.status as string;
   let phoneNumber = session.phone_number as string | null;
+  // Quando o transporte RECUSA a pergunta, a resposta não é "está como estava".
+  // Antes, qualquer erro que não fosse 404 mantinha o status do banco E
+  // carimbava o health check — a tela dizia "Conectado · Verificado agora"
+  // com o WAHA respondendo 401 para tudo (medido em 2026-09-14: chave errada
+  // no container, mensagem enviada não saiu, e a tela verde). O motivo vai
+  // para `status_reason`, a tela o mostra, e ele some quando a verificação
+  // volta a passar.
+  let falhaDaVerificacao: MotivoDeVerificacao | null = null;
   try {
     const remote = (await waha.getSessionQr(nomeSessao)) as {
       status?: string;
@@ -180,7 +193,10 @@ export async function GET(
     const msg = err instanceof Error ? err.message : "unknown";
     // 404 no WAHA = sessão não iniciada lá → considera STOPPED.
     if (msg.includes("404")) liveStatus = "STOPPED";
-    // outros erros: mantém o status do DB (não sobrescreve com ruído transitório).
+    // Outros erros: o status do banco fica (não se sobrescreve com ruído
+    // transitório), mas a FALHA fica registrada — 401/403 é chave errada, o
+    // resto é transporte fora de alcance.
+    else falhaDaVerificacao = classificarFalhaDeVerificacao(msg);
   }
 
   // Sincroniza o DB: sempre carimba o health check; atualiza status/telefone só se válido.
@@ -191,6 +207,10 @@ export async function GET(
     patch.last_status_change_at = checkedAt;
   }
   if (phoneNumber && phoneNumber !== session.phone_number) patch.phone_number = phoneNumber;
+  // O motivo entra quando a verificação falha e SAI quando volta a passar —
+  // só mexe em motivos que são desta verificação, nunca nos de outros fluxos.
+  if (falhaDaVerificacao) patch.status_reason = falhaDaVerificacao;
+  else if (ehMotivoDeVerificacao(session.status_reason)) patch.status_reason = null;
 
   const gravar = (corpo: Record<string, unknown>) =>
     supabase
@@ -224,10 +244,13 @@ export async function GET(
       display_name: session.display_name,
       phone_number: phoneNumber,
       status: liveStatus,
+      status_reason: falhaDaVerificacao ?? (ehMotivoDeVerificacao(session.status_reason) ? null : session.status_reason),
       last_health_check_at: checkedAt,
       waha_configured: true,
       /** Verdadeiro = o número lido no canal já pertence a outro canal ativo desta org. */
       phone_number_conflict: phoneConflict,
+      /** A verificação AO VIVO passou? Falso = o status acima é o do banco, não do transporte. */
+      verificacao: falhaDaVerificacao ? { ok: false, motivo: falhaDaVerificacao } : { ok: true },
     }),
     { requestId },
   );

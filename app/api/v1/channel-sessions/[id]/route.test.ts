@@ -499,4 +499,63 @@ describe("GET /api/v1/channel-sessions/[id]", () => {
     expect(waha.getSessionQr).not.toHaveBeenCalled();
     expect((await res.json()).data.waha_configured).toBe(false);
   });
+
+  /**
+   * ⭐ O TRANSPORTE RECUSOU A PERGUNTA, E A TELA DIZIA "VERIFICADO".
+   *
+   * Medido em 2026-09-14: WAHA com a chave errada respondia 401 para tudo; o
+   * health check mantinha o status do banco (certo — ruído não derruba canal)
+   * MAS carimbava a hora como se tivesse verificado, e o card ficava
+   * "Conectado · Verificado 15:34" enquanto a mensagem enviada não saía.
+   */
+  it("transporte responde 401 → status do banco fica, mas o motivo é NOMEADO e a verificação não passa", async () => {
+    authOk();
+    const db = makeDb({ sessions: [canal({ status: "WORKING", status_reason: null })] });
+    const waha = wahaOk(db);
+    waha.getSessionQr.mockRejectedValueOnce(
+      new Error('waha_qr_401: {"message":"Unauthorized","statusCode":401}'),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(reqGet(), ctx());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.status).toBe("WORKING");
+    expect(body.data.verificacao).toEqual({ ok: false, motivo: "transporte_nao_autorizado" });
+    expect(body.data.status_reason).toBe("transporte_nao_autorizado");
+    const gravado = db.escritas.find((e) => e.table === "channel_sessions")!;
+    expect(gravado.patch).not.toBeNull();
+    expect(gravado.patch!.status_reason).toBe("transporte_nao_autorizado");
+    expect(gravado.patch!.status).toBeUndefined();
+  });
+
+  it("rede caiu → motivo `transporte_inalcancavel`, sem tocar no status", async () => {
+    authOk();
+    const db = makeDb();
+    const waha = wahaOk(db);
+    waha.getSessionQr.mockRejectedValueOnce(new Error("fetch failed: ECONNREFUSED 127.0.0.1:3030"));
+    const { GET } = await import("./route");
+    const body = await (await GET(reqGet(), ctx())).json();
+    expect(body.data.verificacao).toEqual({ ok: false, motivo: "transporte_inalcancavel" });
+    expect(body.data.status).toBe("WORKING");
+  });
+
+  it("a verificação volta a passar → o motivo some; motivo de OUTRO fluxo fica", async () => {
+    authOk();
+    const db = makeDb({ sessions: [canal({ status_reason: "transporte_nao_autorizado" })] });
+    wahaOk(db);
+    const { GET } = await import("./route");
+    const body = await (await GET(reqGet(), ctx())).json();
+    expect(body.data.verificacao).toEqual({ ok: true });
+    expect(body.data.status_reason).toBeNull();
+    expect(db.escritas.find((e) => e.table === "channel_sessions")!.patch!.status_reason).toBeNull();
+
+    // Motivo que não é desta verificação (ex.: desconexão pelo usuário) não é
+    // apagado por um health check verde.
+    const db2 = makeDb({ sessions: [canal({ status_reason: "user_disconnected" })] });
+    wahaOk(db2);
+    const body2 = await (await GET(reqGet(), ctx())).json();
+    expect(body2.data.status_reason).toBe("user_disconnected");
+    expect(db2.escritas.find((e) => e.table === "channel_sessions")!.patch).not.toHaveProperty("status_reason");
+  });
 });
