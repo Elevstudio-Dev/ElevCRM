@@ -1,23 +1,72 @@
 # Rodar os testes na máquina de desenvolvimento
 
-Três suítes, três garantias diferentes. A ordem abaixo é a que dá resposta
-rápida primeiro.
-
-## 1. Unitária — segundos, roda sempre
+## O comando que roda tudo
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test:unit
+pnpm elev:testar            # a Definition of Done inteira, ~55 min
+pnpm elev:testar --sem-e2e  # só as camadas rápidas, ~20 min — para mudança sem UI
+```
+
+`scripts/elev-testar-tudo.sh` roda, nesta ordem, **gov:verify → test:db →
+test:shell → E2E** (build, seeds do CI, e as duas listas do CI, lidas do
+`e2e.yml`), guarda um log por camada em `.superpowers/testar-tudo/<data>/` e
+termina com um veredito. Existe porque `pnpm gov:verify` **não** cobre
+`test:db` nem `test:e2e` (CLAUDE.md), e em setembro a `main` ficou quatro dias
+com a E2E vermelha enquanto cada sessão rodava só "o recorte relevante".
+
+As seções abaixo explicam cada camada — para rodar uma só, ou para ler o
+vermelho.
+
+## 1. Unitária — minutos, roda sempre
+
+```bash
+pnpm gov:verify   # typecheck + lint + lint:channels + lint:role-rank + test:unit
 ```
 
 Verde aqui não prova produto, prova que as peças fazem o que dizem.
-Referência de tamanho: 620 arquivos, 6.831 testes (2026-09-03).
+Referência de tamanho: 670 arquivos, 7.309 testes (2026-09-13).
+
+## 1b. Invariantes de banco — ~10 min, obrigatória em mudança de schema
+
+```bash
+pnpm test:db
+```
+
+Sobe um Postgres efêmero (`pgvector:pg15`, o piso que o produto promete),
+aplica o `baseline.sql` em modo instalação **e** em modo atualização, e roda os
+invariantes de isolamento entre organizações. É a única prova de que o RLS
+segura — `test:unit` exclui `tests/invariants/**` de propósito. Precisa do
+Docker de pé. Referência: 151 arquivos, 1.198 casos (2026-09-13).
+
+## 1c. Kit de instalação — ~1 min, obrigatória em Dockerfile/compose/kit
+
+```bash
+pnpm test:shell
+```
+
+Os guards do `update.sh`, do dono do projeto, do entrypoint do scheduler e os
+validadores do instalador. É o único gate que exercita o que o cliente roda na
+VPS.
 
 ## 2. E2E — ~30 minutos, e **precisa de seed**
 
 ```bash
+pnpm e2e:build       # o build de produção com o .env.e2e — o Playwright sobe `next start` dele
 pnpm elev:semear     # ANTES. Sem isto o resultado não vale.
 pnpm exec playwright test
 ```
+
+Rodar `playwright test` sem lista roda TUDO em `tests/e2e/`, inclusive o que o
+CI deixa fora de propósito (`vps-fresh-onboarding`, seção 3, e
+`inbox-tempo-real`, instável por WebSocket — issue upstream #347). O
+`elev:testar` roda as duas listas do CI, que é a medida que vale.
+
+Duas armadilhas medidas em 2026-09-12: o build reescreve o `.next` — se o
+servidor de teste da 3100 estiver servindo dele, derrube antes
+(`fuser -k 3100/tcp`); e specs de bloco **serial** que dependem de banco limpo
+(`agenda-tela-do-produto`, "trilhas de cor") reprovam num banco com 24 usuários
+e abortam o resto do arquivo — no CI o banco nasce limpo. Ler o vermelho antes
+de acusar o produto.
 
 ### Por que o `elev:semear` existe
 
