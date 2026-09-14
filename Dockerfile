@@ -61,10 +61,20 @@ LABEL org.opencontainers.image.source="https://github.com/melgarafael/DeskcommCR
 # sob `CMD ["node","server.js"]` — só existe quando o processo nasce de um
 # `npm`/`pnpm run`. Toda instalação do mundo reportava o fallback "0.1.0".
 ARG APP_VERSION=dev
+# --max-http-header-size: o limite padrão do Node é 16 KB para o cabeçalho
+# INTEIRO da requisição, e quem estoura é cookie. O CRM vive num subdomínio
+# (`crm.empresa.com.br`) e recebe todo cookie gravado em `.empresa.com.br` —
+# site, GTM, analytics, chat de vendas — junto com os da própria sessão
+# (o token do Supabase vem em pedaços de ~3 KB). Estourou, o Node responde
+# 431 antes de o app ver a requisição: tela cinza do navegador, sem log, e
+# "Tentar de novo" não resolve. Medido em 2026-09-14 no servidor de teste
+# (cookie de 20 KB → 431; com o limite em 64 KB → 200). 32 KB aqui: o dobro
+# do padrão, ainda longe do que o Traefik aceita (1 MB).
 ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS=--max-http-header-size=32768 \
     APP_VERSION=$APP_VERSION
 # ffmpeg: a derivação de vídeo (Onda 3.1) roda no processo do app — o cron
 # event-log-drain executa o media_derive handler, que chama `ffmpeg` via spawn
