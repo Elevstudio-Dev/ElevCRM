@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { rotasAgendadas as rotasAgendadasDoScheduler } from "@/scripts/agenda-dos-crons";
+
 /**
  * TODA ROTA DE CRON EXISTE PARA SER CHAMADA POR ALGUÉM.
  *
@@ -39,12 +41,15 @@ function rotasNoCodigo(): string[] {
     .sort();
 }
 
-/** As rotas que o `scheduler` chama, extraídas do crontab embutido no compose. */
-function rotasAgendadas(): string[] {
-  const sh = readFileSync(CRONTAB, "utf8");
-  const achadas = sh.matchAll(/api\/v1\/cron\/([a-z0-9-]+)/g);
-  return [...new Set([...achadas].map((m) => m[1]!))].sort();
-}
+/**
+ * As rotas que o `scheduler` chama.
+ *
+ * O parser mora em `scripts/agenda-dos-crons.ts` porque o relógio de
+ * desenvolvimento (`scripts/dev-crons.ts`) lê a MESMA lista — ele tinha a sua
+ * própria, com 2 das 21 rotas, e por isso `contact-avatars` nunca rodava na
+ * máquina de quem desenvolve. Uma fonte, um parser.
+ */
+const rotasAgendadas = (): string[] => rotasAgendadasDoScheduler(readFileSync(CRONTAB, "utf8"));
 
 describe("rotas de cron × agendamento no self-host", () => {
   it("o apparato consegue enxergar as duas listas (controle positivo)", () => {

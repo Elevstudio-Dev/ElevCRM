@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -194,9 +195,20 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
         {contacts.map((c) => (
           <TableRow key={c.id} className="cursor-pointer">
             <TableCell className="font-medium">
-              <Link href={`/app/contacts/${c.id}`} className="hover:underline">
-                {displayName(c)}
-              </Link>
+              {/* O ROSTO, pela mesma regra das outras duas telas
+                  (`AvatarDoContato`). Esta lista era a única sem ele. */}
+              <div className="flex items-center gap-2">
+                <AvatarDoContato
+                  contato={c}
+                  nome={displayName(c)}
+                  reserva={c.phone_number ?? c.email ?? "?"}
+                  className="h-7 w-7"
+                  classNameIniciais="text-[10px]"
+                />
+                <Link href={`/app/contacts/${c.id}`} className="truncate hover:underline">
+                  {displayName(c)}
+                </Link>
+              </div>
             </TableCell>
             <TableCell className="text-muted-foreground">
               {c.email ?? "—"}

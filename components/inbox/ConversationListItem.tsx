@@ -6,7 +6,7 @@ import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
 import { Phone, Robot } from "@/lib/ui/icons";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
@@ -71,16 +71,6 @@ const COR_DO_COMANDO: Record<string, string> = {
   encerrada: "bg-muted-foreground/30",
 };
 
-function initials(name: string | null | undefined, fallback: string): string {
-  const v = (name ?? "").trim();
-  if (!v) return fallback.slice(0, 2).toUpperCase();
-  const parts = v.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return fallback.slice(0, 2).toUpperCase();
-  if (parts.length === 1) return (parts[0] ?? "").slice(0, 2).toUpperCase();
-  const first = parts[0]?.[0] ?? "";
-  const last = parts[parts.length - 1]?.[0] ?? "";
-  return (first + last).toUpperCase();
-}
 
 function relativeTime(iso: string | null, locale: Locale): string {
   if (!iso) return "";
@@ -171,22 +161,12 @@ export function ConversationListItem({
       <div className="relative shrink-0">
         {/* 48px: é o tamanho que o WhatsApp usa, e o rosto é o que a pessoa
             procura primeiro numa lista de conversa. */}
-        <Avatar className="h-12 w-12">
-          {/* Só monta a <img> quando existe arquivo: sem isso o browser pediria
-              a rota para TODO contato da lista e levaria 404 em cada um sem
-              foto — que é a maioria. O AvatarFallback do Radix já cobre o caso
-              de a imagem não carregar, então as iniciais nunca somem. */}
-          {c?.avatar_storage_path && !c?.is_anonymized ? (
-            <AvatarImage
-              src={`/api/v1/contacts/${c.id}/avatar`}
-              alt=""
-              className="object-cover"
-            />
-          ) : null}
-          <AvatarFallback className="text-xs">
-            {initials(displayName, phoneFallback)}
-          </AvatarFallback>
-        </Avatar>
+        <AvatarDoContato
+          contato={c}
+          nome={displayName}
+          reserva={phoneFallback}
+          className="h-12 w-12"
+        />
         <span
           className={cn(
             "absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-background",

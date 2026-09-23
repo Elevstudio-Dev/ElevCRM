@@ -26,8 +26,14 @@ import { contactListQuerySchema } from "@/lib/schemas";
 
 type SB = SupabaseClient;
 
+// `avatar_storage_path` viaja porque a lista MOSTRA o rosto (2026-09-22). Ela
+// não devolvia o campo, e por isso a tela de Contatos era a única das três a
+// não ter foto nenhuma — o dono reportou como "não atualiza a foto". O caminho
+// em si não é segredo (o arquivo vive em bucket privado e só sai por
+// `/api/v1/contacts/<id>/avatar`, que autentica); o que a tela precisa saber é
+// apenas SE existe arquivo, para não pedir a rota de quem não tem foto.
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at, avatar_storage_path";
 
 interface CursorPayload {
   sort: string | null;
