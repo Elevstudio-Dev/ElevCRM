@@ -238,6 +238,12 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
       "User-Agent que a integração manda à Nuvemshop. É como eles identificam o app nos logs e no contato; mudar sem avisar quebra a correlação do lado deles",
     marcas: ["elevcrm", "elevcrm"],
   },
+  "lib/integrations/despachocerto/cliente.ts": {
+    categoria: "PROTOCOLO",
+    motivo:
+      "trecho da URL que o Despacho Certo publica para nos atender. Quem casa a string é o roteador deles; renomear aqui dá 404 em toda instalação, e o sintoma para o despachante é o cadastro que simplesmente não acontece",
+    marcas: ["elevcrm", "elevcrm"],
+  },
   "lib/agenda/google/evento.ts": {
     categoria: "PROTOCOLO",
     motivo:

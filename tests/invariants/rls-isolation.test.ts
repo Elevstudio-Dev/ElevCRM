@@ -230,6 +230,17 @@ beforeAll(() => {
               from public.team_channels c where c.organization_id = v_org and c.kind = 'geral' limit 1;
         end if;
 
+        -- integration_contact_links (migration 0215): o contato daqui apontando
+        -- para o cadastro dele no sistema do cliente. O external_id é o id
+        -- LÁ, e é por ele que a OS volta e vira marcador — vazar a linha é
+        -- entregar ao vizinho quem é cliente de quem.
+        if not exists (select 1 from public.integration_contact_links where organization_id = v_org) then
+          insert into public.integration_contact_links
+            (organization_id, provider, contact_id, external_id)
+            select v_org, 'despachocerto', c.id, 'rls-' || v_org::text
+              from public.contacts c where c.organization_id = v_org limit 1;
+        end if;
+
         if not exists (select 1 from public.push_subscriptions where organization_id = v_org) then
           insert into public.push_subscriptions
             (organization_id, user_id, endpoint, p256dh, auth)
@@ -295,6 +306,11 @@ export const TABLES = [
   "team_channels",
   "team_channel_members",
   "team_messages",
+  // migration 0215 — o vínculo entre o contato daqui e o cliente no sistema
+  // integrado. Leitura é org-scoped sem gate de papel (o agent precisa dela
+  // para saber se já cadastrou); a ESCRITA é só service-role, porque quem
+  // grava é a rota que falou com o sistema do cliente, nunca o browser.
+  "integration_contact_links",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"

@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
+import { BotaoDoDespachoCerto } from "@/components/integrations/BotaoDoDespachoCerto";
 import { tempoSemResposta } from "@/lib/inbox/tempo-sem-resposta";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -66,20 +67,6 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "Arquivada",
 };
 
-/**
- * Duas letras para o circulo, com o telefone como rede quando nao ha nome.
- *
- * Mesma logica de `ConversationListItem`, replicada e nao importada: aquele
- * arquivo nao a exporta, e exporta-la de la seria mexer num componente fora
- * do escopo desta mudanca.
- */
-function iniciais(nome: string | null | undefined, reserva: string): string {
-  const fonte = (nome ?? "").trim() || reserva;
-  const partes = fonte.split(/\s+/).filter(Boolean);
-  if (partes.length === 0) return "?";
-  if (partes.length === 1) return partes[0]!.slice(0, 2).toUpperCase();
-  return (partes[0]![0]! + partes[partes.length - 1]![0]!).toUpperCase();
-}
 
 export function ConversationHeader({ conversation }: Props) {
   const t = useT();
@@ -222,18 +209,12 @@ export function ConversationHeader({ conversation }: Props) {
               as iniciais nunca somem. `is_anonymized` e o gate de LGPD e nao
               pode sair: contato anonimizado nao mostra rosto. Mesmo padrao de
               `ConversationListItem`. */}
-          <Avatar className="h-8 w-8 shrink-0">
-            {c?.avatar_storage_path && !c?.is_anonymized ? (
-              <AvatarImage
-                src={`/api/v1/contacts/${c.id}/avatar`}
-                alt=""
-                className="object-cover"
-              />
-            ) : null}
-            <AvatarFallback className="text-[10px]">
-              {iniciais(displayName, phone ?? "?")}
-            </AvatarFallback>
-          </Avatar>
+          <AvatarDoContato
+            contato={c}
+            nome={displayName}
+            reserva={phone ?? "?"}
+            classNameIniciais="text-[10px]"
+          />
           <h2 className="truncate text-sm font-semibold">{displayName}</h2>
           {/* O telefone ja era calculado e nunca era renderizado. Some no
               celular, onde o nome sozinho ja ocupa a linha. */}
@@ -317,6 +298,15 @@ export function ConversationHeader({ conversation }: Props) {
           barra pode encolher e quebrar internamente, e os botões continuam
           todos visíveis e clicáveis — só que em duas linhas quando preciso. */}
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {/* O BOTÃO DA INTEGRAÇÃO, ao lado de "Assumir" — e só para quem ligou
+            uma. O produto se vende para loja, clínica e escritório: um botão
+            de despachante em toda instalação seria ruído para a maioria. Quem
+            não tem `tenant_integrations` com esse provedor não vê nada. */}
+        <BotaoDoDespachoCerto
+          contactId={c?.id ?? null}
+          nomeSugerido={displayName}
+          telefoneSugerido={c?.phone_number ?? ""}
+        />
         {isOpen && (
           <Button
             size="sm"

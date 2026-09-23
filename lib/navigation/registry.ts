@@ -466,6 +466,17 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     healthDot: true,
   },
   {
+    href: "/app/integrations/despachocerto",
+    label: "Despacho Certo",
+    description:
+      "Cadastre o cliente sem sair da conversa, e receba a OS e a placa como marcadores.",
+    icon: Storefront,
+    group: "canais",
+    // A tela é só configuração, e a chave de integração dá acesso ao cadastro
+    // de clientes do outro sistema.
+    minRole: "admin",
+  },
+  {
     // Não tinha link nenhum no app inteiro: só se chegava digitando a URL.
     href: "/app/integrations/nuvemshop",
     label: "Nuvemshop",

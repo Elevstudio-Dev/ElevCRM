@@ -43,6 +43,9 @@ export const AUDIT_ACTIONS = [
   "nuvemshop.oauth_failed",
   "nuvemshop.webhook_received",
   "nuvemshop.webhook_invalid_signature",
+  // Despacho Certo (integração de despachante, plugin por organização).
+  "despachocerto.connected",
+  "despachocerto.client_linked",
   "lead.created",
   "lead.updated",
   "lead.deleted",

@@ -12611,6 +12611,57 @@ revoke execute on function public.fn_aplicar_quadro_do_onboarding(uuid, uuid, te
 grant execute on function public.fn_aplicar_quadro_do_onboarding(uuid, uuid, text, text, jsonb)
   to service_role;
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- APÊNDICE 0215 — O CONTATO APONTA PARA O CADASTRO DELE NUM SISTEMA DE FORA
+--
+-- Espelha `supabase/migrations/20260922190000_0215_...`. Quem INSTALA aplica
+-- este arquivo; quem ATUALIZA aplica a migration. As duas têm de deixar o banco
+-- igual, e é por isso que este apêndice existe.
+--
+-- `integration_contact_links` é o vínculo "este contato é o cliente X no outro
+-- sistema" — a base do botão "Cadastrar" do inbox e das tags de OS/placa que
+-- chegam por webhook. Tabela genérica de propósito: o Elev CRM não é só para
+-- despachante, e uma coluna `despachocerto_client_id` em `contacts` poria o
+-- nome de um produto de nicho na tabela mais central do CRM.
+--
+-- Aditiva e idempotente.
+-- ════════════════════════════════════════════════════════════════════════════
+
+alter table public.tenant_integrations
+  drop constraint if exists tenant_integrations_provider_check;
+alter table public.tenant_integrations
+  add constraint tenant_integrations_provider_check
+  check (provider in ('nuvemshop', 'vtex', 'shopify', 'despachocerto'));
+
+create table if not exists public.integration_contact_links (
+  id                uuid primary key default gen_random_uuid(),
+  organization_id   uuid not null references public.organizations(id) on delete cascade,
+  provider          text not null,
+  contact_id        uuid not null references public.contacts(id) on delete cascade,
+  external_id       text not null,
+  external_metadata jsonb not null default '{}'::jsonb,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  constraint integration_contact_links_provider_check
+    check (provider in ('nuvemshop', 'vtex', 'shopify', 'despachocerto'))
+);
+
+create unique index if not exists uniq_integration_contact_links_contato
+  on public.integration_contact_links (organization_id, provider, contact_id);
+create unique index if not exists uniq_integration_contact_links_externo
+  on public.integration_contact_links (organization_id, provider, external_id);
+
+alter table public.integration_contact_links enable row level security;
+
+drop policy if exists integration_contact_links_select on public.integration_contact_links;
+create policy integration_contact_links_select on public.integration_contact_links
+  for select to authenticated using (
+    public.fn_is_platform_admin()
+    or organization_id in (select public.fn_user_org_ids())
+  );
+
+notify pgrst, 'reload schema';
+
 -- ---- marca por organização (migration 0157) ----
 --
 -- A MARCA DO CLIENTE FINAL SE GRAVA EM UMA INSTRUÇÃO SÓ.
