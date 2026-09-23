@@ -35,12 +35,23 @@ export function TelaDaIntegracao() {
   const [baseUrl, setBaseUrl] = useState("");
   const [chave, setChave] = useState("");
   const [segredoNovo, setSegredoNovo] = useState<string | null>(null);
+  // A resposta do PUT, guardada inteira. O bloco "cole isto lá" precisa da
+  // URL do webhook, e na PRIMEIRA conexão a leitura anterior ainda não a
+  // tinha: o segredo voltava do servidor e não tinha onde aparecer — some
+  // para sempre, porque ele só é mostrado no instante em que é gerado.
+  const [conexaoNova, setConexaoNova] = useState<RespostaDeConexao | null>(null);
 
-  const conectar = useMutation<RespostaDeConexao, Error, { base_url: string; chave: string }>({
-    mutationFn: (dados) =>
-      apiClient.put<RespostaDeConexao>("/api/v1/integrations/despachocerto", dados),
+  const conectar = useMutation<
+    RespostaDeConexao,
+    Error,
+    { base_url: string; chave: string; rotacionar_segredo?: boolean }
+  >({
+    mutationFn: async (dados) =>
+      (await apiClient.put<{ data: RespostaDeConexao }>("/api/v1/integrations/despachocerto", dados))
+        .data,
     onSuccess: (r) => {
       setSegredoNovo(r.webhook_secret);
+      setConexaoNova(r);
       setChave("");
       void qc.invalidateQueries({ queryKey: CHAVE_DA_INTEGRACAO });
       toast.success(t("Integração salva."));
@@ -51,6 +62,11 @@ export function TelaDaIntegracao() {
   const atual = estado.data;
   const ligada = atual?.conectado === true;
   const urlPreenchida = baseUrl || atual?.base_url || "";
+  const naoPodeSalvar =
+    conectar.isPending || urlPreenchida.length < 8 || chave.trim().length < 8;
+  // A resposta do PUT vence a leitura: ela é mais nova, e no primeiro
+  // salvamento é a ÚNICA que tem a URL do webhook.
+  const webhookUrl = conexaoNova?.webhook_url || atual?.webhook_url;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -112,34 +128,57 @@ export function TelaDaIntegracao() {
               </div>
             </div>
 
-            <div>
-              <Button
-                type="button"
-                disabled={conectar.isPending || urlPreenchida.length < 8 || chave.trim().length < 8}
-                onClick={() => conectar.mutate({ base_url: urlPreenchida.trim(), chave: chave.trim() })}
-              >
-                {conectar.isPending
-                  ? t("Salvando...")
-                  : ligada
-                    ? t("Salvar e gerar segredo novo")
-                    : t("Conectar")}
-              </Button>
+            {/* SALVAR NÃO ROTACIONA. O botão dizia "Salvar e gerar segredo
+                novo" e mandava um pedido sem rotação nenhuma — prometia uma
+                coisa e fazia outra. E rotacionar a cada salvamento seria pior
+                ainda: quem só corrige o endereço derrubaria a integração, com
+                o outro lado respondendo 401 sem explicação. */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  disabled={naoPodeSalvar}
+                  onClick={() =>
+                    conectar.mutate({ base_url: urlPreenchida.trim(), chave: chave.trim() })
+                  }
+                >
+                  {conectar.isPending ? t("Salvando...") : ligada ? t("Salvar") : t("Conectar")}
+                </Button>
+                {ligada ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={naoPodeSalvar}
+                    onClick={() =>
+                      conectar.mutate({
+                        base_url: urlPreenchida.trim(),
+                        chave: chave.trim(),
+                        rotacionar_segredo: true,
+                      })
+                    }
+                  >
+                    {t("Gerar segredo novo")}
+                  </Button>
+                ) : null}
+              </div>
               {ligada ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {t("Salvar de novo gera um segredo de webhook novo — o anterior deixa de valer.")}
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "Salvar mantém o segredo que já está colado no Despacho Certo. Gerar um novo faz o anterior deixar de valer na hora.",
+                  )}
                 </p>
               ) : null}
             </div>
 
             {/* ── 2. o Despacho Certo avisa o CRM ───────────────────────── */}
-            {atual?.webhook_url ? (
+            {webhookUrl ? (
               <div className="rounded-md border border-border bg-surface-sunken p-4">
                 <p className="text-sm font-medium">{t("Cole isto no Despacho Certo")}</p>
                 <div className="mt-3 grid gap-3">
                   <div className="grid gap-1">
                     <span className="text-xs text-muted-foreground">{t("URL do webhook")}</span>
                     <code className="break-all rounded-md bg-muted px-2 py-1 text-xs">
-                      {atual.webhook_url}
+                      {webhookUrl}
                     </code>
                   </div>
                   <div className="grid gap-1">
@@ -152,9 +191,9 @@ export function TelaDaIntegracao() {
                       </code>
                     ) : (
                       <span className="text-xs text-muted-foreground">
-                        {atual.tem_segredo
+                        {atual?.tem_segredo
                           ? t(
-                              "Já existe um segredo. Ele aparece só no momento em que é gerado — salve de novo para criar outro.",
+                              "Já existe um segredo. Ele aparece só no momento em que é gerado — use “Gerar segredo novo” para criar outro.",
                             )
                           : t("Nenhum segredo ainda. Salve para gerar.")}
                       </span>

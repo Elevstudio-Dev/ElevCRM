@@ -154,11 +154,27 @@ export async function conectar(
     patch.webhook_secret_encrypted = bufToBytea(empacotarSegredo(segredoEmClaro));
   }
 
-  const { data, error } = await admin
-    .from("tenant_integrations")
-    .upsert(patch, { onConflict: "organization_id,provider" })
-    .select(COLS)
-    .single();
+  // UPDATE quando a linha existe; INSERT quando não existe. NÃO um `upsert`.
+  //
+  // `webhook_secret_encrypted` é NOT NULL, e quem salva só para corrigir a URL
+  // não rotaciona o segredo — então a coluna fica fora do `patch`. Num
+  // `upsert`, o Postgres monta a tupla do INSERT e valida o NOT NULL ANTES de
+  // detectar o conflito: a linha existia, o caminho seria de update, e ainda
+  // assim a gravação reprovava com "null value in column
+  // webhook_secret_encrypted". Medido na primeira conexão real, 23/09.
+  //
+  // Repetir o segredo cifrado no patch resolveria o sintoma relendo e
+  // regravando bytes que ninguém pediu para mudar. Separar as duas operações
+  // diz o que cada uma é: corrigir o que mudou, ou criar o que não existe.
+  const escrita = atual
+    ? admin
+        .from("tenant_integrations")
+        .update(patch)
+        .eq("organization_id", organizationId)
+        .eq("provider", PROVEDOR)
+    : admin.from("tenant_integrations").insert(patch);
+
+  const { data, error } = await escrita.select(COLS).single();
   if (error) throw new Error(`não consegui gravar a integração: ${error.message}`);
 
   return { integracao: projetar(data as unknown as LinhaCrua), segredoEmClaro };

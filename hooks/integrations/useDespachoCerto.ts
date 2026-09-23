@@ -27,7 +27,13 @@ export const CHAVE_DA_INTEGRACAO = ["integrations", "despachocerto"] as const;
 export function useDespachoCerto() {
   return useQuery<EstadoDaIntegracao>({
     queryKey: CHAVE_DA_INTEGRACAO,
-    queryFn: () => apiClient.get<EstadoDaIntegracao>("/api/v1/integrations/despachocerto"),
+    // `{ data }` e não o objeto cru: as rotas desta base respondem num
+    // envelope, e `apiClient` entrega o corpo inteiro. Pedir o objeto cru
+    // compila, roda, e devolve tudo `undefined` — a tela fica "não
+    // conectado" com a integração gravada no banco.
+    queryFn: async () =>
+      (await apiClient.get<{ data: EstadoDaIntegracao }>("/api/v1/integrations/despachocerto"))
+        .data,
     staleTime: 5 * 60_000,
     // Integração desligada é o caso NORMAL (o CRM não é só para despachante):
     // não vale repetir a pergunta quando ela falha.
@@ -46,10 +52,12 @@ export interface VinculoDoContato {
 export function useVinculoDoContato(contactId: string | null, ligada: boolean) {
   return useQuery<VinculoDoContato>({
     queryKey: ["integrations", "despachocerto", "vinculo", contactId],
-    queryFn: () =>
-      apiClient.get<VinculoDoContato>(
-        `/api/v1/integrations/despachocerto/clients/${contactId}`,
-      ),
+    queryFn: async () =>
+      (
+        await apiClient.get<{ data: VinculoDoContato }>(
+          `/api/v1/integrations/despachocerto/clients/${contactId}`,
+        )
+      ).data,
     enabled: Boolean(contactId) && ligada,
     staleTime: 60_000,
     retry: false,
@@ -70,11 +78,13 @@ export interface CadastroPedido {
 export function useCadastrarNoDespachoCerto() {
   const qc = useQueryClient();
   return useMutation<{ cliente: ClienteDoDespacho; existente: boolean }, Error, CadastroPedido>({
-    mutationFn: (dados) =>
-      apiClient.post<{ cliente: ClienteDoDespacho; existente: boolean }>(
-        "/api/v1/integrations/despachocerto/clients",
-        dados,
-      ),
+    mutationFn: async (dados) =>
+      (
+        await apiClient.post<{ data: { cliente: ClienteDoDespacho; existente: boolean } }>(
+          "/api/v1/integrations/despachocerto/clients",
+          dados,
+        )
+      ).data,
     onSuccess: (_r, enviado) => {
       void qc.invalidateQueries({
         queryKey: ["integrations", "despachocerto", "vinculo", enviado.contact_id],
