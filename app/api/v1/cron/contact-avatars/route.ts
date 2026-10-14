@@ -41,8 +41,11 @@ const MAX_BYTES = 2 * 1024 * 1024;
 interface ContactRow {
   id: string;
   organization_id: string;
-  wa_identity: string | null;
   avatar_storage_path: string | null;
+  /** Onde perguntar a foto. Resolvido ao montar a lista, não dentro do laço:
+   *  pessoa vem de `contacts.wa_identity`, grupo vem de
+   *  `conversations.group_chat_id`, e o laço não precisa saber a diferença. */
+  chatId: string | null;
 }
 
 /** `lid:123…` / `phone:+55…` → o chatId que o adapter espera. */
@@ -50,6 +53,54 @@ function chatIdFromIdentity(identity: string): string | null {
   if (identity.startsWith("lid:")) return `${identity.slice(4)}@lid`;
   if (identity.startsWith("phone:")) return `${identity.slice(6).replace(/\D/g, "")}@c.us`;
   return null;
+}
+
+/**
+ * Os grupos que ainda precisam de foto.
+ *
+ * O vínculo é pela CONVERSA, e várias conversas podem apontar para o mesmo
+ * contato de grupo — por isso a deduplicação por contato antes de perguntar ao
+ * banco quem está vencido. Sem ela, um grupo com duas conversas consumiria duas
+ * vagas do lote e empurraria outro grupo para a rodada seguinte, para sempre.
+ */
+async function candidatosDeGrupo(
+  admin: ReturnType<typeof createAdminClient>,
+  cutoff: string,
+  limite: number,
+): Promise<ContactRow[]> {
+  const { data: conversas } = await admin
+    .from("conversations")
+    .select("organization_id, contact_id, group_chat_id")
+    .not("group_chat_id", "is", null)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(limite * 5);
+
+  const chatPorContato = new Map<string, string>();
+  for (const c of (conversas ?? []) as Array<{
+    contact_id: string | null;
+    group_chat_id: string | null;
+  }>) {
+    if (c.contact_id && c.group_chat_id && !chatPorContato.has(c.contact_id)) {
+      chatPorContato.set(c.contact_id, c.group_chat_id);
+    }
+  }
+  if (chatPorContato.size === 0) return [];
+
+  const { data: contatos } = await admin
+    .from("contacts")
+    .select("id, organization_id, avatar_storage_path")
+    .in("id", [...chatPorContato.keys()])
+    .eq("is_anonymized", false)
+    .or(`avatar_updated_at.is.null,avatar_updated_at.lt.${cutoff}`)
+    .order("avatar_updated_at", { ascending: true, nullsFirst: true })
+    .limit(limite);
+
+  return (contatos ?? []).map((c) => ({
+    id: c.id as string,
+    organization_id: c.organization_id as string,
+    avatar_storage_path: (c.avatar_storage_path ?? null) as string | null,
+    chatId: chatPorContato.get(c.id as string) ?? null,
+  }));
 }
 
 async function handle(req: NextRequest): Promise<Response> {
@@ -86,13 +137,32 @@ async function handle(req: NextRequest): Promise<Response> {
     return fail("internal_error", queryError.message, 500, { requestId });
   }
 
-  const rows = (contatos ?? []) as ContactRow[];
+  // Pessoas e grupos no MESMO lote, cada um com seu chatId já resolvido. O
+  // limite é por fonte: um inbox cheio de grupos não pode deixar as pessoas
+  // sem foto, nem o contrário.
+  const pessoas: ContactRow[] = (
+    (contatos ?? []) as Array<{
+      id: string;
+      organization_id: string;
+      wa_identity: string | null;
+      avatar_storage_path: string | null;
+    }>
+  ).map((c) => ({
+    id: c.id,
+    organization_id: c.organization_id,
+    avatar_storage_path: c.avatar_storage_path,
+    chatId: c.wa_identity ? chatIdFromIdentity(c.wa_identity) : null,
+  }));
+
+  const grupos = await candidatosDeGrupo(admin, cutoff, SCAN_LIMIT);
+
+  const rows: ContactRow[] = [...pessoas, ...grupos];
   let atualizados = 0;
   let semFoto = 0;
   let falhas = 0;
 
   for (const c of rows) {
-    const chatId = c.wa_identity ? chatIdFromIdentity(c.wa_identity) : null;
+    const chatId = c.chatId;
     // Carimba mesmo sem conseguir resolver o chatId: sem isso o contato voltaria
     // em TODA rodada do cron, para sempre, batendo no canal à toa.
     //
