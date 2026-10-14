@@ -56,6 +56,27 @@ function chatIdFromIdentity(identity: string): string | null {
 }
 
 /**
+ * ONDE PERGUNTAR A FOTO — a identidade OPACA primeiro, o número depois.
+ *
+ * O WhatsApp passou a endereçar parte dos contatos por um id opaco (`@lid`) em
+ * vez do número. Para esses, perguntar a foto por `<numero>@c.us` devolve
+ * `null` — não um erro, não "sem foto": null, igual a quem realmente não tem.
+ * Medido em 14/10 nos seis contatos que apareciam sem foto numa fila real: os
+ * seis devolveram a URL quando perguntados por `<lid>@lid`, e null por `@c.us`.
+ *
+ * Por isso a ordem é esta e não a inversa: o `phone_number` continua existindo
+ * para quem já tem `wa_lid`, então preferir o número silenciaria a foto de todo
+ * contato que o WhatsApp já migrou — que é exatamente o que estava acontecendo.
+ */
+function ondePerguntarAFoto(c: {
+  wa_lid: string | null;
+  wa_identity: string | null;
+}): string | null {
+  if (c.wa_lid) return `${c.wa_lid}@lid`;
+  return c.wa_identity ? chatIdFromIdentity(c.wa_identity) : null;
+}
+
+/**
  * Os grupos que ainda precisam de foto.
  *
  * O vínculo é pela CONVERSA, e várias conversas podem apontar para o mesmo
@@ -125,8 +146,8 @@ async function handle(req: NextRequest): Promise<Response> {
   // declarada irreversível no produto; esta linha é o que sustenta isso.
   const { data: contatos, error: queryError } = await admin
     .from("contacts")
-    .select("id, organization_id, wa_identity, avatar_storage_path")
-    .not("wa_identity", "is", null)
+    .select("id, organization_id, wa_identity, wa_lid, avatar_storage_path")
+    .or("wa_identity.not.is.null,wa_lid.not.is.null")
     .eq("is_anonymized", false)
     .or(`avatar_updated_at.is.null,avatar_updated_at.lt.${cutoff}`)
     .order("avatar_updated_at", { ascending: true, nullsFirst: true })
@@ -145,13 +166,14 @@ async function handle(req: NextRequest): Promise<Response> {
       id: string;
       organization_id: string;
       wa_identity: string | null;
+      wa_lid: string | null;
       avatar_storage_path: string | null;
     }>
   ).map((c) => ({
     id: c.id,
     organization_id: c.organization_id,
     avatar_storage_path: c.avatar_storage_path,
-    chatId: c.wa_identity ? chatIdFromIdentity(c.wa_identity) : null,
+    chatId: ondePerguntarAFoto(c),
   }));
 
   const grupos = await candidatosDeGrupo(admin, cutoff, SCAN_LIMIT);
