@@ -153,6 +153,7 @@ function bancoDeMentira(preexistentes: Array<Partial<LinhaMessage>> = []): Duplo
       if (fn === "fn_upsert_wa_contact") return { data: "contato-1", error: null };
       if (fn === "fn_upsert_wa_group_contact") return { data: "grupo-1", error: null };
       if (fn === "fn_upsert_wa_conversation") return { data: "conversa-1", error: null };
+      if (fn === "fn_upsert_wa_group_conversation") return { data: "conversa-de-grupo-1", error: null };
       return { data: null, error: null };
     },
   };
@@ -284,6 +285,62 @@ describe("controles — o que tem que continuar sendo descartado", () => {
       rpcs.some((c) => c.fn === "fn_upsert_wa_contact"),
       "um grupo virando contato de pessoa é o defeito que a 0027 matou: id de grupo como se fosse cliente",
     ).toBe(false);
+    afirmaConversaDeGrupo(rpcs, messages, "120363000000000000@g.us");
+  });
+
+  /**
+   * A CONVERSA DO GRUPO nasce pela chave do grupo — nunca pelo caminho 1:1.
+   *
+   * `fn_upsert_wa_conversation` só enxerga `is_group = false`. Para grupo, o
+   * ingest a chamava e carimbava `group_chat_id` DEPOIS, e o carimbo colidia com
+   * o índice `(org, contato, sessão, group_chat_id)` a partir da 2ª mensagem —
+   * deixando duas conversas por grupo (a história na que NÃO tinha o id) e o
+   * envio sem destino. Ver a migration 0216.
+   *
+   * Dois fios: a mensagem tem de entrar na conversa que a RPC de grupo devolveu,
+   * e o caminho 1:1 não pode ser tocado de jeito nenhum.
+   */
+  function afirmaConversaDeGrupo(
+    rpcs: Array<{ fn: string; args: Record<string, unknown> }>,
+    messages: Array<Record<string, unknown>>,
+    chatEsperado: string,
+  ) {
+    const conversa = rpcs.find((c) => c.fn === "fn_upsert_wa_group_conversation");
+    expect(
+      conversa,
+      "o grupo não nasceu pela RPC própria — voltou o par 1:1 + carimbo, que colide da 2ª mensagem em diante",
+    ).toBeDefined();
+    expect(conversa!.args.p_group_chat_id, "a chave do grupo tem de ir na BUSCA, não num UPDATE depois").toBe(
+      chatEsperado,
+    );
+    expect(
+      rpcs.some((c) => c.fn === "fn_upsert_wa_conversation"),
+      "o caminho 1:1 foi usado para um grupo: é ele que cria a segunda conversa",
+    ).toBe(false);
+    expect(
+      messages[0]!.conversation_id,
+      "a mensagem entrou numa conversa que não é a que a RPC de grupo devolveu",
+    ).toBe("conversa-de-grupo-1");
+  }
+
+  it("mensagem RECEBIDA de um grupo entra pela mesma conversa de grupo", async () => {
+    const { admin, messages, rpcs } = bancoDeMentira();
+
+    await dispatchWahaEvent(
+      admin as never,
+      SESSION as never,
+      envelope({
+        id: "false_120363000000000000@g.us_3ACA779885FA9DEA8C12_36438703866081@lid",
+        from: "120363000000000000@g.us",
+        fromMe: false,
+        body: "oi, grupo",
+        timestamp: 1_760_000_000,
+      }),
+      "req-2",
+    );
+
+    expect(messages, "a mensagem recebida do grupo não foi gravada").toHaveLength(1);
+    afirmaConversaDeGrupo(rpcs, messages, "120363000000000000@g.us");
   });
 
   it("id de 4 segmentos (grupo, formato documentado do WAHA) não cria contato", async () => {

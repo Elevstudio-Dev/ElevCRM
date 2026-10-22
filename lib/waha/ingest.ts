@@ -493,36 +493,51 @@ async function upsertGroupContact(
 }
 
 /**
- * Carimba `is_group` e `group_chat_id` na conversa.
+ * A conversa de um GRUPO — achada (ou criada) pela chave do grupo, numa operação só.
  *
- * Separado de `upsertConversation` porque `fn_upsert_wa_conversation` é
- * compartilhada e tem grants próprios; acrescentar parâmetro a ela para um caso
- * que um UPDATE resolve é mexer em superfície de segurança à toa.
+ * ─── Por que isto NÃO é `upsertConversation` + um carimbo depois ────────────
  *
- * Falha BAIXO e conta: a mensagem já entrou quando chegamos aqui, e bloquear a
- * ingestão porque um carimbo falhou deixaria o histórico refém de uma coluna
- * derivada. Mas sem a marca a conversa vira 1:1 aos olhos do resto do sistema —
- * inclusive do filtro `ignore_groups` da IA, que é o que a mantém calada em
- * grupo. Por isso o log é `error` e não `info`: aqui o silêncio tem consequência.
+ * `fn_upsert_wa_conversation` resolve por `(org, contato, sessão) WHERE is_group
+ * = false`. Para grupo, a versão anterior a chamava e DEPOIS marcava a conversa
+ * com um UPDATE (`is_group = true`, `group_chat_id = X`):
+ *
+ *   1ª mensagem → cria C1 e o UPDATE a marca. Funciona.
+ *   2ª mensagem → a função só enxerga `is_group = false`, não acha C1 (já é
+ *                 true) e cria C2; o UPDATE tenta pôr o MESMO `X` em C2 e colide
+ *                 com o índice `(org, contato, sessão, group_chat_id)`.
+ *   3ª em diante → a função acha C2 e a devolve; o UPDATE falha de novo.
+ *
+ * Medido: 9 grupos com duas conversas cada, a história inteira na que NÃO tinha
+ * o id — e por isso o envio para grupo falhava com `missing_phone_number`: o
+ * destino de um grupo só existe em `group_chat_id`. O log guardava a causa, 890
+ * vezes igual. Um UPDATE depois do fato não tem como consertar isso, porque o
+ * índice já reservou o `X` para C1. A chave do grupo entra na BUSCA, e a
+ * migration 0216 faz achar-ou-criar atomicamente (sem janela entre o "não achei"
+ * e o "criei", que é onde duas mensagens simultâneas se duplicariam).
  */
-async function marcarConversaComoGrupo(
+async function upsertConversaDeGrupo(
   admin: Admin,
   orgId: string,
-  conversationId: string,
+  contactId: string,
+  sessionId: string,
   chatId: string,
-): Promise<void> {
-  const { error } = await admin
-    .from("conversations")
-    .update({ is_group: true, group_chat_id: chatId })
-    .eq("organization_id", orgId)
-    .eq("id", conversationId);
+): Promise<string | null> {
+  const { data, error } = await admin.rpc("fn_upsert_wa_group_conversation" as never, {
+    p_org: orgId,
+    p_contact: contactId,
+    p_session: sessionId,
+    p_group_chat_id: chatId,
+  } as never);
   if (error) {
-    logger.error("waha.ingest: conversa de grupo ficou sem a marca de grupo", {
+    // `error`, não `info`: sem esta conversa a mensagem não entra, e o silêncio
+    // aqui é exatamente o que escondeu o defeito por semanas.
+    logger.error("waha.ingest: conversa do grupo não achada nem criada", {
       organization_id: orgId,
-      conversation_id: conversationId,
       detail: error.message.slice(0, 160),
     });
+    return null;
   }
+  return (data as string) ?? null;
 }
 
 /**
@@ -693,9 +708,10 @@ async function handleInbound(
     if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
   }
 
-  const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
+  const conversationId = ehGrupo
+    ? await upsertConversaDeGrupo(admin, session.organization_id, contactId, session.id, chatId)
+    : await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
-  if (ehGrupo) await marcarConversaComoGrupo(admin, session.organization_id, conversationId, chatId);
 
   const now = new Date().toISOString();
   const { data: insertedMessage, error: insertErr } = await admin
@@ -937,9 +953,10 @@ async function handleOutboundFromUserPhone(
         telefoneAlternativoDe(p),
       );
   if (!contactId) return;
-  const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
+  const conversationId = ehGrupo
+    ? await upsertConversaDeGrupo(admin, session.organization_id, contactId, session.id, chatId)
+    : await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
-  if (ehGrupo) await marcarConversaComoGrupo(admin, session.organization_id, conversationId, chatId);
 
   const now = new Date().toISOString();
   const { data: insertedOutbound, error: insertErr } = await admin

@@ -172,34 +172,30 @@ export async function POST(req: Request): Promise<Response> {
       continue;
     }
 
+    // A conversa do grupo é achada pela CHAVE do grupo, numa operação só — e já
+    // nasce com `is_group` e `group_chat_id`. A versão anterior criava a conversa
+    // 1:1 e a carimbava depois com um UPDATE, que colidia com o índice
+    // `(org, contato, sessão, group_chat_id)` assim que o grupo já existia (a
+    // importação roda DE NOVO sempre que alguém clica em "importar"). Ver a
+    // migration 0216 e `upsertConversaDeGrupo`, no ingest do canal.
+    //
+    // A marca `is_group` é o que mantém a IA calada neste grupo: o filtro
+    // `ignore_groups` do despachante a lê. Por isso falhar aqui CONTA como falha
+    // do grupo inteiro, e não como detalhe cosmético.
     const { data: conversationId, error: erroConversa } = await admin.rpc(
-      "fn_upsert_wa_conversation" as never,
-      { p_org: activeOrg.orgId, p_contact: contactId, p_session: viva.id } as never,
+      "fn_upsert_wa_group_conversation" as never,
+      {
+        p_org: activeOrg.orgId,
+        p_contact: contactId,
+        p_session: viva.id,
+        p_group_chat_id: g.chatId,
+      } as never,
     );
     if (erroConversa || !conversationId) {
       resultado.falharam += 1;
       logger.warn("grupos.import: conversa do grupo não criada", {
         organization_id: activeOrg.orgId,
         detail: (erroConversa?.message ?? "rpc devolveu vazio").slice(0, 160),
-      });
-      continue;
-    }
-
-    // A MARCA é o que mantém a IA calada neste grupo: o filtro `ignore_groups`
-    // do despachante lê `is_group`. Conversa de grupo sem a marca é conversa em
-    // que o agente pode responder — por isso a falha aqui CONTA como falha do
-    // grupo inteiro, e não como detalhe cosmético.
-    const { error: erroMarca } = await admin
-      .from("conversations")
-      .update({ is_group: true, group_chat_id: g.chatId })
-      .eq("organization_id", activeOrg.orgId)
-      .eq("id", conversationId as string);
-    if (erroMarca) {
-      resultado.falharam += 1;
-      logger.error("grupos.import: conversa ficou sem a marca de grupo", {
-        organization_id: activeOrg.orgId,
-        conversation_id: conversationId as string,
-        detail: erroMarca.message.slice(0, 160),
       });
       continue;
     }

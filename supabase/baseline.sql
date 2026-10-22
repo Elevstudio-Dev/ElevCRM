@@ -12662,6 +12662,65 @@ create policy integration_contact_links_select on public.integration_contact_lin
 
 notify pgrst, 'reload schema';
 
+-- ═══════════════════════════════════════
+-- APÊNDICE 0216 — A CONVERSA DO GRUPO TEM CHAVE PRÓPRIA
+--
+-- Espelha `supabase/migrations/20261021120000_0216_...`. Quem INSTALA aplica
+-- este arquivo; quem ATUALIZA aplica a migration. As duas têm de deixar o banco
+-- igual.
+--
+-- `fn_upsert_wa_conversation` só enxerga `is_group = false`; para grupo, o
+-- ingest criava uma segunda conversa a cada carimbo que colidia com o índice
+-- `(org, contato, sessão, group_chat_id)`. Esta função acha ou cria a conversa
+-- do grupo JÁ pela chave do grupo, numa operação só (sem corrida).
+--
+-- Idempotente: `create or replace function` e revoke/grant declarativos; não
+-- toca em dado nenhum. É FUNÇÃO, então entra ANTES do bloco da VARREDURA anon,
+-- que é de propósito o último do arquivo (vigiado por
+-- `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`).
+create or replace function public.fn_upsert_wa_group_conversation(
+  p_org uuid,
+  p_contact uuid,
+  p_session uuid,
+  p_group_chat_id text
+) returns uuid
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  v_id uuid;
+  v_chat text := nullif(trim(p_group_chat_id), '');
+begin
+  if v_chat is null then
+    return null;
+  end if;
+
+  insert into public.conversations (
+    organization_id, contact_id, channel_session_id, channel, status,
+    is_group, group_chat_id, unread_count_for_assignee, metadata
+  ) values (
+    p_org, p_contact, p_session, 'whatsapp', 'open',
+    true, v_chat, 0, '{}'::jsonb
+  )
+  on conflict (organization_id, contact_id, channel_session_id, group_chat_id)
+  do update set is_group = true, updated_at = now()
+  returning id into v_id;
+
+  return v_id;
+end
+$function$;
+
+comment on function public.fn_upsert_wa_group_conversation(uuid, uuid, uuid, text) is
+  'Acha ou cria a conversa de um GRUPO de WhatsApp pela chave (org, contato, sessão, group_chat_id), numa operação só. Existe porque fn_upsert_wa_conversation só enxerga is_group=false e, para grupo, criava uma segunda conversa a cada carimbo que colidia.';
+
+revoke all on function public.fn_upsert_wa_group_conversation(uuid, uuid, uuid, text) from public;
+revoke all on function public.fn_upsert_wa_group_conversation(uuid, uuid, uuid, text) from anon;
+revoke all on function public.fn_upsert_wa_group_conversation(uuid, uuid, uuid, text) from authenticated;
+grant execute on function public.fn_upsert_wa_group_conversation(uuid, uuid, uuid, text) to service_role;
+
+notify pgrst, 'reload schema';
+
 -- ---- marca por organização (migration 0157) ----
 --
 -- A MARCA DO CLIENTE FINAL SE GRAVA EM UMA INSTRUÇÃO SÓ.
