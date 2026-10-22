@@ -38,10 +38,17 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (tabela: string) => ({
       select: () => {
+        // `conversations` é consultada pela varredura de GRUPOS e devolve uma LISTA
+        // (como o banco devolve). Aqui não há nenhum grupo — este arquivo mede a
+        // corrida com a anonimização, que é de PESSOA. Sem este ramo o dublê
+        // respondia com o objeto da sessão, que não é iterável, e o teste caía por
+        // um motivo que nada tem a ver com o que ele mede.
         const dados =
           tabela === "contacts"
             ? [{ id: CONTATO, organization_id: ORG, wa_identity: "phone:+5511999990000", avatar_storage_path: null }]
-            : { waha_session_name: "sessao-de-teste", provider: "waha" };
+            : tabela === "conversations"
+              ? []
+              : { waha_session_name: "sessao-de-teste", provider: "waha" };
         const proxy: Record<string, unknown> = new Proxy(
           {},
           {
