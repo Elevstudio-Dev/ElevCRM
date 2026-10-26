@@ -139,3 +139,7 @@ evidence/marca-logo/
 .backup-fora.log
 .backup-fora.lock
 .backup-fora-tmp.*/
+.backup-midia.ok
+.backup-midia.fail
+.backup-midia.log
+.backup-midia.lock

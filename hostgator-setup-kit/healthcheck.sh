@@ -43,6 +43,15 @@ if backup_fora_configurado; then
 else
   c_ylw "⚠ sem backup fora da VPS — se este servidor morrer, o backup morre junto (docs/runbooks/operacao-24h.md)."
 fi
+if backup_midia_configurado; then
+  if [ -f "$PROJECT_DIR/.backup-midia.ok" ]; then
+    c_grn "✓ backup dos arquivos de mídia configurado; último ok em $(date -u -d "@$(head -1 "$PROJECT_DIR/.backup-midia.ok" | tr -cd '0-9')" +%FT%TZ 2>/dev/null || echo '?')"
+  else
+    c_ylw "⚠ backup dos arquivos de mídia configurado, mas ainda não rodou — teste com: bash hostgator-setup-kit/backup-midia.sh --teste"
+  fi
+else
+  c_ylw "⚠ sem backup dos arquivos de mídia — as fotos e áudios dos pacientes não voltam se forem perdidos (docs/runbooks/operacao-24h.md)."
+fi
 
 step "Atualização pela tela (agente do host)"
 # Achado numa VPS real: o cron do agente é instalado no TOPO do update.sh, de

@@ -335,3 +335,4 @@ ensure_encryption_key .env
 setup_event_log_drain_cron
 setup_monitor_cron
 setup_backup_fora_cron
+setup_backup_midia_cron

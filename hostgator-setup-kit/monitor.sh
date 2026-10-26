@@ -119,21 +119,36 @@ checar_memoria() {
 # conferida. Backup que roda e não chega é pior que backup que não roda: dá
 # confiança que não existe.
 checar_backup() {
-  local marcador="${MONITOR_BACKUP_MARCADOR:-${PROJECT_DIR:-.}/.backup-fora.ok}"
-  local limite_h="${MONITOR_BACKUP_MAX_HORAS:-30}" epoch idade_h
   if ! backup_fora_configurado; then
     aviso "sem backup fora da VPS (BACKUP_FORA_DESTINO / BACKUP_AGE_RECIPIENT vazios no .env)"
     return 0
   fi
+  conferir_marcador "${MONITOR_BACKUP_MARCADOR:-${PROJECT_DIR:-.}/.backup-fora.ok}" "backup fora da VPS"
+}
+
+# A mídia (fotos e áudios dos pacientes) é backup à parte: o do banco não a leva. Mesmo
+# critério — marcador que só nasce depois de copiar E conferir — e mesma régua de 30 h.
+checar_backup_midia() {
+  if ! backup_midia_configurado; then
+    aviso "sem backup dos arquivos de mídia (BACKUP_MIDIA_ORIGEM / _DESTINO / _SENHA vazios no .env)"
+    return 0
+  fi
+  conferir_marcador "${MONITOR_BACKUP_MIDIA_MARCADOR:-${PROJECT_DIR:-.}/.backup-midia.ok}" "backup dos arquivos de mídia"
+}
+
+# O marcador é um epoch escrito SÓ depois de enviar e conferir. Aqui só se lê a idade dele.
+conferir_marcador() {  # conferir_marcador <arquivo> <rótulo>
+  local marcador="$1" rotulo="$2"
+  local limite_h="${MONITOR_BACKUP_MAX_HORAS:-30}" epoch idade_h
   if [ ! -f "$marcador" ]; then
-    aviso "o backup fora da VPS ainda não rodou nenhuma vez"
+    aviso "o $rotulo ainda não rodou nenhuma vez"
     return 0
   fi
   epoch="$(head -1 "$marcador" | tr -cd '0-9')"
-  [ -n "$epoch" ] || { problema "o marcador do backup fora da VPS está ilegível"; return 0; }
+  [ -n "$epoch" ] || { problema "o marcador do $rotulo está ilegível"; return 0; }
   idade_h=$(( ( $(agora) - epoch ) / 3600 ))
   if [ "$idade_h" -gt "$limite_h" ]; then
-    problema "o último backup fora da VPS tem ${idade_h}h (o limite é ${limite_h}h)"
+    problema "o último $rotulo tem ${idade_h}h (o limite é ${limite_h}h)"
   fi
 }
 
@@ -218,6 +233,7 @@ main() {
   checar_disco
   checar_memoria
   checar_backup
+  checar_backup_midia
   checar_reinicio
   checar_certificado
 

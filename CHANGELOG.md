@@ -8,40 +8,6 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
-### Adicionado
-
-- **Operação 24 horas: o servidor avisa quando algo está errado, e o backup sai da VPS**
-  Quatro peças novas no kit de instalação, todas opcionais — nada muda para quem não as liga:
-
-  - `monitor.sh` roda a cada 5 minutos e confere o Docker, cada serviço, a saúde do app,
-    disco, memória, certificado HTTPS, reinício pendente e a idade do último backup. Avisa um
-    monitor externo (`HEARTBEAT_URL` no `.env`, só `https://`): tudo bem → pinga; problema →
-    pinga `<URL>/fail` com o motivo; **silêncio** → o próprio monitor externo alerta, que é a
-    única forma de perceber uma VPS inteira fora do ar.
-  - `backup-fora.sh` leva o banco, o `.env` (as chaves que decifram o que o banco guarda
-    cifrado) e as sessões de WhatsApp para um armazenamento **fora do servidor**, cifrado com
-    `age` — nada em texto aberto, nem em disco temporário. Só a chave pública fica na VPS. O
-    `--teste` confere o destino e avisa se a chave de envio consegue apagar o que enviou.
-    Liga com `BACKUP_FORA_DESTINO` e `BACKUP_AGE_RECIPIENT` no `.env`.
-  - `testar-restauracao.sh` prova que o backup restaura: baixa o mais recente, confere o hash de
-    cada arquivo, decifra e carrega num Postgres descartável, e compara o número de tabelas com o
-    banco vivo. Termina com **BACKUP PROVADO** ou com o motivo de não ter provado.
-  - `preparar-host.sh` prepara um servidor novo: firewall (liberando antes a porta do SSH em que
-    você está conectado), bloqueio de tentativas de invasão, atualizações de segurança sem
-    reinício automático, swap e relógio. `--dry-run` mostra o plano sem mudar nada.
-
-  O passo a passo, a rotina e o que ainda **não** está coberto (os arquivos de mídia do Storage
-  não entram no backup do banco) estão em `docs/runbooks/operacao-24h.md`. O roteiro para a
-  Elev virar Tech Provider da Meta (WhatsApp oficial no mesmo número do celular) está em
-  `docs/runbooks/meta-tech-provider.md`.
-
-### Corrigido
-
-- **O `healthcheck.sh` declarava "saudável" um app com o banco fora** Ele procurava
-  `"status":"ok"` no JSON cru, que é o vocabulário dos checks individuais; o do Redis casava e o
-  app inteiro saía "✓ saudável". Passa a ler o status geral (`healthy`, `degraded`,
-  `unhealthy`), o mesmo critério do instalador e do atualizador.
-
 ## [1.16.0] — 2026-09-12
 
 ### Adicionado

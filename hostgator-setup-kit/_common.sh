@@ -732,7 +732,7 @@ owner_id_by_email() {
 # primeira (o filtro remove tudo que casa com o marcador, e as duas linhas
 # casavam). Medido na VPS: depois de instalar, sobrava só o agente e o CRM ficava
 # SEM o drain de eventos — a automação inteira parada, em silêncio.
-cron_tag() { printf '# elevcrm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent|monitor|backup-fora)}"; }
+cron_tag() { printf '# elevcrm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent|monitor|backup-fora|backup-midia)}"; }
 
 # Puro (testável sem tocar no crontab real): lê o crontab atual em stdin e
 # imprime o novo. Tira as linhas DESTA instalação — pelo marcador, e também
@@ -811,6 +811,48 @@ setup_update_agent_cron() {
 # backup-fora.sh — três lugares que discordariam do que "configurado" quer dizer.
 backup_fora_configurado() {
   [ -n "${BACKUP_FORA_DESTINO:-}" ] && [ -n "${BACKUP_AGE_RECIPIENT:-}" ]
+}
+
+# O backup dos ARQUIVOS do Storage (fotos, áudios e documentos dos pacientes) está
+# configurado? Origem, destino E senha: sem a senha o rclone mandaria os arquivos em
+# claro para fora, e o `exportar_cripto_da_midia` não teria como cifrá-los.
+backup_midia_configurado() {
+  [ -n "${BACKUP_MIDIA_ORIGEM:-}" ] && [ -n "${BACKUP_MIDIA_DESTINO:-}" ] && [ -n "${BACKUP_MIDIA_SENHA:-}" ]
+}
+
+# Monta (e EXPORTA, para o rclone ler do ambiente) o remoto `midiacripto:` — o destino do
+# backup da mídia, cifrado: conteúdo E nomes dos arquivos. Quem lê o bucket vê lixo, não
+# "foto-do-paciente-fulano.jpg". Compartilhado pelo backup-midia.sh e pela prova de
+# restauração, que PRECISAM montar o mesmo remoto do mesmo jeito (senão cada um decifra
+# diferente e o backup nunca abre).
+#
+# A senha vira a forma "ofuscada" que o rclone exige, e entra pelo stdin: na linha de
+# comando um `ps` a mostraria. Devolve 1 se não conseguiu (docker fora, imagem ausente).
+exportar_cripto_da_midia() {
+  local imagem="${RCLONE_IMAGE:-${BACKUP_RCLONE_IMAGE:-rclone/rclone:1.68.2}}" ofuscada
+  ofuscada="$(printf '%s' "$BACKUP_MIDIA_SENHA" | docker run --rm -i "$imagem" obscure - 2>/dev/null)" || return 1
+  [ -n "$ofuscada" ] || return 1
+  export RCLONE_CONFIG_MIDIACRIPTO_TYPE=crypt
+  export RCLONE_CONFIG_MIDIACRIPTO_REMOTE="${BACKUP_MIDIA_DESTINO%/}"
+  export RCLONE_CONFIG_MIDIACRIPTO_PASSWORD="$ofuscada"
+  export RCLONE_CONFIG_MIDIACRIPTO_FILENAME_ENCRYPTION=standard
+  export RCLONE_CONFIG_MIDIACRIPTO_DIRECTORY_NAME_ENCRYPTION=true
+}
+
+# Ativa (idempotente) o backup diário dos arquivos do Storage para fora da VPS. Só com
+# origem, destino e senha no .env. Roda DEPOIS do backup do banco (03:17 UTC), em arquivo
+# de log próprio: copiar mídia leva mais tempo, e uma falha de um não esconde a do outro.
+setup_backup_midia_cron() {
+  command -v crontab >/dev/null 2>&1 || { c_ylw "⚠ 'crontab' não encontrado — o backup dos arquivos de mídia não foi ativado."; return 0; }
+  if ! backup_midia_configurado; then
+    c_ylw "⚠ backup dos arquivos de mídia desligado (BACKUP_MIDIA_ORIGEM / _DESTINO / _SENHA vazios) — ver docs/runbooks/operacao-24h.md"
+    return 0
+  fi
+  local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/backup-midia.sh"
+  local marcador; marcador="$(cron_tag backup-midia)"
+  local cron_line="47 3 * * * ${legado} >> ${PROJECT_DIR}/.backup-midia.log 2>&1 ${marcador}"
+  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  c_grn "✓ backup dos arquivos de mídia ativo (todo dia às 03:47 UTC)"
 }
 
 # Ativa (idempotente) o monitor do servidor. Só liga quando há para onde avisar:

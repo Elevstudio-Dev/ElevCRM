@@ -147,7 +147,8 @@ declare `REVERSE_PROXY=traefik` no `.env` — aí a escolha é sua e ele segue s
 | `preparar-host.sh` | Prepara um servidor NOVO para ficar no ar: firewall, bloqueio de tentativas de invasão, atualizações de segurança, swap, relógio. `--dry-run` mostra o plano sem mudar nada |
 | `monitor.sh` | Roda por cron a cada 5 min e avisa um monitor externo (`HEARTBEAT_URL`) se algo está errado — ou se ele para de avisar |
 | `backup-fora.sh` | Backup **cifrado** do banco, do `.env` e das sessões de WhatsApp para fora da VPS. `--teste` confere o destino e se a chave consegue apagar |
-| `testar-restauracao.sh` | Prova que o backup fora da VPS restaura (num Postgres descartável). Rode todo mês |
+| `backup-midia.sh` | Backup **cifrado** das fotos, áudios e documentos dos pacientes (o Storage do Supabase), incremental, para fora da VPS. O backup do banco não os inclui |
+| `testar-restauracao.sh` | Prova que o backup fora da VPS restaura (num Postgres descartável) e que a mídia abre com a senha. Rode todo mês |
 
 > **Manter no ar 24 horas** — firewall, monitor, backup fora da VPS e a rotina de operação estão
 > em [`docs/runbooks/operacao-24h.md`](../docs/runbooks/operacao-24h.md). O `backup.sh` grava no mesmo

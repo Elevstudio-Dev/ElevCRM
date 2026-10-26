@@ -1961,6 +1961,7 @@ setup_event_log_drain_cron
 setup_update_agent_cron
 setup_monitor_cron
 setup_backup_fora_cron
+setup_backup_midia_cron
 
 # ── Final ───────────────────────────────────────────────────────────────────
 # O app não confirmou que está de pé: dizer "Instalação concluída!" aqui seria

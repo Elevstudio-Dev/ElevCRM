@@ -21,7 +21,7 @@ ficar no ar, como saber quando não está, e como voltar.
 | O disco enche | tudo para, depois de um tempo | `monitor.sh` avisa a 80% e acusa a 90% | Não |
 | O certificado HTTPS não renova | navegador recusa o site | `monitor.sh` avisa 21 dias antes | Não |
 | A Meta / o WhatsApp | mensagens não chegam | canal aparece com erro na tela; o monitor **não** vê isto | Quando voltar |
-| O backup para de chegar | **ninguém sente** — até o desastre | `monitor.sh` acusa depois de 30 h | Não |
+| O backup (do banco ou da mídia) para de chegar | **ninguém sente** — até o desastre | `monitor.sh` acusa depois de 30 h | Não |
 
 A última linha é a mais perigosa: backup que falha em silêncio só aparece na hora de
 restaurar. Por isso o monitor trata "backup com mais de 30 h" como **problema**, e não aviso.
@@ -37,6 +37,7 @@ restaurar. Por isso o monitor trata "backup com mais de 30 h" como **problema**,
 | Monitor com "dead man's switch" (healthchecks.io ou equivalente) | perceber a queda da VPS inteira | a Elev |
 | Monitor de site (UptimeRobot, Better Stack…) | perceber que o site não abre | a Elev |
 | Meta (Tech Provider) | WhatsApp oficial — ver [`meta-tech-provider.md`](meta-tech-provider.md) | a Elev |
+| Chave S3 do Storage do Supabase | ler os arquivos dos pacientes para o backup (§5b) | — (vem do plano) |
 | Chave de IA de cada cliente | o cliente cadastra a dele, em Configurações → IA | o cliente |
 
 ## 3. Preparar o servidor (uma vez)
@@ -152,6 +153,71 @@ Supabase) — o banco descartável é um Postgres comum, e os erros de extensão
 escondidos. **Uma vez por trimestre** restaure num projeto Supabase descartável e confira que
 o login e uma conversa abrem.
 
+## 5b. Backup dos arquivos (fotos, áudios e documentos dos pacientes)
+
+**O backup do banco não leva os arquivos.** O Supabase restaura a tabela que *lista* os arquivos,
+não os arquivos. Foto que o paciente mandou, apagada ou perdida, não volta — e a conversa
+continua apontando para ela. O `backup-midia.sh` copia o Storage inteiro para fora, **cifrado**
+(conteúdo e nomes), de forma **incremental**: só o que é novo ou mudou.
+
+### 5b.1 `copy`, nunca `sync` — e o que isso custa
+
+O Storage do Supabase [não tem versionamento](https://supabase.com/docs/guides/storage/s3/compatibility):
+arquivo apagado lá some para sempre. Por isso o backup **só acrescenta**: o que foi apagado na
+origem continua no backup (é para isso que ele serve). O custo, dito de frente: um arquivo que
+o paciente pediu para apagar (LGPD) continua no backup até o prazo de expiração do bucket
+vencer. Escreva esse prazo no contrato de tratamento de dados.
+
+### 5b.2 O que configurar
+
+1. **Chave S3 do Storage**: Supabase → Storage → *S3 Connection* → criar o par de chaves.
+   [Ela dá acesso total a todos os buckets e ignora as regras de acesso](https://supabase.com/docs/guides/storage/s3/authentication)
+   — trate como a `service_role`: só no `.env` da VPS.
+2. **No `.env` da VPS**:
+
+   ```
+   BACKUP_MIDIA_ORIGEM=supamidia:
+   BACKUP_MIDIA_DESTINO=fora:NOME-DO-BUCKET/elevcrm-midia   # o mesmo remoto "fora" do §5.3, outra pasta
+   BACKUP_MIDIA_SENHA=…            # 24+ caracteres: openssl rand -base64 32 — cifra conteúdo E nomes
+   RCLONE_CONFIG_SUPAMIDIA_TYPE=s3
+   RCLONE_CONFIG_SUPAMIDIA_PROVIDER=Other
+   RCLONE_CONFIG_SUPAMIDIA_ENDPOINT=https://<ref-do-projeto>.storage.supabase.co/storage/v1/s3
+   RCLONE_CONFIG_SUPAMIDIA_ACCESS_KEY_ID=…
+   RCLONE_CONFIG_SUPAMIDIA_SECRET_ACCESS_KEY=…
+   RCLONE_CONFIG_SUPAMIDIA_REGION=<região do projeto, ex. sa-east-1>
+   ```
+
+   A senha da cifra **não precisa de cofre à parte**: o `.env` é copiado (cifrado com `age`) pelo
+   `backup-fora.sh`, então ela sobrevive a uma VPS perdida — desde que a chave privada do §5.1
+   também tenha sobrevivido. **Perdeu a senha = perdeu os arquivos.**
+3. **Teste, depois o de verdade**:
+
+   ```bash
+   bash hostgator-setup-kit/backup-midia.sh --teste   # lê a origem, escreve, confere a ida e volta pela cifra e TENTA APAGAR
+   bash hostgator-setup-kit/backup-midia.sh           # a primeira cópia leva tudo; as seguintes só o novo
+   ```
+
+   O cron diário (03:47 UTC, depois do banco) é ligado pelo `install.sh`/`update.sh` quando as três
+   variáveis existem. O marcador `.backup-midia.ok` só nasce depois de copiar **e** conferir que
+   todo arquivo da origem chegou com o mesmo tamanho; o `monitor.sh` acusa se passar de 30 h.
+
+### 5b.3 Restaurar
+
+```bash
+# no computador de quem guarda a senha, com o mesmo .env (BACKUP_MIDIA_* e RCLONE_CONFIG_*):
+bash hostgator-setup-kit/testar-restauracao.sh --chave-privada ~/elev-backup.key --env ~/cliente.env
+```
+
+A prova mensal do §5.5 também abre a mídia: confere que o destino **abre com a senha** (com a senha
+errada o `rclone` não dá erro, mostra o backup vazio — a prova compara com a contagem bruta e
+reprova) e baixa e decifra uma amostra de até 5 arquivos. Para devolver os arquivos ao Storage,
+com as variáveis do `.env` exportadas e a cifra montada (`exportar_cripto_da_midia`, em
+`_common.sh`): `rclone copy midiacripto: supamidia:`.
+
+**Não provado:** a volta dos arquivos **para dentro do Storage do Supabase** (a ida e a decifração,
+byte a byte, foram provadas; reenviar para o mesmo bucket e conferir que a tela os abre, não).
+Faça esse ensaio no trimestral do §6.
+
 ## 6. Rotina
 
 | Quando | O quê |
@@ -216,8 +282,10 @@ diário). Se precisar do nosso: `restore.sh` com o dump decifrado — **sobrescr
   que *lista* os arquivos, mas não os arquivos — nem o diário, nem o PITR, nem um `pg_dump`
   (fontes: a [issue do repositório de Storage do Supabase](https://github.com/supabase/storage/issues/789)
   e a [discussão aberta pedindo backup do Storage](https://github.com/orgs/supabase/discussions/39948);
-  não li uma página oficial que diga isso, então confirme no painel). Hoje não há cópia nossa
-  deles: apagados ou perdidos, não voltam. Para uma clínica, isto é a lacuna mais séria.
+  não li uma página oficial que diga isso, então confirme no painel). **O §5b cobre isso — mas só
+  quando você o liga.** Sem as três variáveis `BACKUP_MIDIA_*`, os arquivos apagados ou perdidos
+  não voltam, e o monitor mostra o aviso "sem backup dos arquivos de mídia". Para uma clínica,
+  é a lacuna mais séria: ligue **antes** do primeiro paciente.
 - **Tempo de reconstrução** (RTO): não medido (§7.1).
 - **Perda máxima de dados** (RPO): até 24 h — o backup é diário. Menos que isso exige o
   recurso de restauração para um instante exato do Supabase (PITR), que é um adicional pago.

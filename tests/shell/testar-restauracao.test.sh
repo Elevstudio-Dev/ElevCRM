@@ -84,11 +84,34 @@ for a in "$@"; do
   [ "$achou" = 1 ] && resto+=("$a")
   case "$a" in rclone/rclone:*) achou=1 ;; esac
 done
+# A mídia: o remoto `midiacripto:` enxerga a mesma pasta que o destino bruto, MAS só se a senha
+# for a certa — com a senha errada o rclone de verdade não dá erro, mostra o backup vazio.
+midia_dir="$FAKE_REMOTE/bucket/elevcrm-midia"
+senha_abre() { [ "${RCLONE_CONFIG_MIDIACRIPTO_PASSWORD:-}" = "OFUSCADA-OK" ]; }
 case "$sub" in
-  lsf)  ls -1 "$(remoto "${resto[0]}")" 2>/dev/null | sed 's|$|/|' ;;
-  copy) origem="$(remoto "${resto[0]}")"; destino="$mount${resto[1]#/saida}"
-        [ -d "$origem" ] || exit 1
-        mkdir -p "$destino"; cp -r "$origem"/. "$destino"/ ;;
+  obscure) senha="$(cat)"; if [ "$senha" = "${STUB_SENHA_CERTA:-senha-certa-da-midia-0123456789}" ]; then echo OFUSCADA-OK; else echo OFUSCADA-ERRADA; fi ;;
+  size)
+    # as duas leituras falham SEPARADAS: com uma só chave, o segundo guarda do script reprovava
+    # sempre e escondia que o primeiro tinha sido removido
+    case "${resto[0]}" in
+      midiacripto:*) [ "${STUB_SIZE_CRIPTO_RC:-0}" -eq 0 ] || exit "$STUB_SIZE_CRIPTO_RC"
+                     if senha_abre; then n="$(ls -1 "$midia_dir" 2>/dev/null | wc -l | tr -d ' ')"; else n=0; fi ;;
+      *)             [ "${STUB_SIZE_BRUTO_RC:-0}" -eq 0 ] || exit "$STUB_SIZE_BRUTO_RC"
+                     n="$(ls -1 "$(remoto "${resto[0]}")" 2>/dev/null | wc -l | tr -d ' ')" ;;
+    esac
+    printf 'Total objects: %s (%s)\nTotal size: 1 KiB (1024 Byte)\n' "$n" "$n" ;;
+  lsf)  case "${resto[0]}" in
+          midiacripto:*) if senha_abre && [ "${STUB_SEM_AMOSTRA:-0}" != 1 ]; then ls -1 "$midia_dir" 2>/dev/null; fi ;;
+          *) ls -1 "$(remoto "${resto[0]}")" 2>/dev/null | sed 's|$|/|' ;;
+        esac ;;
+  copy) case "${resto[0]}" in
+          midiacripto:*) senha_abre || exit 0
+                         mkdir -p "$mount/midia"; cp -r "$midia_dir"/. "$mount/midia"/
+                         exit "${STUB_AMOSTRA_RC:-0}" ;;
+          *) origem="$(remoto "${resto[0]}")"; destino="$mount${resto[1]#/saida}"
+             [ -d "$origem" ] || exit 1
+             mkdir -p "$destino"; cp -r "$origem"/. "$destino"/ ;;
+        esac ;;
 esac
 exit 0
 STUB
@@ -237,6 +260,81 @@ STUB_ERROS=$'ERROR:  extension "pg_graphql" is not available\nERROR:  extension 
 check "lista os erros da carga, agrupados" tem "$OUT" 'extension "pg_graphql" is not available'
 check "  com a contagem" tem "$OUT" "3 erro(s) durante a carga"
 check "  e erros esperados NÃO reprovam (é Postgres comum, não Supabase)" test "$RC" -eq 0
+
+# ══ A mídia (fotos e áudios dos pacientes) ═══════════════════════════════════
+echo "a mídia"
+MIDIA_ENV=("BACKUP_MIDIA_ORIGEM=supamidia:" "BACKUP_MIDIA_DESTINO=fora:bucket/elevcrm-midia" "BACKUP_MIDIA_SENHA=senha-certa-da-midia-0123456789")
+cria_midia() {  # cria_midia <n> — n arquivos no destino bruto da mídia
+  local d="$FAKE_REMOTE/bucket/elevcrm-midia" i
+  mkdir -p "$d"
+  for i in $(seq 1 "$1"); do printf 'conteudo %s\n' "$i" > "$d/$i.enc"; done
+}
+
+novo_cenario midiaok "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700; cria_midia 3
+restaura
+check "com mídia configurada e a senha certa: prova" test "$RC" -eq 0
+check "  diz quantos arquivos abrem com a senha" tem "$OUT" "3 arquivo(s) de mídia abrem com a senha"
+check "  baixa e decifra uma amostra de verdade" tem "$OUT" "baixei e decifrei 3 arquivo(s) de amostra"
+check "  e ainda diz BACKUP PROVADO" tem "$OUT" "BACKUP PROVADO"
+
+# O caso traiçoeiro: senha ERRADA não dá erro no rclone — ele mostra o backup VAZIO.
+novo_cenario midiasenhaerrada "BACKUP_MIDIA_ORIGEM=supamidia:" "BACKUP_MIDIA_DESTINO=fora:bucket/elevcrm-midia" "BACKUP_MIDIA_SENHA=outra-senha-que-nao-abre-0123456789"
+cria_backup 20290101-031700; cria_midia 3
+restaura
+check "senha ERRADA da mídia: REPROVA (o destino tem arquivos, mas nenhum abre)" test "$RC" -ne 0
+check "  e diz que a senha não abre" tem "$OUT" "a senha está errada"
+check "  sem afirmar BACKUP PROVADO" naotem "$OUT" "BACKUP PROVADO"
+
+novo_cenario midiavazia "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700
+restaura
+check "mídia ainda vazia (nada enviado): não reprova, mas diz" tem "$OUT" "ainda está vazio"
+check "  e prova o banco normalmente" test "$RC" -eq 0
+
+novo_cenario midiasemamostra "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700; cria_midia 2
+STUB_SEM_AMOSTRA=1 restaura
+check "nenhum arquivo pequeno para amostrar: avisa que não conferiu o conteúdo" tem "$OUT" "não conferi o conteúdo"
+
+novo_cenario midialeituraquebra "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700; cria_midia 2
+STUB_SIZE_BRUTO_RC=1 restaura
+check "não consegue ler o destino BRUTO da mídia: REPROVA" test "$RC" -ne 0
+check "  e diz que foi o destino" tem "$OUT" "ler o destino da mídia"
+
+novo_cenario midiacriptoquebra "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700; cria_midia 2
+STUB_SIZE_CRIPTO_RC=1 restaura
+check "não consegue ler a mídia PELA CIFRA: REPROVA" test "$RC" -ne 0
+check "  e diz que foi pela cifra" tem "$OUT" "pela cifra"
+
+novo_cenario midiaamostrafalha "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700; cria_midia 2
+STUB_AMOSTRA_RC=1 restaura
+check "a amostra não baixa: REPROVA" test "$RC" -ne 0
+check "  e diz isso" tem "$OUT" "baixar uma amostra"
+
+# A amostra é uma LISTA explícita (--files-from), nunca um teto de bytes: com --max-transfer o
+# rclone abandona a cópia no meio e falha ao ajustar a data das pastas ("chtimes … no such file"),
+# e um backup BOM reprovava assim que a mídia passava do teto — achado pela prova real contra o
+# Storage, que o dublê não reproduz. Este caso trava a ESCOLHA, já que o dublê não tem como errar.
+novo_cenario midialista "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700; cria_midia 3
+restaura
+check "a amostra é baixada por lista explícita (--files-from)" tem "$(cat "$STUB_LOG")" "--files-from"
+check "  e NÃO por teto de bytes (--max-transfer)" naotem "$(cat "$STUB_LOG")" "--max-transfer"
+
+novo_cenario semmidia
+cria_backup 20290101-031700
+restaura
+check "sem mídia no .env: avisa que não provou os arquivos dos pacientes" tem "$OUT" "não provei os arquivos dos pacientes"
+check "  e a prova do banco segue verde" test "$RC" -eq 0
+
+novo_cenario midiasenhanalinha "${MIDIA_ENV[@]}"
+cria_backup 20290101-031700; cria_midia 1
+restaura
+check "a SENHA da mídia não aparece na linha de comando do docker" naotem "$(cat "$STUB_LOG")" "senha-certa-da-midia-0123456789"
 
 # ══ Argumentos ═══════════════════════════════════════════════════════════════
 echo "argumentos"

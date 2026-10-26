@@ -203,6 +203,33 @@ check "marcador ilegível é PROBLEMA (não finge que está em dia)" tem "$saida
 saida="$(env BACKUP_FORA_DESTINO="fora:x" MONITOR_BACKUP_MARCADOR="$MARC" bash -c 'MONITOR_LIB=1 . "$1"/monitor.sh 2>/dev/null; set +e; checar_backup; echo "P=${#PROBLEMAS[@]} A=${#AVISOS[@]}"' x "$KIT_DIR")"
 check "destino sem chave pública NÃO conta como configurado" tem "$saida" "P=0 A=1"
 
+# ══ Backup dos arquivos de mídia ═════════════════════════════════════════════
+echo "backup dos arquivos de mídia"
+MARC_M="$WORK/marcador-midia"
+CONF_M=(BACKUP_MIDIA_ORIGEM="supamidia:" BACKUP_MIDIA_DESTINO="fora:b/midia" BACKUP_MIDIA_SENHA="uma-senha-bem-longa-0123456789")
+rodar_midia() {  # rodar_midia [VAR=valor...] → "P=<n> A=<n>" e as mensagens de checar_backup_midia
+  env "$@" MONITOR_BACKUP_MIDIA_MARCADOR="$MARC_M" bash -c \
+    'MONITOR_LIB=1 . "$1"/monitor.sh 2>/dev/null; set +e; checar_backup_midia; echo "P=${#PROBLEMAS[@]} A=${#AVISOS[@]}"; printf "%s\n" "${PROBLEMAS[@]}" "${AVISOS[@]}"' x "$KIT_DIR"
+}
+rm -f "$MARC_M"
+saida="$(rodar_midia BACKUP_MIDIA_ORIGEM= BACKUP_MIDIA_DESTINO= BACKUP_MIDIA_SENHA=)"
+check "sem backup de mídia configurado: AVISO permanente, nunca problema" tem "$saida" "P=0 A=1"
+check "  e o aviso diz que as fotos dos pacientes ficam sem cópia" tem "$saida" "arquivos de mídia"
+saida="$(rodar_midia BACKUP_MIDIA_ORIGEM="supamidia:" BACKUP_MIDIA_DESTINO="fora:b/midia" BACKUP_MIDIA_SENHA=)"
+check "origem e destino SEM a senha NÃO conta como configurado (mandaria em claro)" tem "$saida" "P=0 A=1"
+saida="$(rodar_midia "${CONF_M[@]}")"
+check "configurado e que nunca rodou: AVISO" tem "$saida" "P=0 A=1"
+printf '%s\n' "$((AGORA - 3600 * 5))" > "$MARC_M"
+saida="$(rodar_midia "${CONF_M[@]}")"
+check "cópia de 5h atrás: calado" tem "$saida" "P=0 A=0"
+printf '%s\n' "$((AGORA - 3600 * 40))" > "$MARC_M"
+saida="$(rodar_midia "${CONF_M[@]}")"
+check "cópia de 40h atrás é PROBLEMA" tem "$saida" "P=1"
+check "  e a mensagem diz que é a da mídia e quantas horas" tem "$saida" "backup dos arquivos de mídia tem 40h"
+printf 'lixo\n' > "$MARC_M"
+saida="$(rodar_midia "${CONF_M[@]}")"
+check "marcador ilegível é PROBLEMA" tem "$saida" "P=1"
+
 # ══ Reinício pendente ════════════════════════════════════════════════════════
 echo "reinício pendente"
 touch -d '8 days ago' "$WORK/reboot-velho"
@@ -252,6 +279,7 @@ check "  imprime OK" tem "$OUT" "OK"
 check "  pinga a URL do monitor, sem /fail" grep -qF -- "$SEGREDO_URL" "$WORK/curl.log"
 check "  e NÃO pinga /fail" naotem "$(cat "$WORK/curl.log")" "/fail"
 check "  grava a rodada no log do projeto" test -s "$PROJ/.monitor.log"
+check "  a rodada completa também olha o backup da mídia (aviso: não configurado)" tem "$OUT" "arquivos de mídia"
 check "  a URL secreta NÃO aparece na saída" naotem "$OUT" "ESTE-SEGREDO"
 check "  nem no log" naotem "$(cat "$PROJ/.monitor.log")" "ESTE-SEGREDO"
 
@@ -319,6 +347,21 @@ check "backup-fora: liga às 03:17" grep -q '^17 3 \* \* \* cd /srv/a && bash ho
 check "  e guarda a saída num arquivo (falha precisa deixar a causa)" grep -qF -- '>> /srv/a/.backup-fora.log 2>&1' "$CRON_FILE"
 cron_rodar setup_backup_fora_cron PROJECT_DIR=/srv/a BACKUP_FORA_DESTINO=fora:b/x BACKUP_AGE_RECIPIENT=age1abc
 check "backup-fora: rodar de novo NÃO duplica" test "$(linhas 'backup-fora.sh')" -eq 1
+
+: > "$CRON_FILE"
+cron_rodar setup_backup_midia_cron PROJECT_DIR=/srv/a BACKUP_MIDIA_ORIGEM=supamidia: BACKUP_MIDIA_DESTINO=fora:b/m BACKUP_MIDIA_SENHA=uma-senha-longa
+check "backup-midia: liga às 03:47 (depois do banco)" grep -q '^47 3 \* \* \* cd /srv/a && bash hostgator-setup-kit/backup-midia.sh' "$CRON_FILE"
+check "  com saída em arquivo de log próprio" grep -qF -- '>> /srv/a/.backup-midia.log 2>&1' "$CRON_FILE"
+cron_rodar setup_backup_midia_cron PROJECT_DIR=/srv/a BACKUP_MIDIA_ORIGEM=supamidia: BACKUP_MIDIA_DESTINO=fora:b/m BACKUP_MIDIA_SENHA=uma-senha-longa
+check "backup-midia: rodar de novo NÃO duplica" test "$(linhas 'backup-midia.sh')" -eq 1
+cron_rodar setup_backup_fora_cron PROJECT_DIR=/srv/a BACKUP_FORA_DESTINO=fora:b/x BACKUP_AGE_RECIPIENT=age1abc
+check "os crons de banco e de mídia coexistem (um não apaga o outro)" test "$(linhas 'backup-midia.sh')" -eq 1 -a "$(linhas 'backup-fora.sh')" -eq 1
+
+: > "$CRON_FILE"
+cron_rodar setup_backup_midia_cron PROJECT_DIR=/srv/a BACKUP_MIDIA_ORIGEM=supamidia: BACKUP_MIDIA_DESTINO=fora:b/m BACKUP_MIDIA_SENHA=
+check "backup-midia: sem a senha não liga" test ! -s "$CRON_FILE"
+cron_rodar setup_backup_midia_cron PROJECT_DIR=/srv/a BACKUP_MIDIA_ORIGEM= BACKUP_MIDIA_DESTINO=fora:b/m BACKUP_MIDIA_SENHA=uma-senha-longa
+check "backup-midia: sem a origem não liga" test ! -s "$CRON_FILE"
 
 : > "$CRON_FILE"
 cron_rodar setup_backup_fora_cron PROJECT_DIR=/srv/a BACKUP_FORA_DESTINO=fora:b/x BACKUP_AGE_RECIPIENT=

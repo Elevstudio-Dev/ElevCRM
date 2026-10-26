@@ -58,6 +58,61 @@ rclone_run() {  # rclone_run <args...> — a pasta de saída é $TMP montado em 
 
 psql_descartavel() { docker exec -i "$CONTAINER" psql -U postgres -d postgres -q -X "$@"; }
 
+# Número de objetos de um `rclone size` ("Total objects: 531 (531)"). Vazio se não leu.
+objetos_de() { sed -n 's/^Total objects: *\([0-9][0-9]*\).*/\1/p' | head -1; }
+
+# Os arquivos de mídia (fotos e áudios dos pacientes) vivem em outro backup, cifrado com uma
+# SENHA (rclone crypt), e a prova precisa abrir esse também — senão "BACKUP PROVADO" cobriria só o
+# banco e daria confiança sobre o que ela não olhou.
+#
+# O caso traiçoeiro: com a senha ERRADA o rclone não dá erro — ele "não consegue decifrar os
+# nomes" e mostra o backup VAZIO. Por isso a contagem de dentro da cifra é confrontada com a
+# contagem bruta do destino: bruto cheio e decifrado vazio = a senha não abre.
+provar_a_midia() {
+  backup_midia_configurado || { c_dim "  (sem backup de mídia no .env: não provei os arquivos dos pacientes)"; return 0; }
+  step "Arquivos de mídia (fotos, áudios, documentos)"
+  exportar_cripto_da_midia || reprovar "Não consegui montar a cifra da mídia (BACKUP_MIDIA_SENHA / Docker)."
+
+  local bruto decifrado n_bruto n_dec
+  bruto="$(rclone_run size "${BACKUP_MIDIA_DESTINO%/}" 2>&1)" || reprovar "Não consegui ler o destino da mídia '${BACKUP_MIDIA_DESTINO%/}'."
+  n_bruto="$(printf '%s\n' "$bruto" | objetos_de)"
+  decifrado="$(rclone_run size midiacripto: 2>&1)" || reprovar "Não consegui ler o backup da mídia pela cifra."
+  n_dec="$(printf '%s\n' "$decifrado" | objetos_de)"
+  n_bruto="${n_bruto:-0}"; n_dec="${n_dec:-0}"
+
+  if [ "$n_bruto" -gt 0 ] && [ "$n_dec" -eq 0 ]; then
+    reprovar "O destino da mídia tem $n_bruto objeto(s), mas NENHUM abre com a BACKUP_MIDIA_SENHA — a senha está errada."
+  fi
+  if [ "$n_dec" -eq 0 ]; then
+    c_dim "  o backup da mídia ainda está vazio (nenhum arquivo foi enviado até agora)"
+    return 0
+  fi
+  c_grn "✓ $n_dec arquivo(s) de mídia abrem com a senha"
+
+  # Uma amostra baixada e decifrada de verdade (arquivos pequenos e um teto de bytes), para o
+  # tamanho do backup não decidir quanto tempo a prova leva.
+  mkdir -p "$TMP/midia"
+  # A amostra é uma LISTA explícita (os 5 primeiros arquivos de até 50 MB), baixada com
+  # --files-from. A primeira versão limitava por bytes (--max-transfer): o rclone abandonava a
+  # cópia no meio e depois falhava ao ajustar a data das pastas que tinha criado ("chtimes … no
+  # such file") — um backup BOM reprovava assim que a mídia passava do teto. Achado pela prova
+  # real contra o Storage (485 MB), que o teste com dublê não tinha como ver.
+  rclone_run lsf midiacripto: -R --files-only --max-size 50M > "$TMP/lista-da-midia.txt" 2>/dev/null \
+    || reprovar "Não consegui listar os arquivos de mídia pela cifra."
+  head -n 5 "$TMP/lista-da-midia.txt" > "$TMP/amostra.txt"
+  if [ -s "$TMP/amostra.txt" ]; then
+    local saida_amostra
+    saida_amostra="$(rclone_run copy midiacripto: /saida/midia --files-from /saida/amostra.txt 2>&1)" \
+      || reprovar "Não consegui baixar uma amostra da mídia: $(printf '%s' "$saida_amostra" | tail -n 3 | tr '\n' ' ')"
+  fi
+  local baixados; baixados="$(find "$TMP/midia" -type f | wc -l | tr -d ' ')"
+  if [ "$baixados" -gt 0 ]; then
+    c_grn "✓ baixei e decifrei $baixados arquivo(s) de amostra"
+  else
+    c_ylw "⚠ nenhum arquivo de até 50 MB para amostrar — a mídia abre, mas não conferi o conteúdo."
+  fi
+}
+
 main() {
   local chave="" env_arq=".env" em="" a
   while [ $# -gt 0 ]; do
@@ -196,6 +251,8 @@ PRELUDIO
   else
     c_dim "  (sem SUPABASE_DB_URL no .env: não comparei com o banco vivo)"
   fi
+
+  provar_a_midia
 
   printf '\n'
   c_grn "BACKUP PROVADO: $em decifra, descomprime e restaura ($tabelas tabelas)."
