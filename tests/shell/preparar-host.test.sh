@@ -83,7 +83,9 @@ STUB
 anota sshd <<'STUB'
 #!/usr/bin/env bash
 case "${1:-}" in
-  -T) for p in ${STUB_SSHD_PORTAS:-}; do echo "port $p"; done ;;
+  # `sshd -T` imprime a configuração EFETIVA. A senha vem de STUB_SSHD_SENHA (default: no) para o
+  # teste poder simular o caso real em que outro arquivo (50-cloud-init.conf) vence o do kit.
+  -T) for p in ${STUB_SSHD_PORTAS:-}; do echo "port $p"; done; echo "passwordauthentication ${STUB_SSHD_SENHA:-no}" ;;
   -t) echo "sshd -t" >> "$STUB_LOG"; exit "${STUB_SSHD_T_RC:-0}" ;;
 esac
 STUB
@@ -258,26 +260,76 @@ nova_raiz semchave
 prep --yes --ssh-so-chave
 check "sem nenhuma chave autorizada: recusa" test "$RC" -ne 0
 check "  explica que trancaria o dono" tem "$OUT" "trancaria você para fora"
-check "  e não grava a configuração" test ! -e "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+check "  e não grava a configuração" test ! -e "$R/etc/ssh/sshd_config.d/00-elevcrm.conf"
 
 nova_raiz comchave
 echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
 prep --yes --ssh-so-chave
-check "com chave: grava PasswordAuthentication no" grep -q 'PasswordAuthentication no' "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+check "com chave: grava PasswordAuthentication no" grep -q 'PasswordAuthentication no' "$R/etc/ssh/sshd_config.d/00-elevcrm.conf"
+# O nome é o ponto: o sshd vale o PRIMEIRO valor de cada diretiva, lendo sshd_config.d em ordem
+# alfabética, e as imagens de nuvem trazem `50-cloud-init.conf` com `PasswordAuthentication yes`.
+# Um arquivo nosso que venha DEPOIS dele perde, e a senha segue ligada.
+check "  o arquivo se chama 00-…, que vem ANTES do 50-cloud-init.conf (o sshd vale o 1º valor)" test -e "$R/etc/ssh/sshd_config.d/00-elevcrm.conf"
+check "  e NÃO existe um 99-… (que perderia para o cloud-init)" test ! -e "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
 check "  valida (sshd -t) ANTES de recarregar" test -n "$(linha_de 'sshd -t')" -a -n "$(linha_de 'systemctl reload ssh')" -a "$(linha_de 'sshd -t')" -lt "$(linha_de 'systemctl reload ssh')"
+check "  diz que CONFIRMOU pelo valor que o sshd usa" tem "$OUT" "confirmado: o sshd recusa senha"
 check "  e manda abrir outra janela antes de fechar esta" tem "$OUT" "abra outra janela"
+
+# O defeito da primeira VPS real: o arquivo é gravado, mas OUTRO arquivo manda mais alto e o sshd
+# segue aceitando senha. O script anunciava sucesso olhando o arquivo que ele mesmo gravou.
+nova_raiz senhaaindaligada
+echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
+STUB_SSHD_SENHA=yes prep --yes --ssh-so-chave
+check "o sshd CONTINUA aceitando senha (outro arquivo vence): o script FALHA" test "$RC" -ne 0
+check "  e NÃO anuncia 'SSH só com chave'" naotem "$OUT" "SSH só com chave (confirmado"
+check "  explica que outro arquivo manda mais alto" tem "$OUT" "continua aceitando SENHA"
+check "  e desfaz a mudança (o arquivo some)" test ! -e "$R/etc/ssh/sshd_config.d/00-elevcrm.conf"
+check "  recarregando o sshd de novo, para o estado desfeito valer" test "$(grep -c 'systemctl reload ssh' "$LOG")" -ge 2
+
+# A 1.17.0 gravava 99-elevcrm.conf, que nunca valeu. Quem a rodou precisa migrar, e o arquivo
+# antigo não pode ficar para trás confundindo quem for depurar.
+nova_raiz migra99
+echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
+mkdir -p "$R/etc/ssh/sshd_config.d"
+printf 'PasswordAuthentication no\nPermitRootLogin prohibit-password\n' > "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+prep --yes --ssh-so-chave
+check "quem rodou a 1.17.0 migra: o 99-… antigo é removido" test ! -e "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+check "  e o 00-… passa a existir" test -e "$R/etc/ssh/sshd_config.d/00-elevcrm.conf"
+
+# O 00-… já está certo E o 99-… antigo ainda está ao lado: não é "já estava" — o lixo precisa sair.
+nova_raiz ambos
+echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
+prep --yes --ssh-so-chave
+printf 'PasswordAuthentication no\n' > "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+prep --yes --ssh-so-chave
+check "00-… certo e 99-… antigo ao lado: NÃO diz 'já estava'" naotem "$OUT" "já estava: SSH só com chave"
+check "  e remove o 99-…" test ! -e "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+
+# "Já estava" só vale com o valor EFETIVO também desligado.
+nova_raiz jaestavaok
+echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
+prep --yes --ssh-so-chave
+prep --yes --ssh-so-chave
+check "rodar de novo com a senha de fato desligada: 'já estava'" tem "$OUT" "já estava: SSH só com chave"
+
+nova_raiz jaestavamente
+echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
+prep --yes --ssh-so-chave
+STUB_SSHD_SENHA=yes prep --yes --ssh-so-chave
+check "arquivo certo MAS senha efetiva ligada: NÃO diz 'já estava' (isso esconderia o defeito)" naotem "$OUT" "já estava: SSH só com chave"
+check "  e falha" test "$RC" -ne 0
 
 nova_raiz sshdruim
 echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
 STUB_SSHD_T_RC=1 prep --yes --ssh-so-chave
-check "sshd recusa a configuração: o script desfaz" test ! -e "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+check "sshd recusa a configuração: o script desfaz" test ! -e "$R/etc/ssh/sshd_config.d/00-elevcrm.conf"
 check "  e NÃO recarrega o sshd" naotem "$(cat "$LOG")" "systemctl reload ssh"
 check "  e sai com erro" test "$RC" -ne 0
 
 nova_raiz semflag
 echo "ssh-ed25519 AAAAexemplo dono@maquina" > "$R/root/.ssh/authorized_keys"
 prep --yes
-check "sem a flag, o SSH por senha NÃO é tocado" test ! -e "$R/etc/ssh/sshd_config.d/99-elevcrm.conf"
+check "sem a flag, o SSH por senha NÃO é tocado" test ! -e "$R/etc/ssh/sshd_config.d/00-elevcrm.conf"
 
 # ══ Opções inválidas ═════════════════════════════════════════════════════════
 echo "opções"

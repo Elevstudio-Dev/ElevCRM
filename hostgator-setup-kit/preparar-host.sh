@@ -231,12 +231,23 @@ passo_ssh_so_chave() {
     [ -s "$f" ] && chaves="$f" && break
   done
   [ -n "$chaves" ] || die "Não achei nenhuma chave em authorized_keys — desligar a senha agora trancaria você para fora. Instale a sua chave primeiro (ssh-copy-id)."
-  local conf; conf="$(caminho /etc/ssh/sshd_config.d/99-elevcrm.conf)"
+  # `00-`, e NÃO `99-`: o sshd lê /etc/ssh/sshd_config.d/*.conf em ordem alfabética e vale o
+  # PRIMEIRO valor de cada diretiva. As imagens de nuvem (Hostinger, e qualquer cloud-init)
+  # trazem um `50-cloud-init.conf` com `PasswordAuthentication yes`; um arquivo nosso que
+  # viesse DEPOIS dele perdia — e o script anunciava "SSH só com chave" com a senha ainda
+  # ligada (achado na primeira VPS real, 2026-10-26, pela prova de que a senha é recusada).
+  local conf; conf="$(caminho /etc/ssh/sshd_config.d/00-elevcrm.conf)"
+  local legado; legado="$(caminho /etc/ssh/sshd_config.d/99-elevcrm.conf)"   # nome da 1.17.0: nunca valeu
   local novo='PasswordAuthentication no
 PermitRootLogin prohibit-password'
-  if [ -f "$conf" ] && [ "$(cat "$conf")" = "$novo" ]; then registrar_ja_estava "SSH só com chave"; return 0; fi
+  # "Já estava" só vale se o valor EFETIVO também é `no`: arquivo certo com outro arquivo
+  # mandando mais alto é exatamente o defeito acima, e dizer "já estava" o esconderia.
+  if [ -f "$conf" ] && [ "$(cat "$conf")" = "$novo" ] && [ ! -f "$legado" ] && [ "$(senha_efetiva_do_sshd)" = "no" ]; then
+    registrar_ja_estava "SSH só com chave"; return 0
+  fi
   if [ "$DRY_RUN" = 1 ]; then printf '  [dry-run] gravaria %s e recarregaria o sshd\n' "$conf"; return 0; fi
   local anterior=""; [ -f "$conf" ] && anterior="$(cat "$conf")"
+  rm -f "$legado"
   gravar_arquivo "$conf" "$novo" >/dev/null
   # Valida ANTES de recarregar: configuração inválida + reload = sshd fora do ar.
   if ! sshd -t 2>/dev/null; then
@@ -244,9 +255,20 @@ PermitRootLogin prohibit-password'
     die "O sshd recusou a configuração — desfiz a mudança e não recarreguei nada."
   fi
   systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || c_ylw "⚠ não consegui recarregar o sshd — faça: systemctl reload ssh"
-  registrar_mudanca "SSH só com chave"
+  # A PROVA é o valor que o sshd USA agora (`sshd -T`), não o arquivo que gravei: sucesso
+  # anunciado sobre um arquivo que perde para outro é o pior tipo de falha de segurança —
+  # a pessoa acha que a senha está desligada e ela está ligada.
+  if [ "$(senha_efetiva_do_sshd)" != "no" ]; then
+    if [ -n "$anterior" ]; then printf '%s\n' "$anterior" > "$conf"; else rm -f "$conf"; fi
+    systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+    die "O sshd continua aceitando SENHA: outro arquivo em /etc/ssh/sshd_config.d/ ou no sshd_config manda mais alto que o do kit. Desfiz a mudança. Veja: grep -in PasswordAuthentication /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf"
+  fi
+  registrar_mudanca "SSH só com chave (confirmado: o sshd recusa senha)"
   c_ylw "  ⚠ NÃO feche esta sessão ainda: abra outra janela e confirme que sua chave entra."
 }
+
+# O valor de `PasswordAuthentication` que o sshd USA agora (e não o que algum arquivo diz).
+senha_efetiva_do_sshd() { sshd -T 2>/dev/null | awk '$1 == "passwordauthentication" { print $2; exit }'; }
 
 # ── Execução ─────────────────────────────────────────────────────────────────
 resumo_final() {
