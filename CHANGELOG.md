@@ -8,6 +8,189 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.17.0] — 2026-10-26
+
+### Adicionado
+
+- **Integração com o Despacho Certo — cadastre o cliente sem sair da conversa, e receba a OS e a placa como marcadores** Quem usa o **Despacho Certo** pode ligar os dois sistemas em Configurações →
+  Canais → Despacho Certo. Com a integração ligada, o cabeçalho de cada conversa
+  ganha um botão **Cadastrar**, ao lado de Assumir.
+
+  **O cadastro.** O botão abre o formulário de cliente do Despacho Certo — os
+  mesmos campos que ele pede: nome, telefone, CPF/CNPJ, e-mail, observações,
+  placa e pessoa física ou jurídica — já preenchido com o nome e o telefone de
+  quem está falando. Ao salvar, o cliente nasce **lá**, e a conversa passa a
+  mostrar o nome do cadastro com link para a ficha. Se aquele telefone (ou
+  documento) já for cliente, nada é duplicado: o contato é vinculado ao cadastro
+  que existe, e a tela diz de quem se trata.
+
+  **A OS volta como marcador.** Quando uma ordem de serviço é aberta no Despacho
+  Certo para esse cliente, o contato e todas as conversas dele recebem dois
+  marcadores: o da OS (`OS 1234`) e o da placa (`ABC1D23`). Uma OS com várias
+  placas marca todas; a mesma OS atualizada várias vezes não repete nada.
+
+  Nada muda para quem não usa o Despacho Certo: sem a integração ligada, o botão
+  não existe e nenhuma tela do CRM menciona o assunto.
+
+- **O lembrete de consulta sai por WhatsApp — e deixa rastro quando não sai** Falta de paciente é o prejuízo número um de uma clínica, e a tela de marcar já
+  avisava que "fulano não receberá o lembrete" sem nunca mandar lembrete a
+  ninguém. Agora manda.
+
+  **Como ligar.** Em Configurações → Agenda → Tipos de agendamento, cada tipo
+  ganha o lembrete: ligar, quanto tempo antes (de 2 horas a 3 dias) e qual
+  modelo de mensagem aprovado usar. Ele nasce **desligado** em todos os tipos —
+  nada muda para quem não liga.
+
+  **O que o sistema decide sozinho.** Só manda no horário de cortesia (das 7h às
+  22h, no fuso do compromisso). Não manda para quem pediu para não receber
+  mensagens, nem para quem marcou depois do momento em que o aviso sairia (quem
+  marca em cima da hora já sabe). Se o compromisso é remarcado, o lembrete é
+  refeito para o horário novo. Cada compromisso recebe um lembrete só, e o motivo
+  de não ter saído fica escrito nele.
+
+  **Canal oficial da Meta.** Fora da janela de 24 horas o WhatsApp oficial só
+  aceita modelo aprovado. O lembrete usa o modelo que você escolheu (as variáveis
+  `nome`, `data`, `hora`, `servico`, `profissional`, `local` e `clinica` são
+  preenchidas sozinhas); se o tipo está ligado e não há modelo utilizável, a
+  Central de avisos mostra um aviso por tipo, e não um por paciente.
+
+  **Quando falha.** Depois de três tentativas a equipe vê na Central de avisos
+  "Um lembrete de consulta não chegou ao paciente".
+
+  **A IA não promete o que o sistema não cumpre.** Ao marcar ou remarcar, a IA
+  recebe do sistema se o lembrete será mesmo enviado e só então o promete ao
+  paciente. O playbook global de agendamento foi atualizado para isso (versão 3),
+  e a atualização o aplica sozinha.
+
+  O passo a passo, os estados de cada lembrete e como diagnosticar estão em
+  `docs/runbooks/lembrete-de-consulta.md`.
+
+- **Operação 24 horas — o servidor avisa quando algo está errado, e o backup (do banco e dos arquivos dos pacientes) sai da VPS** Cinco peças novas no kit de instalação, todas opcionais — nada muda para quem
+  não as liga.
+
+  **monitor.sh.** Roda a cada 5 minutos e confere o Docker, cada serviço, a saúde
+  do app, disco, memória, certificado HTTPS, reinício pendente e a idade do
+  último backup. Avisa um monitor externo (`HEARTBEAT_URL` no `.env`, só
+  `https://`): tudo bem, ele pinga; problema, ele pinga `<URL>/fail` com o
+  motivo; **silêncio**, o próprio monitor externo alerta — que é a única forma de
+  perceber uma VPS inteira fora do ar.
+
+  **backup-fora.sh.** Leva o banco, o `.env` (as chaves que decifram o que o
+  banco guarda cifrado) e as sessões de WhatsApp para um armazenamento
+  **fora do servidor**, cifrado com `age`: nada em texto aberto, nem em disco
+  temporário.
+  Só a chave pública fica na VPS. O `--teste` confere o destino e avisa se a
+  chave de envio consegue apagar o que enviou. Liga com `BACKUP_FORA_DESTINO` e
+  `BACKUP_AGE_RECIPIENT` no `.env`.
+
+  **backup-midia.sh.** Leva as **fotos, áudios e documentos dos pacientes** (o
+  Storage do Supabase) para fora, cifrados (conteúdo e nomes), de forma
+  incremental. O backup do banco não os inclui: o Supabase restaura a lista dos
+  arquivos, não os arquivos. É `copy`, nunca `sync` — o Storage não tem
+  versionamento, então o que foi apagado na origem continua no backup. Liga com
+  `BACKUP_MIDIA_ORIGEM`, `BACKUP_MIDIA_DESTINO` e `BACKUP_MIDIA_SENHA`.
+
+  **testar-restauracao.sh.** Prova que o backup restaura: baixa o mais recente,
+  confere o hash de cada arquivo, decifra e carrega num Postgres descartável, e
+  compara o número de tabelas com o banco vivo. Também abre a mídia com a senha e
+  baixa uma amostra. Termina com **BACKUP PROVADO** ou com o motivo de não ter
+  provado. Rode todo mês.
+
+  **preparar-host.sh.** Prepara um servidor novo: firewall (liberando antes a
+  porta do SSH em que você está conectado), bloqueio de tentativas de invasão,
+  atualizações de segurança sem reinício automático, swap e relógio. O
+  `--dry-run` mostra o plano sem mudar nada.
+
+  O `install.sh` e o `update.sh` ligam os crons do monitor e dos backups quando o
+  `.env` tem o que eles precisam. O passo a passo, a rotina e o que ainda **não**
+  está coberto (a volta dos arquivos para dentro do Storage do Supabase, o tempo
+  de reconstrução de uma VPS) estão em `docs/runbooks/operacao-24h.md`.
+
+### Corrigido
+
+- **Aba aberta durante uma atualização se recupera sozinha — e a tela de erro diz o que aconteceu** Quando o sistema é atualizado com uma aba aberta, o próximo clique nessa aba
+  pedia um pedaço de código que não existe mais e caía em "Algo deu errado", com
+  um ID de suporte que, numa instalação sem Sentry, não leva a nada — e "Tentar
+  de novo" não resolvia. Agora a aba reconhece o caso e recarrega sozinha (no
+  máximo uma vez por minuto, para nunca entrar em laço); se ainda assim voltar, a
+  tela explica que o sistema foi atualizado e oferece "Recarregar". Nada do que
+  você fez se perde: é o mesmo F5 de sempre.
+
+  E a tela de erro genérica passou a mostrar, além do ID, a mensagem do erro —
+  para quem opera a instalação saber o que aconteceu sem depender de um serviço
+  externo.
+
+- **Conexões deixa de dizer "Verificado" quando o WhatsApp recusou a verificação** O card de um número em Conexões carimbava "Verificado <hora>" mesmo quando o
+  transporte do WhatsApp tinha recusado a pergunta — chave de API errada (401)
+  ou serviço fora do ar. O status mostrado era o último conhecido, e a tela não
+  dizia isso: um número podia aparecer "Conectado · Verificado agora" enquanto
+  nenhuma mensagem saía, e só o "Reconectar" entregava o erro. Agora, quando a
+  verificação falha, o card mostra "Não verificado" com o motivo (chave recusada
+  ou serviço sem resposta) no lugar da hora; quando volta a passar, a hora volta.
+
+- **Cookie grande não derruba mais o login (HTTP 431)** Quando o navegador mandava cookies demais junto com a requisição — o CRM num
+  subdomínio recebe todos os cookies do domínio da empresa (site, analytics,
+  chat), além do próprio token de sessão —, o servidor recusava antes de o
+  sistema ver a requisição: tela cinza do navegador com "HTTP ERROR 431", sem
+  nada no log, e "Tentar de novo" não resolvia. O limite do servidor dobrou
+  (de 16 KB para 32 KB de cabeçalho), e uma instalação atualizada recebe isso
+  sem mexer em nada. Se ainda assim acontecer, limpar os cookies do domínio
+  resolve na hora.
+
+- **Responder em um grupo volta a funcionar — a conversa do grupo é achada pela chave do grupo** O envio para um grupo falhava com "Contato sem telefone para envio WhatsApp".
+  Medido numa instalação real: **9 grupos tinham duas conversas cada** — uma com a
+  chave do grupo e quase vazia, outra sem a chave e com a história inteira. O
+  destino de um grupo só existe na chave dele, e a segunda mensagem de cada grupo
+  criava uma conversa nova em vez de achar a primeira.
+
+  A correção faz a chave do grupo entrar na busca da conversa: a partir desta
+  versão, as mensagens novas de um grupo vão sempre para a conversa certa, na
+  entrada e na saída (inclusive o que o dono escreve pelo celular), e importar
+  grupos de novo não duplica nada. A atualização aplica a mudança de banco
+  sozinha.
+
+  As conversas duplicadas que já existiam **continuam existindo**: esta versão
+  não mexe em dados. As mensagens novas passam a ir para a conversa que tem a
+  chave, e a fusão do que ficou para trás é um reparo à parte.
+
+- **A foto do contato volta a aparecer — na lista de conversas, no cabeçalho, na tabela de contatos e nos grupos** A foto não aparecia por três motivos independentes, e os três foram corrigidos.
+
+  **A tela.** Cada lista montava o avatar por conta própria, e só a ficha do
+  contato sabia pedir a imagem. Agora a lista de conversas, o cabeçalho e a
+  tabela de contatos usam o mesmo componente, então as três mostram a foto (ou as
+  iniciais, quando não há) do mesmo jeito.
+
+  **O endereço novo do WhatsApp.** O WhatsApp passou a endereçar parte dos
+  contatos por um identificador opaco em vez do número, e para esses a foto pedida
+  pelo número voltava vazia — o sistema concluía "esta pessoa não tem foto" e
+  desistia por sete dias. A foto agora é pedida pela identidade que o WhatsApp usa
+  hoje. Numa instalação real, 28 dos 30 contatos que estavam sem foto passaram a
+  ter.
+
+  **Os grupos.** A varredura de fotos não enxergava grupo nenhum (grupo não tem o
+  identificador de pessoa). Numa instalação real, 8 dos 12 grupos ganharam foto
+  na primeira passada; os outros 4 não têm imagem definida.
+
+  As fotos aparecem em até alguns minutos depois da atualização: o relógio que as
+  busca roda a cada 10 minutos.
+
+- **O healthcheck.sh declarava "saudável" um app com o banco fora** O diagnóstico do kit procurava `"status":"ok"` no JSON cru da rota de saúde.
+  `ok` é o vocabulário dos checks individuais, então o do Redis casava e o app
+  inteiro saía "✓ saudável" mesmo com o banco fora do ar. Agora o diagnóstico lê o
+  status geral (`healthy`, `degraded` ou `unhealthy`) — o mesmo critério que o
+  instalador e o atualizador já usavam — e passa a mostrar também o estado do
+  monitor e dos backups.
+
+- **O convite de equipe recusa nascer sem segredo em produção** O token do convite de equipe é assinado com o segredo da instalação
+  (`INTERNAL_SECRET`). Se o segredo faltasse, o código caía num valor fixo de
+  desenvolvimento — uma string que está no repositório público, ou seja, um
+  convite que qualquer pessoa poderia forjar. Na prática isso nunca acontecia
+  numa instalação normal, porque o sistema já se recusa a subir em produção sem
+  esse segredo; mas a última linha de defesa não pode depender da primeira.
+  Agora, em produção, sem segredo, o convite falha alto em vez de sair assinado
+  com o valor conhecido. Instalações feitas pelo instalador não mudam em nada:
+  ele sempre gerou o segredo.
+
 ## [1.16.0] — 2026-09-12
 
 ### Adicionado
@@ -2463,7 +2646,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.16.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.13.0...v1.14.0
