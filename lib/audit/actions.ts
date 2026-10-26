@@ -398,6 +398,10 @@ export const AUDIT_ACTIONS = [
   // `nossos_ignorados` de propósito: é o número que prova o anti-eco
   // funcionando — sem ele, esses eventos teriam virado compromisso fantasma.
   "agenda.google.sync_executado",
+  // A rodada do LEMBRETE de consulta (migration 0217). Como as irmãs acima, só
+  // audita quando FEZ algo (enviou, descartou ou desistiu de um lembrete), e a
+  // metadata carrega só contagens — nunca o nome nem o telefone de quem foi avisado.
+  "agenda.lembretes_executados",
 
   // ── O compromisso em si (frentes 1 e 5 do Calendário Vivo) ──────────────
   // Marcar, remarcar e cancelar são mutações de um compromisso com hora e

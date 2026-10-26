@@ -26,6 +26,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listaTiposDeAtendimento } from "@/lib/agenda/consulta";
+import { conferirModeloEscolhido } from "@/lib/agenda/lembrete/modelo-do-tipo";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,18 @@ const camposDoTipo = {
   buffer_after_minutes: z.number().int().min(0).max(720).optional(),
   minimum_notice_minutes: z.number().int().min(0).max(43_200).optional(),
   booking_window_days: z.number().int().min(1).max(365).optional(),
+  /**
+   * O lembrete por WhatsApp (migrations 0177 e 0217). Nasce desligado (0194): enviar
+   * mensagem é irreversível, e quem liga é quem vê a tela.
+   *
+   * O piso de uma hora e o teto de sete dias são MAIS ESTREITOS que o CHECK do banco
+   * (0 a 43200) de propósito: lembrete com menos de uma hora de folga o cron descarta
+   * por "tarde demais", e com mais de uma semana o paciente já esqueceu o aviso.
+   */
+  reminder_enabled: z.boolean().optional(),
+  reminder_minutes_before: z.number().int().min(60).max(10_080).optional(),
+  /** `null` = texto padrão (só serve onde o canal aceita texto livre). */
+  reminder_template_name: z.string().trim().min(1).max(512).nullish(),
 };
 
 const criarSchema = z.object(camposDoTipo);
@@ -82,6 +95,23 @@ function slugDe(nome: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "tipo";
+}
+
+/**
+ * O modelo escolhido para o lembrete precisa existir, estar aprovado e ter só variáveis
+ * que o lembrete sabe preencher — e a hora de descobrir é AGORA, ao salvar. Descobrir
+ * no envio é descobrir com o paciente já sem aviso.
+ *
+ * `undefined` e `null` passam: omitir não muda nada, e `null` é "voltar ao texto padrão".
+ */
+async function recusarModeloImprestavel(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  nome: string | null | undefined,
+): Promise<string | null> {
+  if (!nome) return null;
+  const r = await conferirModeloEscolhido(admin, organizationId, nome);
+  return r.ok ? null : r.mensagem;
 }
 
 export async function GET(req: NextRequest): Promise<Response> {
@@ -119,6 +149,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       buffer_after_minutes: t.bufferDepoisMin,
       minimum_notice_minutes: t.antecedenciaMinimaMin,
       booking_window_days: t.janelaDeAgendamentoDias,
+      reminder_enabled: t.lembreteLigado,
+      reminder_minutes_before: t.lembreteAntecedenciaMin,
+      reminder_template_name: t.lembreteModelo,
     })),
     { requestId },
   );
@@ -135,6 +168,10 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const admin = createAdminClient();
+
+  const recusaDoModelo = await recusarModeloImprestavel(admin, autorizado.org.orgId, lido.data.reminder_template_name);
+  if (recusaDoModelo) return fail("validation_failed", recusaDoModelo, 422, { requestId });
+
   const { data, error } = await admin
     .from("calendar_event_types")
     .insert({ ...lido.data, organization_id: autorizado.org.orgId, slug: slugDe(lido.data.name) })
@@ -176,6 +213,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   }
 
   const admin = createAdminClient();
+
+  const recusaDoModelo = await recusarModeloImprestavel(admin, autorizado.org.orgId, campos.reminder_template_name);
+  if (recusaDoModelo) return fail("validation_failed", recusaDoModelo, 422, { requestId });
+
   const { data, error } = await admin
     .from("calendar_event_types")
     .update(campos)

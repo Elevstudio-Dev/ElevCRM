@@ -614,6 +614,15 @@ export interface TipoDeAtendimento {
   bufferDepoisMin: number;
   antecedenciaMinimaMin: number;
   janelaDeAgendamentoDias: number;
+  /**
+   * O lembrete por WhatsApp deste tipo (migrations 0177 e 0217). Também NÃO vão ao modelo:
+   * o que a IA pode dizer sobre aviso vem de `lembrete.sera_enviado` no resultado de
+   * marcar/remarcar, que sabe do contato e do prazo — repassar a configuração crua
+   * convidaria a prometer um aviso que o contato bloqueado nunca vai receber.
+   */
+  lembreteLigado: boolean;
+  lembreteAntecedenciaMin: number;
+  lembreteModelo: string | null;
 }
 
 export type ResultadoDosTipos =
@@ -643,7 +652,7 @@ export async function listaTiposDeAtendimento(
   let q = supabase
     .from("calendar_event_types")
     .select(
-      "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days",
+      "id, name, slug, description, category, duration_minutes, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, reminder_enabled, reminder_minutes_before, reminder_template_name",
     )
     // Service role bypassa a RLS: este filtro é a única proteção no caminho da
     // ferramenta MCP (ver o cabeçalho do arquivo).
@@ -679,6 +688,9 @@ export async function listaTiposDeAtendimento(
       bufferDepoisMin: Number(t.buffer_after_minutes),
       antecedenciaMinimaMin: Number(t.minimum_notice_minutes),
       janelaDeAgendamentoDias: Number(t.booking_window_days),
+      lembreteLigado: Boolean(t.reminder_enabled),
+      lembreteAntecedenciaMin: Number(t.reminder_minutes_before),
+      lembreteModelo: t.reminder_template_name ? String(t.reminder_template_name) : null,
     })),
   };
 }

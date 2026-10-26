@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { modelosParaEscolher } from "@/lib/agenda/lembrete/modelo-do-tipo";
+import { algumCanalExigeModelo } from "@/lib/channels/exige-modelo";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -42,11 +44,11 @@ export default async function TiposDeAgendamentoPage() {
   const podeEditar = user.is_platform_admin || ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   const supabase = await createClient();
-  const [{ data: tipos }, { data: pessoas }] = await Promise.all([
+  const [{ data: tipos }, { data: pessoas }, modelos, canalExigeModelo] = await Promise.all([
     supabase
       .from("calendar_event_types")
       .select(
-        "id, name, slug, description, category, duration_minutes, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active",
+        "id, name, slug, description, category, duration_minutes, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active, reminder_enabled, reminder_minutes_before, reminder_template_name",
       )
       .eq("organization_id", activeOrg.orgId)
       .order("is_active", { ascending: false })
@@ -56,6 +58,12 @@ export default async function TiposDeAgendamentoPage() {
       .select("user_id, role")
       .eq("organization_id", activeOrg.orgId)
       .is("revoked_at", null),
+    // Os modelos já avaliados para o lembrete: a tela só oferece o que o cron sabe enviar.
+    modelosParaEscolher(supabase, activeOrg.orgId),
+    // O canal desta organização só entrega fora das 24 h com modelo aprovado? Pergunta de
+    // CAPACIDADE (nunca de nome): a tela avisa o tipo com lembrete ligado e sem modelo,
+    // que é exatamente o que o cron não consegue enviar.
+    algumCanalExigeModelo(supabase, activeOrg.orgId),
   ]);
 
   // O NOME DE GENTE, e não o fragmento de UUID.
@@ -91,6 +99,8 @@ export default async function TiposDeAgendamentoPage() {
         }))}
         usuarioAtualId={user.id}
         podeEditar={podeEditar}
+        modelos={modelos}
+        canalExigeModelo={canalExigeModelo}
       />
     </div>
   );

@@ -29,6 +29,7 @@ import {
   type SituacaoAnterior,
   type Transicao,
 } from "@/lib/agenda/laco";
+import { preverLembreteDoCompromisso } from "@/lib/agenda/lembrete/previsao";
 import { ALVO_DE_VINCULO_DO_AGENDAMENTO, VINCULO_DE_AGENDAMENTO } from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
@@ -195,7 +196,16 @@ export async function marcarAgendamentoHandler(
     metadata: { event_type_id: tipo.id, owner_user_id: donoId, time_zone: criado.time_zone },
   });
 
-  return criado as Record<string, unknown>;
+  // O que a IA pode prometer ao cliente sobre o aviso — dito aqui, pela máquina, e não
+  // deixado à descrição da ferramenta (que durante meses prometeu um lembrete que não
+  // existia). Ver `lib/agenda/lembrete/previsao.ts`.
+  const lembrete = await preverLembreteDoCompromisso(supabase, ctx.organization_id, {
+    eventTypeId: tipo.id as string,
+    contactId: input.contact_id ?? null,
+    comecaEm: new Date(criado.starts_at as string),
+  });
+
+  return { ...criado, lembrete } as Record<string, unknown>;
 }
 
 /**
@@ -350,6 +360,17 @@ export async function alterarAgendamentoHandler(
         metadata: { de: atual.starts_at, para: salvo.starts_at },
       });
     }
+  }
+
+  // Remarcar REARMA o lembrete (trigger da 0217): a previsão do horário novo vai junto,
+  // para a IA não repetir ao cliente a promessa do horário antigo.
+  if (transicao === "rescheduled") {
+    const lembrete = await preverLembreteDoCompromisso(supabase, ctx.organization_id, {
+      eventTypeId: (atual.event_type_id as string | null) ?? null,
+      contactId: (atual.contact_id as string | null) ?? null,
+      comecaEm: new Date(salvo.starts_at as string),
+    });
+    return { ...salvo, lembrete } as Record<string, unknown>;
   }
 
   return salvo as Record<string, unknown>;

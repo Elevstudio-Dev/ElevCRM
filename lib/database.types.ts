@@ -1735,7 +1735,12 @@ export type Database = {
           notes: string | null
           organization_id: string
           owner_user_id: string | null
+          reminder_armed_at: string
+          reminder_attempts: number
+          reminder_detail: string | null
+          reminder_message_id: string | null
           reminder_sent_at: string | null
+          reminder_state: string
           rescheduled_from_id: string | null
           source: string
           starts_at: string
@@ -1771,7 +1776,12 @@ export type Database = {
           notes?: string | null
           organization_id: string
           owner_user_id?: string | null
+          reminder_armed_at?: string
+          reminder_attempts?: number
+          reminder_detail?: string | null
+          reminder_message_id?: string | null
           reminder_sent_at?: string | null
+          reminder_state?: string
           rescheduled_from_id?: string | null
           source?: string
           starts_at: string
@@ -1807,7 +1817,12 @@ export type Database = {
           notes?: string | null
           organization_id?: string
           owner_user_id?: string | null
+          reminder_armed_at?: string
+          reminder_attempts?: number
+          reminder_detail?: string | null
+          reminder_message_id?: string | null
           reminder_sent_at?: string | null
+          reminder_state?: string
           rescheduled_from_id?: string | null
           source?: string
           starts_at?: string

@@ -60,6 +60,10 @@ export type InboxKind =
   // nenhum trecho foi gravado. UM kind e não dois, porque quem lê a Central
   // quer saber que o material não entrou — o porquê é o corpo do aviso.
   | 'conhecimento_nao_indexado'
+  // (migration 0217) O lembrete de consulta não saiu: sem modelo aprovado para o
+  // canal oficial, canal fora do ar ou três tentativas recusadas. O aviso é o que
+  // impede "o sistema acha que avisou" de se repetir.
+  | 'appointment_reminder_failed'
   | 'other';
 
 export interface InboxItemRow {

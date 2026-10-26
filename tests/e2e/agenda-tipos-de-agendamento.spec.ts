@@ -275,3 +275,84 @@ test("desativar tira o tipo da tela de marcar, sem apagar a história", async ({
     "tipo desativado continua oferecido para marcar",
   ).toHaveCount(0);
 });
+
+test("ligo o lembrete de um tipo pela tela, ele sobrevive ao reload, e desligar o tira", async ({
+  page,
+}) => {
+  /**
+   * O LEMBRETE TEM SUPERFÍCIE (migration 0217).
+   *
+   * As colunas `reminder_enabled / reminder_minutes_before / reminder_template_name`
+   * existiam desde a 0177 sem tela e sem rota, e a doutrina de canal diz o que isso
+   * vale: rota que grava e nunca foi exercitada por uma tela não conta como
+   * superfície. Este caso é a tela exercitando a rota — ligar, escolher a
+   * antecedência, salvar, recarregar e achar tudo no lugar, e desligar.
+   *
+   * O que ele NÃO prova, dito aqui para a ausência não virar cobertura: a escolha de
+   * um MODELO aprovado e o aviso de "lembrete sem modelo" dependem de a organização
+   * ter modelos sincronizados / um canal oficial, e a organização de teste não tem
+   * nenhum dos dois. Esses dois ramos são provados nos unitários da rota e da lista de
+   * modelos.
+   */
+  const creds = lerCreds();
+  await entrar(page, creds);
+  await page.goto("/app/settings/tenant/agenda");
+  await expect(page.getByTestId("tipos-de-agendamento-config")).toBeVisible({ timeout: 20_000 });
+
+  const nome = `Lembrete E2E ${Date.now().toString().slice(-6)}`;
+  await page.getByTestId("abrir-novo-tipo").click();
+  await page.getByTestId("novo-tipo-nome").fill(nome);
+  await page.getByTestId("salvar-novo-tipo").click();
+
+  const linha = page.getByTestId("lista-de-tipos").getByRole("listitem").filter({ hasText: nome });
+  await expect(linha).toBeVisible({ timeout: 20_000 });
+  const id = ((await linha.getAttribute("data-testid")) ?? "").replace(/^tipo-/, "");
+  expect(id, "a linha do tipo não tem o data-testid tipo-<id>").not.toBe("");
+
+  // Nasce DESLIGADO (0194): enviar mensagem é irreversível, e quem liga é quem vê a tela.
+  await expect(page.getByTestId(`lembrete-${id}`), "o tipo nasceu com o lembrete ligado").toHaveCount(0);
+
+  // ── liga, escolhe 4 horas, salva ──────────────────────────────────────
+  await linha.getByRole("button", { name: "Editar" }).click();
+  await expect(page.getByTestId(`lembrete-config-${id}`)).toBeVisible();
+  await expect(
+    page.getByTestId(`editar-lembrete-ligado-${id}`),
+    "o formulário abriu com o lembrete marcado, mas o tipo nasceu desligado",
+  ).not.toBeChecked();
+  await page.getByTestId(`editar-lembrete-ligado-${id}`).check();
+  await page.getByTestId(`editar-lembrete-antecedencia-${id}`).selectOption("240");
+  await page.getByTestId(`salvar-${id}`).click();
+
+  const selo = page.getByTestId(`lembrete-${id}`);
+  await expect(selo, "salvei com o lembrete ligado e a lista não mostra o selo").toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(selo).toContainText("4 horas antes");
+
+  // ── sobrevive ao reload: o servidor é quem sabe, não o estado da tela ──
+  await page.reload();
+  await expect(page.getByTestId(`lembrete-${id}`)).toContainText("4 horas antes", {
+    timeout: 20_000,
+  });
+  await page
+    .getByTestId("lista-de-tipos")
+    .getByRole("listitem")
+    .filter({ hasText: nome })
+    .getByRole("button", { name: "Editar" })
+    .click();
+  await expect(
+    page.getByTestId(`editar-lembrete-ligado-${id}`),
+    "recarreguei e o lembrete voltou desligado",
+  ).toBeChecked();
+  await expect(page.getByTestId(`editar-lembrete-antecedencia-${id}`)).toHaveValue("240");
+
+  // Sem modelos na organização de teste, a única opção é o texto padrão — e é ela que vai.
+  await expect(page.getByTestId(`editar-lembrete-modelo-${id}`)).toHaveValue("");
+
+  // ── desliga: o selo some ──────────────────────────────────────────────
+  await page.getByTestId(`editar-lembrete-ligado-${id}`).uncheck();
+  await page.getByTestId(`salvar-${id}`).click();
+  await expect(page.getByTestId(`lembrete-${id}`), "desliguei e o selo continua").toHaveCount(0, {
+    timeout: 20_000,
+  });
+});

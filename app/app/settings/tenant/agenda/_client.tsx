@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
+import type { ModeloParaEscolher } from "@/lib/agenda/lembrete/modelo-do-tipo";
 import { LOCAIS_DE_ATENDIMENTO } from "@/lib/agenda/locais";
 import { apiClient } from "@/lib/api/client";
 
@@ -23,6 +24,31 @@ export interface TipoRow {
   default_owner_user_id: string | null;
   requires_confirmation: boolean;
   is_active: boolean;
+  reminder_enabled: boolean;
+  reminder_minutes_before: number;
+  reminder_template_name: string | null;
+}
+
+/**
+ * Com quanta antecedência o lembrete pode sair. Cinco opções fechadas, e não um campo
+ * numérico, porque a pergunta que a clínica faz é "um dia antes ou na véspera à noite?",
+ * não "quantos minutos?". O piso de 2 h respeita a regra do cron (menos de 1 h de folga
+ * é "tarde demais").
+ */
+const ANTECEDENCIAS_DO_LEMBRETE: Array<{ minutos: number; rotulo: string }> = [
+  { minutos: 120, rotulo: "2 horas antes" },
+  { minutos: 240, rotulo: "4 horas antes" },
+  { minutos: 1440, rotulo: "1 dia antes" },
+  { minutos: 2880, rotulo: "2 dias antes" },
+  { minutos: 4320, rotulo: "3 dias antes" },
+];
+
+/** O rótulo de uma antecedência; valor fora da lista (gravado por API) ainda aparece, em horas. */
+function rotuloDaAntecedencia(minutos: number): string {
+  return (
+    ANTECEDENCIAS_DO_LEMBRETE.find((a) => a.minutos === minutos)?.rotulo ??
+    `${Math.round(minutos / 60)} horas antes`
+  );
 }
 
 /**
@@ -75,11 +101,17 @@ export function TiposDeAgendamentoClient({
   pessoas,
   podeEditar,
   usuarioAtualId,
+  modelos,
+  canalExigeModelo,
 }: {
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
   podeEditar: boolean;
   usuarioAtualId: string;
+  /** Os modelos aprovados da organização, já avaliados: `serve` diz se o lembrete sabe preenchê-los. */
+  modelos: ModeloParaEscolher[];
+  /** O canal desta organização só entrega fora das 24 h com modelo aprovado. */
+  canalExigeModelo: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -296,6 +328,34 @@ export function TiposDeAgendamentoClient({
                   </span>
                 )
               ) : null}
+              {tipo.reminder_enabled ? (
+                <span
+                  data-testid={`lembrete-${tipo.id}`}
+                  className="rounded-full border border-border px-2 py-0.5 text-[11px] text-text-muted"
+                >
+                  {t("Lembrete")} {t(rotuloDaAntecedencia(tipo.reminder_minutes_before))}
+                </span>
+              ) : null}
+              {tipo.reminder_enabled && canalExigeModelo && !tipo.reminder_template_name ? (
+                // O aviso existe porque o sintoma é MUDO: o canal oficial só entrega fora
+                // das 24 h com modelo aprovado, e sem ele o lembrete fica esperando até
+                // vencer — o paciente não recebe e ninguém vê erro nenhum na tela.
+                // E ele é a porta: abre a edição, onde o modelo se escolhe.
+                podeEditar ? (
+                  <button
+                    type="button"
+                    data-testid={`lembrete-sem-modelo-${tipo.id}`}
+                    onClick={() => setEditandoId(tipo.id)}
+                    className="text-xs text-warning underline underline-offset-2"
+                  >
+                    {t("lembrete sem modelo aprovado — escolher modelo")}
+                  </button>
+                ) : (
+                  <span data-testid={`lembrete-sem-modelo-${tipo.id}`} className="text-xs text-warning">
+                    {t("lembrete sem modelo aprovado — o aviso pode não sair")}
+                  </span>
+                )
+              ) : null}
               {!tipo.is_active ? <span className="text-xs text-text-subtle">{t("desativado")}</span> : null}
               {podeEditar ? (
                 <span className="ml-auto flex gap-1">
@@ -371,6 +431,16 @@ export function TiposDeAgendamentoClient({
                         // voltar — que é o laço de retorno correto.
                         default_owner_user_id:
                           String(dados.get("default_owner_user_id") ?? "") || null,
+                        // O checkbox desmarcado NÃO vem no FormData: ausente é "desligado",
+                        // e é por isso que a leitura é `=== "on"` e não `Boolean(get)`.
+                        reminder_enabled: dados.get("reminder_enabled") === "on",
+                        reminder_minutes_before: Number(
+                          dados.get("reminder_minutes_before") ?? tipo.reminder_minutes_before,
+                        ),
+                        // `|| null`: "Texto padrão" é o valor vazio, e voltar a ele tem de
+                        // chegar ao servidor como nulo, não como campo ausente.
+                        reminder_template_name:
+                          String(dados.get("reminder_template_name") ?? "") || null,
                       }),
                     "Tipo alterado.",
                   );
@@ -414,6 +484,65 @@ export function TiposDeAgendamentoClient({
                     ))}
                   </select>
                 </label>
+                <fieldset
+                  data-testid={`lembrete-config-${tipo.id}`}
+                  className="grid gap-3 rounded-md border border-border p-3 sm:col-span-3 sm:grid-cols-3"
+                >
+                  <legend className="px-1 text-xs font-medium text-text-muted">
+                    {t("Lembrete por WhatsApp")}
+                  </legend>
+                  <label className="flex items-center gap-2 text-sm text-text sm:col-span-3">
+                    <input
+                      type="checkbox"
+                      name="reminder_enabled"
+                      defaultChecked={tipo.reminder_enabled}
+                      data-testid={`editar-lembrete-ligado-${tipo.id}`}
+                    />
+                    {t("Avisar o paciente antes do atendimento")}
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-text-muted">
+                    {t("Quanto tempo antes")}
+                    <select
+                      name="reminder_minutes_before"
+                      defaultValue={tipo.reminder_minutes_before}
+                      data-testid={`editar-lembrete-antecedencia-${tipo.id}`}
+                      className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                    >
+                      {!ANTECEDENCIAS_DO_LEMBRETE.some((a) => a.minutos === tipo.reminder_minutes_before) ? (
+                        <option value={tipo.reminder_minutes_before}>
+                          {t(rotuloDaAntecedencia(tipo.reminder_minutes_before))}
+                        </option>
+                      ) : null}
+                      {ANTECEDENCIAS_DO_LEMBRETE.map((a) => (
+                        <option key={a.minutos} value={a.minutos}>
+                          {t(a.rotulo)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs text-text-muted sm:col-span-2">
+                    {t("Modelo de mensagem")}
+                    <select
+                      name="reminder_template_name"
+                      defaultValue={tipo.reminder_template_name ?? ""}
+                      data-testid={`editar-lembrete-modelo-${tipo.id}`}
+                      className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                    >
+                      <option value="">{t("Texto padrão (só onde o canal aceita texto livre)")}</option>
+                      {modelos.map((m) => (
+                        // Modelo que o lembrete não sabe preencher aparece DESABILITADO e
+                        // com o motivo, em vez de sumir: quem criou o modelo na Meta
+                        // procura por ele, e some-sem-explicar é o defeito de sempre.
+                        <option key={m.nome} value={m.nome} disabled={!m.serve}>
+                          {m.serve ? m.nome : `${m.nome} — ${t("não serve")}: ${m.problema ?? ""}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-xs text-text-muted sm:col-span-3">
+                    {t("No canal oficial do WhatsApp, o aviso fora das 24 h só sai com um modelo aprovado pela Meta, com as variáveis nome, data, hora, servico, profissional e local. Crie e aprove o modelo em Conexões → Oficial → Templates.")}
+                  </p>
+                </fieldset>
                 <div className="flex justify-end sm:col-span-3">
                   <Button type="submit" size="sm" data-testid={`salvar-${tipo.id}`} disabled={salvando}>
                     {salvando ? t("Salvando…") : t("Salvar")}

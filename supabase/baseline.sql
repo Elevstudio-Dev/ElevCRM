@@ -10105,6 +10105,11 @@ alter table public.agent_inbox_items
     -- tratava `skipped` como sucesso, e a linha da fonte seguia dizendo `ready`.
     -- Irmão direto de `midia_nao_lida`: mesma chave, mesmo silêncio.
     'conhecimento_nao_indexado',
+    -- (migration 0217) O lembrete de consulta não saiu: sem modelo aprovado para o
+    -- canal oficial, canal fora do ar, ou três tentativas recusadas. Antes disto o
+    -- lembrete nem existia — e quando existir, falhar em silêncio é o mesmo que
+    -- prometer um aviso que o paciente nunca recebe.
+    'appointment_reminder_failed',
     'other'
   ));
 
@@ -16313,6 +16318,149 @@ forçado. Inventar é pior do que demorar um instante a mais para responder.
 end
 $pub$;
 
+-- ---- playbook `agendamento` v3: só promete o lembrete que o resultado confirma (migration 0218) ----
+do $pub$
+declare
+  -- md5 do corpo abaixo. Conferido logo após o insert — ver o item 2 do cabeçalho da 0191.
+  v_md5 constant text := '2e3a54de905ebb4901cd4c5f8069db34';
+  v_id  uuid;
+begin
+  select id into v_id
+    from skill_versions
+   where organization_id is null and name = 'agendamento' and md5(body) = v_md5
+   limit 1;
+
+  if v_id is null then
+    insert into skill_versions (organization_id, name, description, body, matcher)
+    values (
+      null,
+      'agendamento',
+      'Playbook pra marcar/remarcar horário (consulta, visita, sessão) — consulta a agenda real pelas ferramentas quando elas existem, nunca inventa disponibilidade, e confirma por escrito antes de fechar.',
+      $body$# Playbook: marcar horário/agendamento
+
+## Quando usar
+O lead pede pra marcar um horário, consulta, visita, demonstração ou sessão —
+qualquer compromisso com data/hora. Comum em clínicas, imobiliárias (visitas),
+serviços e consultorias.
+
+## Regra de ouro: consulte a agenda, não adivinhe
+Você tem acesso à agenda **se, e somente se**, a ferramenta `crm_find_free_slots`
+estiver disponível para você. Não julgue isso por intuição — chame e leia a resposta.
+- Voltou com horários → ofereça 2 ou 3 deles, concretos.
+- Voltou `publicou_horarios: false` → o atendente ainda não publicou os horários de
+  trabalho dele. Isso NÃO é "está lotado" e NÃO é "não tem vaga": não invente horário,
+  não diga que a agenda está cheia, e avise que alguém da equipe confirma.
+- Voltou com `motivo` → leia a `mensagem` e faça o que ela manda. Ela foi escrita para
+  o cliente ouvir.
+- Voltou `fuso_suposto: true` → o fuso da agenda veio do padrão e ninguém confirmou.
+  Ofereça pedindo confirmação — "consigo terça às 14h; confere se esse horário bate aí
+  pra você?" — em vez de afirmar.
+- Você não tem essa ferramenta → aí sim: não ofereça horário nenhum, diga que vai
+  confirmar a disponibilidade e sinalize handoff para quem tem acesso.
+Prometer um horário que depois não existe quebra confiança e gera reagendamento
+forçado. Inventar é pior do que demorar um instante a mais para responder.
+
+## Fluxo padrão (if-then)
+
+**1. Identifique o serviço/motivo antes de oferecer horário**
+- SE o lead só disse "quero agendar" sem contexto → pergunte o motivo/serviço
+  primeiro. Agendar sem saber o quê gera erro de encaixe (ex.: consulta de 20min
+  marcada num slot de 1h de procedimento).
+
+**2. Ofereça opções fechadas, não uma pergunta aberta**
+- SE `crm_find_free_slots` respondeu com horários → ofereça 2-3 concretos ("tenho terça
+  14h ou quarta 10h, qual funciona?"). Pergunta aberta tipo "qual horário você prefere?"
+  gera ida e volta desnecessária e trava a conversa.
+- SE você não tem a ferramenta → não invente. Diga algo como "vou confirmar a
+  disponibilidade e te retorno em instantes" e sinalize handoff/task pra quem tem
+  acesso.
+
+**3. Colete os dados obrigatórios antes de confirmar**
+- Nome completo do lead (ou confirme o que já está no CRM).
+- Serviço/motivo específico.
+- Unidade/local, se o tenant tiver mais de uma (clínica com filiais, imobiliária com
+  múltiplos imóveis).
+- Se for reagendamento, o horário anterior a ser substituído.
+
+**4. Confirme por escrito antes de encerrar**
+- SE o lead aceitar um horário → repita de volta por escrito: "Confirmado:
+  [serviço] dia [data] às [hora], em [local]. Confirma pra mim?"
+- Só considere o agendamento fechado depois do "sim"/confirmação explícita do lead —
+  silêncio ou "ok" vago não é confirmação suficiente pra compromissos com custo de
+  no-show alto (ex. consulta médica, visita a imóvel).
+
+**5. Reagendamento e cancelamento**
+- SE o lead pedir pra remarcar E você tem `crm_reschedule_appointment` → use ela.
+  NÃO cancele e marque de novo: é o MESMO compromisso mudando de hora. O histórico
+  continua um só. O resultado traz `lembrete` para o horário NOVO: só diga ao cliente
+  que ele receberá um aviso se `lembrete.sera_enviado` for verdadeiro.
+- SE o lead pedir pra remarcar e você NÃO tem essa ferramenta → então cancelar e marcar
+  de novo é o único caminho, e ele tem um custo que você precisa administrar: o cliente
+  pode receber dois avisos seguidos e contraditórios ("desmarcado" e depois "marcado").
+  Antes de fazer, diga a ele em uma frase o que vai acontecer — "vou desmarcar o horário
+  antigo e já marcar o novo, você pode receber dois avisos" — e nunca deixe os dois
+  compromissos de pé ao mesmo tempo.
+- SE o lead pedir pra cancelar → use `crm_cancel_appointment` se você a tiver, informe o
+  motivo, e pergunte se quer remarcar pra outra data, sem pressionar. Cancelar libera
+  aquele horário para outra pessoa e não dá para desfazer: confirme antes.
+
+**6. Risco de no-show**
+- O resultado de `crm_book_appointment` e de `crm_reschedule_appointment` traz
+  `lembrete`. Se `sera_enviado` for verdadeiro, pode dizer ao cliente que receberá um
+  lembrete antes do horário — e só isso. Se for falso, NÃO prometa lembrete nem aviso:
+  `lembrete.instrucao` diz o que fazer no lugar (em geral, confirmar data e hora na
+  própria conversa).
+- Se o negócio tiver política de confirmação D-1 documentada na base de
+  conhecimento, siga-a. Se não houver, não invente política — apenas confirme o
+  agendamento normalmente.
+
+## Regras duras
+- Nunca confirme horário sem ter checado disponibilidade real (ou sem sinalizar que
+  ainda vai confirmar).
+- Nunca marque dois compromissos conflitantes pro mesmo lead sem avisar.
+- Se o lead pedir um horário fora do funcionamento do negócio (ex. domingo,
+  madrugada) e isso não estiver nas regras do tenant, não confirme — explique a
+  janela real de atendimento.
+- Dado sensível (endereço completo, documento) só é coletado se o fluxo do tenant
+  realmente exigir — não peça informação a mais que o agendamento precisa.
+- Marcar consulta e agendar retorno são coisas DIFERENTES. `crm_book_appointment` é para
+  hora combinada COM o cliente, que ele reservou e vai comparecer — alguém espera por ele.
+  `crm_schedule_followup` é decisão interna nossa de voltar a falar: o cliente não fica
+  sabendo e nada é reservado na agenda de ninguém. Se ele ESCOLHEU um horário para ser
+  atendido, é a primeira.
+
+## Exemplos de resposta (tom, não copiar literal)
+- "Pra eu te encaixar certo: é pra qual serviço/motivo?"
+- "Tenho quinta às 15h ou sexta às 9h — qual fica melhor pra você?"
+- "Confirmado: consulta dia 28/07 às 15h, na unidade Centro. Pode confirmar pra
+  mim?"
+
+## O que NÃO fazer
+- Não pergunte "qual horário você prefere?" sem oferecer opções concretas quando
+  você tem a agenda.
+- Não confirme agendamento sem resposta explícita do lead.
+- Não invente disponibilidade que você não checou.$body$,
+      '{"any_keywords": ["agendar", "marcar horário", "marcar consulta", "marcar uma visita", "agenda", "que horas vocês", "horário disponível", "remarcar", "reagendar", "cancelar o horário", "desmarcar"], "probe_keywords": ["que horas", "qual dia", "tem vaga", "disponibilidade"]}'::jsonb
+    )
+    returning id into v_id;
+
+    if (select md5(body) from skill_versions where id = v_id) is distinct from v_md5 then
+      raise exception 'playbook agendamento: o md5 declarado (%) nao corresponde ao corpo inserido. Recalcule antes de publicar.', v_md5;
+    end if;
+  end if;
+
+  -- Repointe SEMPRE (ver a 0191): idempotência por CONTEÚDO, nunca `if not exists`.
+  update skill_pointers
+     set version_id = v_id, updated_at = now()
+   where organization_id is null and name = 'agendamento';
+
+  if not found then
+    insert into skill_pointers (organization_id, name, version_id)
+    values (null, 'agendamento', v_id);
+  end if;
+end
+$pub$;
+
 
 -- ---- ⚠️ RESTAURADA AO FIM (2026-08-27) ----
 --
@@ -16383,6 +16531,123 @@ update public.calendar_event_types
 
 comment on column public.calendar_event_types.reminder_enabled is
   'Lembrete automático deste tipo. Nasce DESLIGADO de propósito: enviar mensagem é irreversível, e um default ligado inscreveria o histórico inteiro sem ninguém ter escolhido. Ligar por padrão é decisão do dono do produto, a ser tomada quando o disparador existir.';
+
+-- APÊNDICE 0217 — O LEMBRETE DE CONSULTA GANHA ESTADO, E REMARCAR O REARMA
+--
+-- Espelha `supabase/migrations/20261023120000_0217_...`. Quem INSTALA aplica este
+-- arquivo; quem ATUALIZA aplica a migration. As duas têm de deixar o banco igual.
+--
+-- A lista de `agent_inbox_items.kind` (o alerta `appointment_reminder_failed`) NÃO
+-- tem apêndice: ela vive no bloco único da constraint, mais acima (lição do #159).
+--
+-- Idempotente: `add column if not exists`, constraints com `drop ... if exists`,
+-- `create or replace`, revoke/grant declarativos. É FUNÇÃO e TRIGGER, então entra ANTES
+-- do bloco da VARREDURA anon, que é de propósito o último do arquivo (vigiado por
+-- `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`).
+alter table public.calendar_appointments
+  add column if not exists reminder_state text not null default 'pending';
+alter table public.calendar_appointments
+  add column if not exists reminder_detail text;
+alter table public.calendar_appointments
+  add column if not exists reminder_attempts smallint not null default 0;
+alter table public.calendar_appointments
+  add column if not exists reminder_message_id uuid references public.messages(id) on delete set null;
+alter table public.calendar_appointments
+  add column if not exists reminder_armed_at timestamptz not null default now();
+
+update public.calendar_appointments
+   set reminder_state = 'sent'
+ where reminder_sent_at is not null
+   and reminder_state = 'pending';
+
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_reminder_state_check;
+alter table public.calendar_appointments
+  add constraint calendar_appointments_reminder_state_check
+  check (reminder_state in ('pending', 'sent', 'skipped', 'failed'));
+
+-- Disjunção de conjunções DE PROPÓSITO: o extrator de vocabulário só reconhece como
+-- "regra" o que tem AND/OR (ver a migration 0217).
+alter table public.calendar_appointments
+  drop constraint if exists calendar_appointments_lembrete_coerente;
+alter table public.calendar_appointments
+  add constraint calendar_appointments_lembrete_coerente
+  check (
+    (reminder_state = 'sent' and reminder_sent_at is not null)
+    or (reminder_state <> 'sent' and reminder_sent_at is null)
+  );
+
+create index if not exists calendar_appointments_lembrete_pendente_idx
+  on public.calendar_appointments (starts_at)
+  where reminder_state = 'pending' and status in ('pending', 'confirmed');
+
+comment on column public.calendar_appointments.reminder_state is
+  'pending = ainda não tratado (inclui "esperando a janela de envio"); sent = saiu; skipped = não deve sair (tarde demais, marcado dentro do prazo, contato bloqueado); failed = tentou e não conseguiu. Remarcar volta a pending.';
+comment on column public.calendar_appointments.reminder_detail is
+  'O motivo curto do último desfecho ou espera: late, booked_inside_horizon, blocked, no_template, no_conversation, channel_down, outside_courtesy_hours, template_slot:<chave>, send_failed:<código>.';
+comment on column public.calendar_appointments.reminder_attempts is
+  'Tentativas de envio já feitas para o horário vigente. Três falhas viram failed.';
+comment on column public.calendar_appointments.reminder_message_id is
+  'A mensagem que levou o lembrete. set null: apagar a mensagem não pode apagar o compromisso.';
+comment on column public.calendar_appointments.reminder_armed_at is
+  'Quando o lembrete foi armado para o horário vigente (criação ou última remarcação). Só recebe lembrete quem foi armado ANTES do momento devido.';
+
+create or replace function public.fn_calendar_appointments_rearma_lembrete()
+returns trigger
+language plpgsql
+as $function$
+begin
+  if new.starts_at is distinct from old.starts_at then
+    new.reminder_state := 'pending';
+    new.reminder_detail := null;
+    new.reminder_attempts := 0;
+    new.reminder_sent_at := null;
+    new.reminder_message_id := null;
+    new.reminder_armed_at := now();
+  end if;
+  return new;
+end
+$function$;
+
+drop trigger if exists trg_calendar_appointments_rearma_lembrete on public.calendar_appointments;
+create trigger trg_calendar_appointments_rearma_lembrete
+  before update of starts_at on public.calendar_appointments
+  for each row
+  execute function public.fn_calendar_appointments_rearma_lembrete();
+
+create or replace function public.fn_lembretes_devidos(
+  p_now timestamptz,
+  p_limit integer default 50
+) returns table (appointment_id uuid, organization_id uuid)
+language sql
+stable
+security definer
+set search_path to 'public'
+as $function$
+  select a.id, a.organization_id
+    from public.calendar_appointments a
+    join public.calendar_event_types t
+      on t.id = a.event_type_id
+     and t.organization_id = a.organization_id
+   where a.reminder_state = 'pending'
+     and a.status in ('pending', 'confirmed')
+     and a.contact_id is not null
+     and t.reminder_enabled
+     and a.starts_at > p_now
+     and a.starts_at - make_interval(mins => t.reminder_minutes_before) <= p_now
+   order by a.starts_at
+   limit least(greatest(coalesce(p_limit, 50), 1), 200);
+$function$;
+
+comment on function public.fn_lembretes_devidos(timestamptz, integer) is
+  'Os compromissos vivos, ainda sem desfecho de lembrete, cujo momento de avisar (starts_at - reminder_minutes_before) já chegou e cujo horário ainda não passou. Só service_role: quem chama é o cron appointment-reminders, que decide o que fazer com cada um.';
+
+revoke all on function public.fn_lembretes_devidos(timestamptz, integer) from public;
+revoke all on function public.fn_lembretes_devidos(timestamptz, integer) from anon;
+revoke all on function public.fn_lembretes_devidos(timestamptz, integer) from authenticated;
+grant execute on function public.fn_lembretes_devidos(timestamptz, integer) to service_role;
+
+notify pgrst, 'reload schema';
 
 -- ---- tipo semeado adota dono no primeiro membro (migration 0195) ----
 -- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon: aqui é OBRIGATÓRIO, não preferência —

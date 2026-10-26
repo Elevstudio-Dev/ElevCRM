@@ -163,6 +163,16 @@ export const ORIGENS_DO_AGENDAMENTO = ["ui", "mcp", "google_sync", "public_page"
 export type OrigemDoAgendamento = (typeof ORIGENS_DO_AGENDAMENTO)[number];
 
 /**
+ * O que aconteceu com o lembrete deste compromisso (migration 0217).
+ *
+ * `pending` não quer dizer "vai sair": quer dizer "ainda não tem desfecho" — e
+ * inclui o compromisso cujo tipo nem tem lembrete ligado. É `skipped` que diz "não
+ * deve sair" e `failed` que diz "tentou e não conseguiu".
+ */
+export const ESTADOS_DO_LEMBRETE = ["pending", "sent", "skipped", "failed"] as const;
+export type EstadoDoLembrete = (typeof ESTADOS_DO_LEMBRETE)[number];
+
+/**
  * O estado da agenda conectada.
  *
  * São os MESMOS sete valores de `tenant_integrations.status` — mesma pergunta,

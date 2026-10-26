@@ -5643,6 +5643,21 @@ export const DICIONARIO: Traducoes = {
   "sem responsável — não aparece para marcar": { es: "sin responsable — no aparece para agendar" },
   "Duração": { es: "Duración" },
   "Quem atende": { es: "Quién atiende" },
+  // ─── O lembrete de consulta por WhatsApp (tela de tipos de agendamento, migration 0217) ───
+  "Lembrete": { es: "Recordatorio" },
+  "2 horas antes": { es: "2 horas antes" },
+  "4 horas antes": { es: "4 horas antes" },
+  "1 dia antes": { es: "1 día antes" },
+  "2 dias antes": { es: "2 días antes" },
+  "3 dias antes": { es: "3 días antes" },
+  "lembrete sem modelo aprovado — escolher modelo": { es: "recordatorio sin plantilla aprobada — elegir plantilla" },
+  "lembrete sem modelo aprovado — o aviso pode não sair": { es: "recordatorio sin plantilla aprobada — el aviso puede no salir" },
+  "Lembrete por WhatsApp": { es: "Recordatorio por WhatsApp" },
+  "Avisar o paciente antes do atendimento": { es: "Avisar al paciente antes de la atención" },
+  "Quanto tempo antes": { es: "Cuánto tiempo antes" },
+  "Texto padrão (só onde o canal aceita texto livre)": { es: "Texto estándar (solo donde el canal acepta texto libre)" },
+  "não serve": { es: "no sirve" },
+  "No canal oficial do WhatsApp, o aviso fora das 24 h só sai com um modelo aprovado pela Meta, com as variáveis nome, data, hora, servico, profissional e local. Crie e aprove o modelo em Conexões → Oficial → Templates.": { es: "En el canal oficial de WhatsApp, el aviso fuera de las 24 h solo sale con una plantilla aprobada por Meta, con las variables nome, data, hora, servico, profissional y local. Crea y aprueba la plantilla en Conexiones → Oficial → Templates." },
   "O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.": { es: "Qué se puede agendar, cuánto dura y quién atiende. Esto es lo que la pantalla de agendar y el agente de IA le ofrecen al cliente." },
   "Ação contém": { es: "La acción contiene" },
   "Ator": { es: "Actor" },
@@ -6405,6 +6420,9 @@ export const DICIONARIO: Traducoes = {
   },
   "Um material que você enviou não entrou na base de conhecimento": {
     es: "Un material que enviaste no entró en la base de conocimiento",
+  },
+  "Um lembrete de consulta não chegou ao paciente": {
+    es: "Un recordatorio de cita no llegó al paciente",
   },
   "Aviso do assistente": { es: "Aviso del asistente" },
   // `informativo` e `crítico` saem iguais nos dois idiomas — sem linha, por isso.

@@ -75,6 +75,10 @@ CRONS="
 # manda o que mudou). A volta é cara — varre calendário inteiro — e por isso
 # roda a cada 15.
 */5 * * * *|60|api/v1/cron/agenda-google-push
+# O LEMBRETE de consulta. A cada 5 min porque o momento de avisar é medido em horas
+# e o atraso tolerado é de seis (ver lib/agenda/lembrete/decisao.ts): um tick perdido
+# não perde o aviso, o seguinte o pega. Cada chamada trata no máximo 30 compromissos.
+*/5 * * * *|60|api/v1/cron/appointment-reminders
 */15 * * * *|60|api/v1/cron/risk-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
 17 * * * *|60|api/v1/cron/contact-proposals-watcher

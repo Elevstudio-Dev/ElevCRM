@@ -78,6 +78,9 @@ function tipo(over: Partial<TipoDeAtendimento> = {}): TipoDeAtendimento {
     bufferDepoisMin: 0,
     antecedenciaMinimaMin: 120,
     janelaDeAgendamentoDias: 60,
+    lembreteLigado: false,
+    lembreteAntecedenciaMin: 1440,
+    lembreteModelo: null,
     ...over,
   };
 }

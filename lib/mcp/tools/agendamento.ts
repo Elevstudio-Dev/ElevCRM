@@ -426,7 +426,10 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
     "`crm_schedule_followup`. A diferença: aqui as DUAS partes combinaram e alguém vai esperar; " +
     "lá é decisão interna nossa e o cliente não sabe de nada. " +
     "Chame `crm_find_free_slots` ANTES e use um `starts_at` que veio de lá — marcar em horário que " +
-    "não está livre é recusado, e a recusa manda você consultar de novo.",
+    "não está livre é recusado, e a recusa manda você consultar de novo. " +
+    "O resultado traz `lembrete`: só diga ao cliente que ele receberá um aviso antes da consulta se " +
+    "`lembrete.sera_enviado` for true — e então diga só isso. Se for false, não prometa aviso nenhum; " +
+    "`lembrete.instrucao` diz o que fazer no lugar.",
   inputSchema: marcarShape,
   category: "write",
   requiresRole: "ai_operator",
@@ -453,7 +456,10 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
           ...(input.notes ? { notes: input.notes } : {}),
         },
       );
-      return { marcado: true, compromisso: r };
+      // `lembrete` sobe para o topo: é o que o modelo precisa achar sem cavar, e a
+      // única coisa que o autoriza a falar de aviso com o cliente.
+      const { lembrete, ...compromisso } = r;
+      return { marcado: true, compromisso, lembrete };
     }),
 };
 
@@ -469,9 +475,12 @@ export const crmRescheduleAppointment: McpToolDefinition<typeof remarcarShape> =
     "Move um compromisso já marcado para outro horário, mantendo o mesmo cliente e o mesmo tipo. " +
     "Use quando o cliente pediu para mudar o dia ou a hora. " +
     "REMARCAR NÃO É CANCELAR E MARCAR DE NOVO: é o MESMO compromisso mudando de hora, o histórico " +
-    "continua um só e o lembrete é refeito sozinho. Se você cancelar e marcar, o cliente recebe " +
+    "continua um só. Se você cancelar e marcar, o cliente recebe " +
     "dois avisos contraditórios e a linha do tempo dele passa a contar que ele desistiu e voltou — " +
     "o que não aconteceu. " +
+    "O resultado traz `lembrete` para o horário NOVO: só diga ao cliente que ele receberá um aviso se " +
+    "`lembrete.sera_enviado` for true; senão não prometa aviso nenhum (`lembrete.instrucao` diz o que " +
+    "fazer no lugar). " +
     "Confirme o horário novo com `crm_find_free_slots` antes: horário indisponível é recusado.",
   inputSchema: remarcarShape,
   category: "write",
@@ -488,7 +497,8 @@ export const crmRescheduleAppointment: McpToolDefinition<typeof remarcarShape> =
           ...(input.notes ? { notes: input.notes } : {}),
         },
       );
-      return { remarcado: true, compromisso: r };
+      const { lembrete, ...compromisso } = r;
+      return { remarcado: true, compromisso, lembrete };
     }),
 };
 
