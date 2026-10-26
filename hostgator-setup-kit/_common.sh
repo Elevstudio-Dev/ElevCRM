@@ -732,7 +732,7 @@ owner_id_by_email() {
 # primeira (o filtro remove tudo que casa com o marcador, e as duas linhas
 # casavam). Medido na VPS: depois de instalar, sobrava só o agente e o CRM ficava
 # SEM o drain de eventos — a automação inteira parada, em silêncio.
-cron_tag() { printf '# elevcrm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent)}"; }
+cron_tag() { printf '# elevcrm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent|monitor|backup-fora)}"; }
 
 # Puro (testável sem tocar no crontab real): lê o crontab atual em stdin e
 # imprime o novo. Tira as linhas DESTA instalação — pelo marcador, e também
@@ -803,6 +803,52 @@ setup_update_agent_cron() {
   local cron_line="*/5 * * * * ${legado} >/dev/null 2>&1 ${marcador}"
   ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
   c_grn "✓ atualização pela tela ativa (agente a cada 5 minutos)"
+}
+
+# O backup FORA da VPS está configurado? As DUAS metades são obrigatórias: o destino
+# sem a chave pública mandaria o backup em claro para fora, e a chave sem o destino
+# não mandaria nada. Uma definição só, usada pelo cron, pelo monitor e pelo próprio
+# backup-fora.sh — três lugares que discordariam do que "configurado" quer dizer.
+backup_fora_configurado() {
+  [ -n "${BACKUP_FORA_DESTINO:-}" ] && [ -n "${BACKUP_AGE_RECIPIENT:-}" ]
+}
+
+# Ativa (idempotente) o monitor do servidor. Só liga quando há para onde avisar:
+# sem HEARTBEAT_URL ele escreveria num log que ninguém lê, e a instalação ganharia
+# um cron que não serve a ninguém. Chamada por install.sh e update.sh.
+setup_monitor_cron() {
+  command -v crontab >/dev/null 2>&1 || { c_ylw "⚠ 'crontab' não encontrado — o monitor do servidor não foi ativado."; return 0; }
+  case "${HEARTBEAT_URL:-}" in
+    https://?*) ;;
+    '') c_dim "  monitor do servidor desligado (HEARTBEAT_URL vazio no .env) — ver docs/runbooks/operacao-24h.md"; return 0 ;;
+    *) c_ylw "⚠ HEARTBEAT_URL precisa começar com https:// — o monitor do servidor não foi ativado."; return 0 ;;
+  esac
+  # `cd` explícito pelo mesmo motivo do agente de atualização: no cron o CWD é o
+  # home de quem é dono do crontab, e o monitor acha o projeto pelo diretório.
+  local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/monitor.sh"
+  local marcador; marcador="$(cron_tag monitor)"
+  local cron_line="*/5 * * * * ${legado} >/dev/null 2>&1 ${marcador}"
+  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  c_grn "✓ monitor do servidor ativo (a cada 5 minutos)"
+}
+
+# Ativa (idempotente) o backup diário para fora da VPS. Só com destino E chave
+# pública no .env (ver `backup_fora_configurado`). A saída vai para um arquivo,
+# ao contrário dos outros crons: se o backup falha, a causa precisa estar em algum
+# lugar quando alguém for procurar.
+setup_backup_fora_cron() {
+  command -v crontab >/dev/null 2>&1 || { c_ylw "⚠ 'crontab' não encontrado — o backup fora da VPS não foi ativado."; return 0; }
+  if ! backup_fora_configurado; then
+    c_ylw "⚠ backup fora da VPS desligado (BACKUP_FORA_DESTINO / BACKUP_AGE_RECIPIENT vazios) — ver docs/runbooks/operacao-24h.md"
+    return 0
+  fi
+  local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/backup-fora.sh"
+  local marcador; marcador="$(cron_tag backup-fora)"
+  # 03:17 UTC (00:17 em Brasília): madrugada do cliente, e fora do :00 em que todo
+  # mundo agenda e o provedor de armazenamento é mais disputado.
+  local cron_line="17 3 * * * ${legado} >> ${PROJECT_DIR}/.backup-fora.log 2>&1 ${marcador}"
+  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  c_grn "✓ backup fora da VPS ativo (todo dia às 03:17 UTC)"
 }
 
 # Garante a chave de cifra dos segredos (webhooks/Nuvemshop) e a semeia no

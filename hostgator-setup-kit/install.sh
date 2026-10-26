@@ -1959,6 +1959,8 @@ step "Ativando as automações"
 ensure_encryption_key .env
 setup_event_log_drain_cron
 setup_update_agent_cron
+setup_monitor_cron
+setup_backup_fora_cron
 
 # ── Final ───────────────────────────────────────────────────────────────────
 # O app não confirmou que está de pé: dizer "Instalação concluída!" aqui seria

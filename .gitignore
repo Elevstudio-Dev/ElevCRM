@@ -129,3 +129,13 @@ evidence/.sonda-score-residuo.json
 # versioná-las cita primeiro (docs/testing/user-journey-map.md, linha M9) e tira
 # esta linha.
 evidence/marca-logo/
+
+# Estado que o kit de operação grava na pasta do projeto, NA VPS (monitor.sh e backup-fora.sh).
+# O .backup-fora.ok é o carimbo em que o monitor confia; os logs e o temporário nunca são código.
+.monitor.log
+.monitor.log.tmp
+.backup-fora.ok
+.backup-fora.fail
+.backup-fora.log
+.backup-fora.lock
+.backup-fora-tmp.*/

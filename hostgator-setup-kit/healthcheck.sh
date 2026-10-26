@@ -8,14 +8,40 @@ dc ps
 
 step "Saúde interna do app (/api/v1/health)"
 # Roda de dentro da rede do compose (a rota não é exposta publicamente sem TLS).
-out="$(dc exec -T app node -e "
-fetch('http://127.0.0.1:3000/api/v1/health').then(r=>r.text()).then(t=>{console.log(t);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})
-" 2>/dev/null || echo '')"
-if [ -n "$out" ]; then
-  printf '%s\n' "$out"
-  printf '%s' "$out" | grep -q '"status":"ok"' && c_grn "✓ app saudável" || c_ylw "⚠ algum subsistema degradado (veja o JSON acima)."
+#
+# Pelo status GERAL (healthy|degraded|unhealthy), e não por grep de `"status":"ok"`
+# no JSON cru: `ok` é o vocabulário dos checks individuais, então o grep casava com
+# o do Redis e dava "✓ app saudável" para um app com o BANCO fora. É o mesmo
+# critério do install.sh e do update.sh — ver `app_health_probe` em _common.sh.
+saida="$(app_health_probe)"
+status_geral="$(printf '%s\n' "$saida" | head -1 | tr -d '\r')"
+corpo="$(printf '%s\n' "$saida" | tail -n +2)"
+if [ -n "$saida" ]; then
+  printf '%s\n' "$corpo"
+  case "$status_geral" in
+    healthy)   c_grn "✓ app saudável" ;;
+    degraded)  c_ylw "⚠ app no ar, com um serviço opcional degradado (veja o JSON acima)." ;;
+    *)         c_red "✖ app com serviço FORA ($status_geral) — veja o JSON acima." ;;
+  esac
 else
   c_ylw "⚠ app não respondeu. Logs: docker compose $(dc_files) logs --tail=50 app"
+fi
+
+step "Monitor do servidor e backup fora da VPS"
+if crontab -l 2>/dev/null | grep -q 'hostgator-setup-kit/monitor.sh'; then
+  c_grn "✓ monitor ativo no cron (a cada 5 minutos)"
+  [ -s "$PROJECT_DIR/.monitor.log" ] && c_dim "  última rodada: $(tail -1 "$PROJECT_DIR/.monitor.log")"
+else
+  c_ylw "⚠ monitor desligado — sem HEARTBEAT_URL ninguém é avisado se o servidor cair (docs/runbooks/operacao-24h.md)."
+fi
+if backup_fora_configurado; then
+  if [ -f "$PROJECT_DIR/.backup-fora.ok" ]; then
+    c_grn "✓ backup fora da VPS configurado; último ok em $(date -u -d "@$(head -1 "$PROJECT_DIR/.backup-fora.ok" | tr -cd '0-9')" +%FT%TZ 2>/dev/null || echo '?')"
+  else
+    c_ylw "⚠ backup fora da VPS configurado, mas ainda não rodou — teste com: bash hostgator-setup-kit/backup-fora.sh --teste"
+  fi
+else
+  c_ylw "⚠ sem backup fora da VPS — se este servidor morrer, o backup morre junto (docs/runbooks/operacao-24h.md)."
 fi
 
 step "Atualização pela tela (agente do host)"

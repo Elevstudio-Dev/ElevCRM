@@ -143,7 +143,16 @@ declare `REVERSE_PROXY=traefik` no `.env` — aí a escolha é sua e ele segue s
 | `restore.sh` | Restaura um backup |
 | `reset-password.sh` | Redefine senha de um usuário |
 | `reset-mfa.sh` | Remove o MFA de um usuário travado |
-| `healthcheck.sh` | Diagnóstico dos serviços |
+| `healthcheck.sh` | Diagnóstico dos serviços (e do monitor e do backup fora da VPS) |
+| `preparar-host.sh` | Prepara um servidor NOVO para ficar no ar: firewall, bloqueio de tentativas de invasão, atualizações de segurança, swap, relógio. `--dry-run` mostra o plano sem mudar nada |
+| `monitor.sh` | Roda por cron a cada 5 min e avisa um monitor externo (`HEARTBEAT_URL`) se algo está errado — ou se ele para de avisar |
+| `backup-fora.sh` | Backup **cifrado** do banco, do `.env` e das sessões de WhatsApp para fora da VPS. `--teste` confere o destino e se a chave consegue apagar |
+| `testar-restauracao.sh` | Prova que o backup fora da VPS restaura (num Postgres descartável). Rode todo mês |
+
+> **Manter no ar 24 horas** — firewall, monitor, backup fora da VPS e a rotina de operação estão
+> em [`docs/runbooks/operacao-24h.md`](../docs/runbooks/operacao-24h.md). O `backup.sh` grava no mesmo
+> disco do servidor: se ele morrer, o backup morre junto. Para operar um cliente de verdade, use o
+> `backup-fora.sh`.
 
 ## Automações e webhooks
 
