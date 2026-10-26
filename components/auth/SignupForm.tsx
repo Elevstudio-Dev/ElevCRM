@@ -70,6 +70,8 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
         setServerError(t("Muitas tentativas. Aguarde alguns minutos."));
       } else if (res.error === "validation_error") {
         setServerError(t("Dados inválidos. Confira os campos."));
+      } else if (res.error === "cadastro_fechado") {
+        setServerError(t("O cadastro está fechado. Peça um convite a quem administra o sistema."));
       } else {
         setServerError(t("Não foi possível criar a conta. Tente novamente."));
       }

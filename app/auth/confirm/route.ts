@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
-import { ensureTenantForUser } from "@/lib/auth/provision";
+import { ensureTenantForUser, organizacaoAtivaDoUsuario } from "@/lib/auth/provision";
 import { decidirConviteDoSignup } from "@/lib/auth/convite-no-signup";
+import { cadastroPublicoAbertoNaInstalacao } from "@/lib/auth/cadastro-publico";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
 
@@ -109,18 +110,32 @@ export async function GET(request: NextRequest) {
   // nenhum, e `ensureTenantForUser` faz o que faria com qualquer visitante:
   // abre uma empresa e o torna admin dela. A pessoa fica com uma organização
   // fantasma, um wizard que não é dela e o gate de MFA de administrador.
-  const decisao = decidirConviteDoSignup(data.user);
+  //
+  // O cadastro público pode estar FECHADO nesta instalação (`CADASTRO_PUBLICO=false`):
+  // então quem chega sem convite e sem vínculo não ganha organização. É AQUI que o
+  // fechamento vale — fechar só a tela `/signup` deixaria o `/auth/v1/signup` do Auth
+  // (anon key, direto do navegador) criar organização do mesmo jeito. O vínculo só é
+  // consultado com o cadastro fechado: quem já é membro (troca de e-mail, link mágico)
+  // segue como sempre, e na instalação aberta o caminho não ganha consulta nenhuma.
+  const cadastroAberto = cadastroPublicoAbertoNaInstalacao();
+  const jaTemOrganizacao = cadastroAberto ? false : (await organizacaoAtivaDoUsuario(data.user.id)) !== null;
+  const decisao = decidirConviteDoSignup(data.user, { cadastroAberto, jaTemOrganizacao });
 
   if (decisao.tipo === "recusar") {
-    // Falha FECHADA: havia convite e ele não vale (expirado ou de outra pessoa).
-    // Provisionar aqui seria devolver o defeito com um conserto por cima.
+    // Falha FECHADA: ou havia convite e ele não vale (expirado ou de outra pessoa), ou
+    // não havia e a instalação não aceita cadastro sozinho. Provisionar aqui seria
+    // devolver o defeito com um conserto por cima.
     await audit({
       action: "auth.signup_provision_recusado",
       actorUserId: data.user.id,
       metadata: { motivo: decisao.motivo },
       requestId,
     });
-    return redirectTo("/login?error=convite_invalido");
+    // Duas telas porque são dois conselhos: "peça outro convite" não ajuda quem nunca
+    // teve um, e "o cadastro está fechado" não ajuda quem tinha convite e ele venceu.
+    return redirectTo(
+      decisao.motivo === "cadastro_fechado" ? "/login?error=cadastro_fechado" : "/login?error=convite_invalido",
+    );
   }
 
   if (decisao.tipo === "convite") {

@@ -4,6 +4,8 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { convidarDonoDaOrganizacao } from "@/lib/team/convidar-dono";
+import type { ConviteEmitido } from "@/lib/team/emitir-convite";
 import { randomUUID } from "node:crypto";
 
 // ---------------------------------------------------------------------------
@@ -238,8 +240,34 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // O dono entra por convite de ADMIN desta organização. Antes disto `owner_email` era
+  // descartado (só ia, em hash, para o audit) e a organização nascia sem ninguém dentro.
+  //
+  // Falhar aqui NÃO desfaz a organização nem vira 500: ela já existe e tem audit, e o
+  // operador reemite por `.../owner-invite`. Devolver erro depois de criar faria o operador
+  // repetir a criação e esbarrar no slug que acabou de nascer.
+  let ownerInvite: ConviteEmitido | null = null;
+  let ownerInviteError: string | undefined;
+  try {
+    ownerInvite = await convidarDonoDaOrganizacao({
+      email: owner_email,
+      organizationId: org.id,
+      orgName: org.display_name,
+      plataforma: adminCtx.user,
+      requestId,
+    });
+  } catch {
+    ownerInviteError = "invite_failed";
+  }
+
   return ok(
-    { id: org.id, slug: org.slug, display_name: org.display_name },
+    {
+      id: org.id,
+      slug: org.slug,
+      display_name: org.display_name,
+      owner_invite: ownerInvite,
+      ...(ownerInviteError ? { owner_invite_error: ownerInviteError } : {}),
+    },
     { status: 201, requestId },
   );
 }

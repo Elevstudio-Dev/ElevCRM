@@ -82,6 +82,15 @@ const schema = z.object({
   INVITE_TOKEN_SECRET: z.string().optional().default(""),
 
   /**
+   * O cadastro público (`/signup`) cria uma organização para quem confirmar um
+   * e-mail. Aberto por padrão — quem já instalou não muda. Numa instalação operada
+   * como serviço (clientes entram por convite), ponha `false` para fechá-lo.
+   * Só `true`/vazio abre; qualquer outro valor FECHA — ver
+   * `lib/auth/cadastro-publico.ts` para o porquê.
+   */
+  CADASTRO_PUBLICO: z.string().optional().default("true"),
+
+  /**
    * Retenção do arquivo do corpo cru dos webhooks (`webhook_events_log`).
    *
    * O default de 7 dias não é gosto: numa instalação real esse arquivo era 86%

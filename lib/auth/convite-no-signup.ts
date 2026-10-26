@@ -27,22 +27,53 @@ export type DecisaoDeSignup =
   | { tipo: "convite"; token: string; payload: InvitePayload }
   /** Ninguém o convidou: caminho normal, ganha a própria organização. */
   | { tipo: "provisionar" }
-  /** Havia convite e ele não vale. Não provisiona — ver abaixo. */
-  | { tipo: "recusar"; motivo: "token_invalido" | "email_divergente" };
+  /**
+   * Não provisiona. Ou havia convite e ele não vale (ver abaixo), ou NÃO havia
+   * convite e esta instalação fechou o cadastro público (`cadastro_fechado`).
+   */
+  | { tipo: "recusar"; motivo: "token_invalido" | "email_divergente" | "cadastro_fechado" };
 
 interface UsuarioConfirmado {
   email?: string | null;
   user_metadata?: Record<string, unknown> | null;
 }
 
+export interface OpcoesDoSignup {
+  /**
+   * O cadastro público está aberto nesta instalação? Padrão `true`: quem já
+   * instalou e não configurou nada segue como sempre. Ver `lib/auth/cadastro-publico.ts`.
+   */
+  cadastroAberto?: boolean;
+  /**
+   * O usuário já é membro ativo de alguma organização? Padrão `false` (falha fechada).
+   * Só importa com o cadastro FECHADO e sem convite: `/auth/confirm` também recebe
+   * troca de e-mail e link mágico de quem já tem conta, e para esse `provisionar` é um
+   * no-op idempotente — o fechamento é contra CRIAR organização, não contra confirmar link.
+   */
+  jaTemOrganizacao?: boolean;
+}
+
 function normalizar(email: string | null | undefined): string {
   return (email ?? "").trim().toLowerCase();
 }
 
-export function decidirConviteDoSignup(user: UsuarioConfirmado): DecisaoDeSignup {
+export function decidirConviteDoSignup(
+  user: UsuarioConfirmado,
+  opcoes: OpcoesDoSignup = {},
+): DecisaoDeSignup {
+  const cadastroAberto = opcoes.cadastroAberto ?? true;
+  const jaTemOrganizacao = opcoes.jaTemOrganizacao ?? false;
   const bruto = user.user_metadata?.["invite_token"];
-  // Sem convite em jogo: o caminho de sempre, intocado.
-  if (typeof bruto !== "string" || bruto.trim() === "") return { tipo: "provisionar" };
+  // Sem convite em jogo: o caminho de sempre, intocado — A MENOS que a instalação
+  // tenha fechado o cadastro público. Este é o ÚNICO ponto que cria organização para
+  // quem se cadastra sozinho, então é aqui que o fechamento tem de valer: fechar só na
+  // tela deixaria o `/auth/v1/signup` do próprio Auth (anon key, direto do navegador)
+  // criar organização do mesmo jeito. Lixo no lugar do token também não é convite.
+  if (typeof bruto !== "string" || bruto.trim() === "") {
+    return cadastroAberto || jaTemOrganizacao
+      ? { tipo: "provisionar" }
+      : { tipo: "recusar", motivo: "cadastro_fechado" };
+  }
 
   const payload = verifyInviteToken(bruto);
   // FALHA FECHADA. Token expirado ou adulterado NÃO pode cair no provisionamento:

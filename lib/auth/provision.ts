@@ -20,6 +20,23 @@ type ProvisionUser = {
 };
 
 /**
+ * O id da organização onde o usuário tem vínculo ATIVO (não revogado), ou `null`.
+ * Service role pelo mesmo motivo de `ensureTenantForUser`: a decisão acontece antes de
+ * existir sessão com organização, então a RLS não deixaria o próprio usuário ler isto.
+ */
+export async function organizacaoAtivaDoUsuario(userId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("user_organizations")
+    .select("organization_id")
+    .eq("user_id", userId)
+    .is("revoked_at", null)
+    .limit(1)
+    .maybeSingle();
+  return data?.organization_id ?? null;
+}
+
+/**
  * Provisiona o tenant de um usuário recém-confirmado via signup self-service:
  * cria a organização (status `active`, `onboarded_at` null → cai no onboarding)
  * e a membership `admin` do usuário.
@@ -34,16 +51,10 @@ type ProvisionUser = {
 export async function ensureTenantForUser(
   user: ProvisionUser,
 ): Promise<{ provisioned: boolean; organizationId?: string }> {
-  const admin = createAdminClient();
+  const existente = await organizacaoAtivaDoUsuario(user.id);
+  if (existente) return { provisioned: false, organizationId: existente };
 
-  const { data: existing } = await admin
-    .from("user_organizations")
-    .select("organization_id")
-    .eq("user_id", user.id)
-    .is("revoked_at", null)
-    .limit(1)
-    .maybeSingle();
-  if (existing) return { provisioned: false, organizationId: existing.organization_id };
+  const admin = createAdminClient();
 
   const orgName =
     (user.user_metadata?.org_name as string | undefined)?.trim() ||

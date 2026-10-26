@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SignupForm } from "@/components/auth/SignupForm";
 import { branding } from "@/lib/branding";
 import { verifyInviteToken } from "@/lib/auth/invite-token";
+import { cadastroPublicoAbertoNaInstalacao } from "@/lib/auth/cadastro-publico";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -27,6 +28,11 @@ export default async function SignupPage({
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
   const conviteExpirado = Boolean(invite) && !payload;
+  // Instalação operada como serviço: o cadastro público fica fechado e a conta só nasce
+  // de um convite. Sem convite válido não há formulário — não é só esconder um botão;
+  // quem manda é `/auth/confirm`, e a tela apenas deixa de prometer o que o servidor
+  // vai recusar.
+  const formularioAberto = Boolean(convite) || cadastroPublicoAbertoNaInstalacao();
 
   const supabase = await createClient();
   const {
@@ -44,7 +50,9 @@ export default async function SignupPage({
         <p className="text-sm text-muted-foreground">
           {convite
             ? t("Crie sua senha para entrar na empresa que te convidou")
-            : `${t("Comece a usar o")} ${branding().name} ${t("em minutos")}`}
+            : formularioAberto
+              ? `${t("Comece a usar o")} ${branding().name} ${t("em minutos")}`
+              : t("Esta instalação só aceita novas contas por convite")}
         </p>
       </div>
 
@@ -59,7 +67,19 @@ export default async function SignupPage({
         </p>
       )}
 
-      <SignupForm convite={convite} />
+      {formularioAberto ? (
+        <SignupForm convite={convite} />
+      ) : (
+        // Convite vencido já tem o aviso acima, que diz o que fazer; repetir "cadastro
+        // fechado" por cima só embaralharia as duas mensagens.
+        !conviteExpirado && (
+          <p role="status" className="rounded-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            {t(
+              "O cadastro está fechado. Para entrar, peça um convite a quem administra o sistema — o link do convite abre esta tela já com o seu e-mail.",
+            )}
+          </p>
+        )
+      )}
 
       <p className="text-center text-sm text-muted-foreground">
         {t("Já tem conta?")}{" "}

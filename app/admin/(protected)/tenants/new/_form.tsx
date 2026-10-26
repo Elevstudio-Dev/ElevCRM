@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateTenant } from "@/hooks/useCreateTenant";
+import type { ConviteEmitido } from "@/hooks/useOwnerInvite";
+import { ConviteDoResponsavel as ConviteDoResponsavel } from "@/components/admin/tenants/ConviteDoResponsavel";
 import { ApiError } from "@/lib/api/types";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -77,6 +79,12 @@ export function NewTenantForm() {
   const router = useRouter();
   const createTenant = useCreateTenant();
   const [slugLocked, setSlugLocked] = useState(false);
+  const [criado, setCriado] = useState<{
+    id: string;
+    displayName: string;
+    convite: ConviteEmitido | null;
+    falhouOConvite: boolean;
+  } | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -128,7 +136,15 @@ export function NewTenantForm() {
       });
 
       toast.success(t("Tenant criado com sucesso!"));
-      router.push(`/admin/tenants/${result.data.id}`);
+      // O convite do responsável só aparece AQUI, uma vez: se ele estiver sem e-mail
+      // (ou o e-mail não chegar), o link é o que o operador tem para entregar. Navegar
+      // direto para a ficha do tenant jogaria esse link fora.
+      setCriado({
+        id: result.data.id,
+        displayName: result.data.display_name,
+        convite: result.data.owner_invite,
+        falhouOConvite: Boolean(result.data.owner_invite_error),
+      });
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === "conflict") {
@@ -143,6 +159,40 @@ export function NewTenantForm() {
   });
 
   const planValue = watch("plan");
+
+  if (criado) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("Tenant criado")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{criado.displayName}</p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("Convite do responsável")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {criado.convite ? (
+              <ConviteDoResponsavel convite={criado.convite} />
+            ) : (
+              <p
+                className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm dark:border-amber-500/30 dark:bg-amber-950/20"
+                role="alert"
+              >
+                {t(
+                  "O tenant foi criado, mas o convite do responsável não pôde ser gerado. Abra o tenant e use «Convidar responsável».",
+                )}
+              </p>
+            )}
+            <Button type="button" onClick={() => router.push(`/admin/tenants/${criado.id}`)}>
+              {t("Ir para o tenant")}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

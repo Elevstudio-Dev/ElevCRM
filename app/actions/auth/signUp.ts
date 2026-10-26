@@ -12,13 +12,14 @@ import {
 import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
+import { cadastroPublicoAbertoNaInstalacao } from "@/lib/auth/cadastro-publico";
 import { env } from "@/lib/env";
 
 export type SignUpResult =
   | { ok: true }
   | {
       ok: false;
-      error: "validation_error" | "rate_limited" | "signup_failed";
+      error: "validation_error" | "rate_limited" | "signup_failed" | "cadastro_fechado";
       details?: Record<string, unknown>;
     };
 
@@ -43,6 +44,15 @@ export async function signUp(
   inviteToken?: string,
 ): Promise<SignUpResult> {
   const temConvite = typeof inviteToken === "string" && inviteToken.trim() !== "";
+
+  // Cadastro público fechado (`CADASTRO_PUBLICO=false`): sem convite, nem chega ao Auth.
+  // Isto é cortesia — poupa o e-mail de confirmação (cota de envio do cliente) e dá a
+  // resposta certa na hora. A trava que de fato vale é `/auth/confirm`, porque o
+  // `/auth/v1/signup` do Auth aceita a anon key direto do navegador, sem passar por aqui.
+  if (!temConvite && !cadastroPublicoAbertoNaInstalacao()) {
+    return { ok: false, error: "cadastro_fechado" };
+  }
+
   const parsed = temConvite
     ? signupComConviteSchema.safeParse(input)
     : signupSchema.safeParse(input);

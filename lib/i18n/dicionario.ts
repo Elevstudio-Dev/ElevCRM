@@ -5490,6 +5490,57 @@ export const DICIONARIO: Traducoes = {
     es: "Esa invitación venció o ya no es válida. Pide una nueva a quien te invitó — crear una cuenta ahora abriría una empresa nueva, y no es eso lo que quieres.",
   },
   "Já tem conta?": { es: "¿Ya tienes cuenta?" },
+  "O cadastro está fechado. Peça um convite a quem administra o sistema.": {
+    es: "El registro está cerrado. Pide una invitación a quien administra el sistema.",
+  },
+  "Esta instalação só aceita novas contas por convite": {
+    es: "Esta instalación solo acepta cuentas nuevas por invitación",
+  },
+  "O cadastro está fechado. Para entrar, peça um convite a quem administra o sistema — o link do convite abre esta tela já com o seu e-mail.": {
+    es: "El registro está cerrado. Para entrar, pide una invitación a quien administra el sistema — el enlace de la invitación abre esta pantalla con tu correo ya completo.",
+  },
+  "Seu e-mail foi confirmado, mas o cadastro está fechado nesta instalação e não há convite para ele. Peça um convite a quem administra o sistema.": {
+    es: "Tu correo fue confirmado, pero el registro está cerrado en esta instalación y no hay una invitación para él. Pide una invitación a quien administra el sistema.",
+  },
+
+  // ─── Admin de plataforma: convite do responsável de um tenant ───
+  "Convidar responsável": { es: "Invitar al responsable" },
+  "Convite do responsável": { es: "Invitación del responsable" },
+  "Gera um convite de administrador para esta organização. O responsável cria a conta pelo link, com este mesmo e-mail, e entra direto nela.": {
+    es: "Genera una invitación de administrador para esta organización. El responsable crea la cuenta con el enlace, con este mismo correo, y entra directo en ella.",
+  },
+  "Gerar convite": { es: "Generar invitación" },
+  "Gerando...": { es: "Generando..." },
+  "Erro ao gerar o convite. Tente novamente.": {
+    es: "Error al generar la invitación. Inténtalo de nuevo.",
+  },
+  "Só tenants ativos recebem convite. Reative o tenant antes.": {
+    es: "Solo los tenants activos reciben invitación. Reactiva el tenant antes.",
+  },
+  "Tenant criado": { es: "Tenant creado" },
+  "Ir para o tenant": { es: "Ir al tenant" },
+  "O tenant foi criado, mas o convite do responsável não pôde ser gerado. Abra o tenant e use «Convidar responsável».": {
+    es: "El tenant fue creado, pero no se pudo generar la invitación del responsable. Abre el tenant y usa «Invitar al responsable».",
+  },
+  "Enviamos o convite para": { es: "Enviamos la invitación a" },
+  "Se ele não chegar, copie o link abaixo e entregue pelo canal que o cliente usa.": {
+    es: "Si no llega, copia el enlace de abajo y entrégalo por el canal que usa el cliente.",
+  },
+  "O e-mail não saiu. Copie o link abaixo e entregue a": {
+    es: "El correo no salió. Copia el enlace de abajo y entrégalo a",
+  },
+  "pelo canal que o cliente usa (por exemplo, o WhatsApp).": {
+    es: "por el canal que usa el cliente (por ejemplo, WhatsApp).",
+  },
+  "Link do convite": { es: "Enlace de la invitación" },
+  "Link copiado": { es: "Enlace copiado" },
+  "Não foi possível copiar. Selecione o link e copie à mão.": {
+    es: "No se pudo copiar. Selecciona el enlace y cópialo a mano.",
+  },
+  "Vale até": { es: "Válido hasta" },
+  "Depois disso, gere outro em «Convidar responsável» na página do tenant.": {
+    es: "Después de eso, genera otra en «Invitar al responsable» en la página del tenant.",
+  },
   "Email ou senha incorretos.": { es: "Correo o contraseña incorrectos." },
   "Erro inesperado. Tente novamente.": { es: "Error inesperado. Intenta de nuevo." },
   "Entrando...": { es: "Entrando..." },

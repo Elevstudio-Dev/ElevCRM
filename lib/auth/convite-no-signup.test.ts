@@ -102,3 +102,88 @@ describe("decidirConviteDoSignup", () => {
     }
   });
 });
+
+/**
+ * O CADASTRO FECHADO — instalação operada como serviço, onde cliente entra por
+ * convite. Este é o ÚNICO ponto que cria organização para quem se cadastra, então
+ * é aqui que o fechamento tem de valer: fechar só na tela deixaria o `/auth/v1/signup`
+ * do próprio Auth (anon key, direto do navegador) criar organização do mesmo jeito.
+ */
+describe("decidirConviteDoSignup com o cadastro público FECHADO", () => {
+  const fechado = { cadastroAberto: false };
+
+  it("sem convite: RECUSA — não ganha organização", () => {
+    expect(decidirConviteDoSignup({ email: "estranho@qualquer.test" }, fechado)).toEqual({
+      tipo: "recusar",
+      motivo: "cadastro_fechado",
+    });
+    expect(decidirConviteDoSignup({ email: "estranho@qualquer.test", user_metadata: {} }, fechado)).toEqual({
+      tipo: "recusar",
+      motivo: "cadastro_fechado",
+    });
+  });
+
+  it("lixo no lugar do token não é convite: continua recusando", () => {
+    for (const lixo of [42, null, {}, [], "   "]) {
+      expect(
+        decidirConviteDoSignup({ email: "a@b.test", user_metadata: { invite_token: lixo } }, fechado),
+      ).toEqual({ tipo: "recusar", motivo: "cadastro_fechado" });
+    }
+  });
+
+  it("COM convite válido para o mesmo e-mail: entra — é o caminho de todo cliente", () => {
+    const t = token("dono@clinica.test");
+    const d = decidirConviteDoSignup(
+      { email: "dono@clinica.test", user_metadata: { invite_token: t } },
+      fechado,
+    );
+    expect(d.tipo).toBe("convite");
+  });
+
+  it("convite de OUTRA pessoa continua recusado, e pelo motivo certo (não vira 'cadastro fechado')", () => {
+    const d = decidirConviteDoSignup(
+      { email: "atacante@outro.test", user_metadata: { invite_token: token("vitima@clinica.test") } },
+      fechado,
+    );
+    expect(d).toEqual({ tipo: "recusar", motivo: "email_divergente" });
+  });
+
+  it("convite expirado continua `token_invalido` — quem tinha convite merece saber que ele venceu", () => {
+    const d = decidirConviteDoSignup(
+      { email: "dono@clinica.test", user_metadata: { invite_token: token("dono@clinica.test", 1) } },
+      fechado,
+    );
+    expect(d).toEqual({ tipo: "recusar", motivo: "token_invalido" });
+  });
+
+  it("quem JÁ TEM organização não é barrado: o fechamento vale para criar, não para confirmar outro link", () => {
+    // Troca de e-mail e link mágico também passam por `/auth/confirm`. Esse usuário já é
+    // membro de uma organização, então `provisionar` é um no-op idempotente — recusá-lo
+    // só o jogaria num erro de "cadastro fechado" sem ter cadastro nenhum a fazer.
+    expect(
+      decidirConviteDoSignup({ email: "membro@clinica.test" }, { cadastroAberto: false, jaTemOrganizacao: true }),
+    ).toEqual({ tipo: "provisionar" });
+  });
+
+  it("`jaTemOrganizacao` NÃO atravessa convite inválido: token ruim segue recusado pelo motivo certo", () => {
+    const d = decidirConviteDoSignup(
+      { email: "dono@clinica.test", user_metadata: { invite_token: token("dono@clinica.test", 1) } },
+      { cadastroAberto: false, jaTemOrganizacao: true },
+    );
+    expect(d).toEqual({ tipo: "recusar", motivo: "token_invalido" });
+  });
+
+  it("sem dizer que já tem organização, o padrão é NÃO ter — falha fechada", () => {
+    expect(decidirConviteDoSignup({ email: "x@y.test" }, { cadastroAberto: false })).toEqual({
+      tipo: "recusar",
+      motivo: "cadastro_fechado",
+    });
+  });
+
+  it("com o cadastro ABERTO (ou sem opção) nada muda: quem já instalou segue como antes", () => {
+    expect(decidirConviteDoSignup({ email: "novo@empresa.test" }, { cadastroAberto: true })).toEqual({
+      tipo: "provisionar",
+    });
+    expect(decidirConviteDoSignup({ email: "novo@empresa.test" }, {})).toEqual({ tipo: "provisionar" });
+  });
+});

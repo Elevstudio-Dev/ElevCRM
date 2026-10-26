@@ -1,6 +1,7 @@
 "use client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import type { ConviteEmitido } from "@/hooks/useOwnerInvite";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,6 +21,10 @@ export interface CreateTenantResponse {
     id: string;
     slug: string;
     display_name: string;
+    /** O convite de admin emitido ao responsável; `null` se a emissão falhou (ver abaixo). */
+    owner_invite: ConviteEmitido | null;
+    /** Presente só quando o tenant foi criado mas o convite NÃO: reemitir pela ficha do tenant. */
+    owner_invite_error?: string;
   };
 }
 

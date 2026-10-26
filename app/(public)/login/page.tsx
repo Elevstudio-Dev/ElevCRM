@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { branding } from "@/lib/branding";
 import { createClient } from "@/lib/supabase/server";
+import { cadastroPublicoAbertoNaInstalacao } from "@/lib/auth/cadastro-publico";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -64,6 +65,16 @@ export default async function LoginPage({
           )}
         </div>
       )}
+      {error === "cadastro_fechado" && (
+        <div
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          {t(
+            "Seu e-mail foi confirmado, mas o cadastro está fechado nesta instalação e não há convite para ele. Peça um convite a quem administra o sistema.",
+          )}
+        </div>
+      )}
       {error === "template_padrao" && (
         <div
           className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -96,15 +107,19 @@ export default async function LoginPage({
             {t("Esqueci minha senha")}
           </Link>
         </p>
-        <p className="text-muted-foreground">
-          {t("Não tem conta?")}{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-foreground underline underline-offset-4"
-          >
-            {t("Criar conta")}
-          </Link>
-        </p>
+        {/* Cadastro fechado: o convite chega por link e abre `/signup` por conta própria,
+            então não há o que oferecer aqui — o link levaria a uma tela que só recusa. */}
+        {cadastroPublicoAbertoNaInstalacao() && (
+          <p className="text-muted-foreground">
+            {t("Não tem conta?")}{" "}
+            <Link
+              href="/signup"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              {t("Criar conta")}
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

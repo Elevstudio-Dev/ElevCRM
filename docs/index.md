@@ -123,6 +123,7 @@ acessibilidade).
 | [`runbooks/waha-hostgator.md`](runbooks/waha-hostgator.md) | Runbook do WAHA em produção |
 | [`runbooks/lembrete-de-consulta.md`](runbooks/lembrete-de-consulta.md) | **Lembrete de consulta por WhatsApp** — como ligar (modelo aprovado + tipo de atendimento), quando NÃO sai e por quê, como diagnosticar |
 | [`runbooks/operacao-24h.md`](runbooks/operacao-24h.md) | **Operação 24 h para vários clientes numa instalação** — o que cai e como você fica sabendo, preparar o servidor, ligar o monitor, backup cifrado fora da VPS e a prova mensal de que restaura, atualizar sem derrubar todos, o que fazer quando o alerta toca, e o que ainda NÃO está coberto |
+| [`runbooks/abrir-cliente-novo.md`](runbooks/abrir-cliente-novo.md) | **Abrir um cliente novo numa instalação com vários clientes** — fechar o cadastro público (`CADASTRO_PUBLICO=false`), criar o tenant com o convite do responsável, reemitir o convite que venceu em 24 h, e o risco que sobra no Auth do Supabase |
 | [`runbooks/meta-tech-provider.md`](runbooks/meta-tech-provider.md) | **A Elev como Tech Provider da Meta** — o que fazer, em ordem, para vários clientes numa instalação e para o mesmo número no app e no CRM (coexistência); o que o produto já tem e o que falta |
 | [`runbooks/cloudpanel.md`](runbooks/cloudpanel.md) | **VPS que já tem CloudPanel/Nginx nas portas 80/443** — o modo proxy externo do kit, o endereço fixo para o Nginx do host e o 403 do webhook global |
 | [`runbooks/ai-credentials-rotation.md`](runbooks/ai-credentials-rotation.md) | Rotação de credenciais de IA |
