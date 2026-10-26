@@ -144,9 +144,12 @@ export function portasDoSupabase(admin: SupabaseClient, relogio: () => Date = ()
         .select("display_name")
         .eq("id", organizationId)
         .maybeSingle();
-      const nome = (data as { display_name: string | null } | null)?.display_name?.trim() || null;
-      clinicas.set(organizationId, nome);
-      return nome;
+      // É o nome da ORGANIZAÇÃO (a clínica), não o de um contato: `organizations.display_name`
+      // tem cadeia própria e legítima, e o guarda de `rotulo-do-contato` a isenta pelo nome.
+      const organizacao = data as { display_name: string | null } | null;
+      const nomeDaOrganizacao = organizacao?.display_name?.trim() || null;
+      clinicas.set(organizationId, nomeDaOrganizacao);
+      return nomeDaOrganizacao;
     },
 
     async conversaParaOContato(c: CompromissoDevido): Promise<ConversaDeEnvio | null> {

@@ -124,7 +124,13 @@ describe("auditoria", () => {
   });
 
   it("enviou, descartou ou desistiu: audita UMA vez, com contagens e sem ids", async () => {
-    rpc.mockResolvedValue({ data: devidos("a1", "a2", "a3", "a4"), error: null });
+    // Ids que NENHUM UUID aleatório consegue produzir. Com "a1", o `requestId` (um UUID novo a
+    // cada execução) continha "…42a1…" por acaso em ~1 de cada 9 rodadas e o teste reprovava
+    // sem defeito nenhum — foi o que derrubou o gov:verify de 26/10.
+    rpc.mockResolvedValue({
+      data: devidos("compromisso-sigiloso-1", "compromisso-sigiloso-2", "compromisso-sigiloso-3", "compromisso-sigiloso-4"),
+      error: null,
+    });
     processar
       .mockResolvedValueOnce("enviado")
       .mockResolvedValueOnce("pulado")
@@ -145,6 +151,6 @@ describe("auditoria", () => {
       ignorado: 0,
       erro: 0,
     });
-    expect(JSON.stringify(entrada)).not.toContain("a1");
+    expect(JSON.stringify(entrada)).not.toContain("compromisso-sigiloso");
   });
 });
