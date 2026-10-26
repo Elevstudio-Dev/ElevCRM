@@ -145,6 +145,7 @@ declare `REVERSE_PROXY=traefik` no `.env` — aí a escolha é sua e ele segue s
 | `reset-mfa.sh` | Remove o MFA de um usuário travado |
 | `healthcheck.sh` | Diagnóstico dos serviços (e do monitor e do backup fora da VPS) |
 | `preparar-host.sh` | Prepara um servidor NOVO para ficar no ar: firewall, bloqueio de tentativas de invasão, atualizações de segurança, swap, relógio. `--dry-run` mostra o plano sem mudar nada |
+| `instalar-remoto.sh` | Instala o CRM numa VPS **já preparada**, a partir da SUA máquina: lê as chaves e senhas sem eco e as envia pela entrada padrão do SSH (nunca por argumento de comando, nunca por chat). Fecha o cadastro público (`CADASTRO_PUBLICO=false`), confere se o nome aponta para a VPS e se o `.env` ainda não existe, e acompanha o `install.sh` até o fim. `--ensaio` valida tudo sem conectar |
 | `monitor.sh` | Roda por cron a cada 5 min e avisa um monitor externo (`HEARTBEAT_URL`) se algo está errado — ou se ele para de avisar |
 | `backup-fora.sh` | Backup **cifrado** do banco, do `.env` e das sessões de WhatsApp para fora da VPS. `--teste` confere o destino e se a chave consegue apagar |
 | `backup-midia.sh` | Backup **cifrado** das fotos, áudios e documentos dos pacientes (o Storage do Supabase), incremental, para fora da VPS. O backup do banco não os inclui |

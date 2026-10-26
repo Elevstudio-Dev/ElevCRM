@@ -1507,6 +1507,26 @@ STUB
   fi
   printf '  ✓ em --yes a cor sai DECLARADA e vazia (o "estado de fábrica" do resolve.ts)\n'
 
+  # ── O cadastro público: padrão aberto, e FECHADO sobrevive à reinstalação ────
+  # `CADASTRO_PUBLICO=false` é o que impede um estranho de abrir uma empresa dentro da
+  # instância de um serviço com vários clientes. O defeito que esta prova guarda é
+  # silencioso: o `.env` sai de um `{ … } > .env` truncante, e uma chave que o instalador
+  # não grava é APAGADA na re-execução — o cadastro reabriria sem erro nenhum.
+  if ! grep -qE '^CADASTRO_PUBLICO=' "$VPS_PROJ/.env"; then
+    printf '  ✗ o .env não declara CADASTRO_PUBLICO (esperado: declarada e vazia = aberto)\n'; exit 1
+  fi
+  if [ -n "$(valor_no_env "$VPS_PROJ/.env" CADASTRO_PUBLICO)" ]; then
+    printf '  ✗ o padrão do CADASTRO_PUBLICO veio com valor: [%s] — ninguém pediu para fechar\n' \
+      "$(valor_no_env "$VPS_PROJ/.env" CADASTRO_PUBLICO)"; exit 1
+  fi
+  printf '  ✓ o cadastro público sai DECLARADO e vazio (aberto) — quem já instalou não muda\n'
+  rodar install.sh --yes "CADASTRO_PUBLICO='false'" >/dev/null
+  if [ "$(valor_no_env "$VPS_PROJ/.env" CADASTRO_PUBLICO)" != "false" ]; then
+    printf '  ✗ CADASTRO_PUBLICO=false NÃO sobreviveu ao install.sh: [%s]\n' \
+      "$(valor_no_env "$VPS_PROJ/.env" CADASTRO_PUBLICO)"; exit 1
+  fi
+  printf '  ✓ CADASTRO_PUBLICO=false sobrevive à reinstalação (o cadastro fechado não reabre sozinho)\n'
+
   # ── A regra de ouro da doutrina de packaging, no ponto onde ela vale ───────
   # Uma instalação nova gravava `APP_IMAGE=…:latest`, e `latest` aqui significa
   # TOPO DA MAIN (o canal segue a branch default), não a última

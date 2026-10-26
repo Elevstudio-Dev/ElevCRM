@@ -1633,6 +1633,11 @@ esac
   envq NODE_ENV "production"
   envq NUVEMSHOP_ENABLED "false"
   envq INTERNAL_AGENT_RUN_STUB "false"
+  # Cadastro público (/signup). Vazio = aberto (o padrão de sempre). `false` fecha: só
+  # entra quem tem convite — o que uma instalação com VÁRIOS clientes quer. Lido do
+  # ambiente (o `.env` já foi carregado antes da entrevista), então uma re-execução
+  # NÃO reabre o cadastro que o operador fechou — nem o instalador remoto, que o grava.
+  envq CADASTRO_PUBLICO "${CADASTRO_PUBLICO:-}"
   envq OWNER_EMAIL "$OWNER_EMAIL"
   envq OWNER_PASSWORD "$OWNER_PASSWORD"
   # As variáveis que você acrescentou à mão, de volta — já no formato em que

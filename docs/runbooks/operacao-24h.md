@@ -58,7 +58,16 @@ restaurar. Por isso o monitor trata "backup com mais de 30 h" como **problema**,
    automático fica desligado de propósito; o monitor avisa quando há reinício pendente.
    Opcional, depois de testar a sua chave em outra janela: `--ssh-so-chave`.
 4. **Instale** o CRM com o `install.sh` (README do kit). Escolha o Supabase **Pro**, região
-   São Paulo.
+   São Paulo. Para instalar **a partir da sua máquina**, sem colar chaves em chat nem no
+   histórico da VPS, use o `instalar-remoto.sh` (ele roda o `install.sh` por você):
+
+   ```bash
+   bash hostgator-setup-kit/instalar-remoto.sh --host IP_DA_VPS --chave ~/.ssh/SUA_CHAVE \
+     --dominio crm.suaempresa.com.br --ensaio    # primeiro, sem conectar em nada
+   ```
+
+   Tire o `--ensaio` para instalar de verdade. Numa instalação com **vários clientes** o
+   cadastro público fica fechado (`CADASTRO_PUBLICO=false`): veja `abrir-cliente-novo.md`.
 
 ## 4. Ligar o monitor (sem isto você não sabe se caiu)
 
