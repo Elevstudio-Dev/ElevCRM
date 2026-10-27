@@ -8,6 +8,77 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.18.0] — 2026-10-27
+
+### Adicionado
+
+- **Uma instalação pode atender vários clientes — você abre cada um com o convite do dono, e o cadastro público fica fechado** Até aqui o `/signup` abria uma empresa nova para **qualquer pessoa** que
+  confirmasse um e-mail. Numa instalação que atende vários clientes (uma VPS, um
+  banco, cada cliente isolado dentro dela), isso é uma porta aberta: um estranho
+  abre uma organização, gasta a cota de e-mail e de IA e pode conectar números de
+  WhatsApp. E a criação de cliente pelo painel da plataforma (`/admin/tenants`)
+  abria a organização **vazia**: o e-mail do responsável era descartado, e não
+  havia como entregar o acesso sem mexer no banco.
+
+  **Fechar o cadastro.** Ponha `CADASTRO_PUBLICO=false` no `.env` e reinicie o app
+  (sem rebuild). Com ele, a tela `/signup` só aparece para quem chega por um
+  convite, o link "Criar conta" some do login, e quem tentar criar conta por fora
+  da tela (direto no Auth do Supabase) confirma o e-mail e
+  **não ganha organização nenhuma**, caindo numa mensagem que explica o motivo.
+  Quem já é membro de uma organização não é afetado: troca de e-mail e links de
+  confirmação seguem como sempre. O padrão **não muda nada** para quem já instalou: sem a variável (ou com
+  `true`), o cadastro continua aberto. Qualquer valor que não seja `true` ou vazio
+  também fecha — errar a grafia (`falso`) não deixa o cadastro aberto em silêncio.
+
+  **Abrir um cliente.** Em `/admin/tenants/new`, o e-mail do responsável agora
+  gera um convite de **administrador** para a organização recém-criada. O e-mail
+  sai pela marca da instalação; se o envio de e-mail não estiver configurado, a
+  tela mostra o link para você entregar pelo canal que o cliente usa (o WhatsApp,
+  por exemplo). O responsável cria a senha pelo link, com aquele mesmo e-mail, e
+  entra direto na organização dele — sem nunca ter aberto uma própria.
+
+  **O convite vale 24 horas.** Se o cliente demorou ou perdeu o e-mail, a ficha do
+  tenant ganhou o botão **Convidar responsável**, que gera um convite novo. Ele só
+  funciona para organizações ativas e o papel é sempre administrador.
+
+  Se a criação do tenant der certo e o convite falhar, o tenant continua criado e a
+  tela avisa — não é preciso (nem possível) criá-lo de novo.
+
+- **Instale o CRM numa VPS a partir do seu computador, sem colar chaves em chat nem no histórico do servidor** Novo `hostgator-setup-kit/instalar-remoto.sh`: roda na **sua máquina**, pergunta a
+  chave e a senha sem eco e as envia à VPS pela entrada padrão do SSH. O segredo não
+  vira argumento de comando (então não aparece em `ps`), não vai para o histórico do
+  shell e não passa por ninguém.
+
+  Ele fecha o cadastro público (`CADASTRO_PUBLICO=false`), liga a telemetria em `off`,
+  confere se o nome do CRM aponta para a VPS (sem isso o certificado HTTPS não sai) e
+  **recusa sobrescrever um `.env` que já existe** — ele guarda as chaves que cifram
+  dados do banco. Depois acompanha o `install.sh` até o fim, apaga `OWNER_PASSWORD` do
+  `.env` da VPS e confere o endereço por HTTPS.
+
+  `--ensaio` valida tudo o que você digitou e mostra o que seria enviado (chaves
+  mascaradas) sem conectar em nada. Veja `docs/runbooks/operacao-24h.md`.
+
+### Corrigido
+
+- **O preparar-host.sh --ssh-so-chave agora desliga a senha do SSH de verdade — e confere pelo valor que o servidor usa** Na 1.17.0, `preparar-host.sh --ssh-so-chave` dizia "SSH só com chave" mas, em
+  servidores de nuvem (Hostinger e qualquer imagem com cloud-init),
+  **a senha continuava ligada**. O servidor lê os arquivos de `/etc/ssh/sshd_config.d/` em
+  ordem e vale o primeiro valor de cada diretiva; essas imagens trazem um
+  `50-cloud-init.conf` com `PasswordAuthentication yes`, e o arquivo do kit
+  (`99-elevcrm.conf`) vinha depois dele e perdia. O script confirmava o sucesso
+  olhando o arquivo que ele mesmo gravou, e não o que o servidor usa.
+
+  Agora o arquivo se chama `00-elevcrm.conf` (vem antes de todos), o script apaga
+  o `99-elevcrm.conf` que a 1.17.0 deixou, e só anuncia sucesso depois de
+  conferir com `sshd -T` que o servidor recusa senha. Se outro arquivo ainda
+  mandar mais alto, o script desfaz a mudança e avisa qual arquivo conferir, em
+  vez de dizer que deu certo.
+
+  **Quem já rodou a 1.17.0 com `--ssh-so-chave`:** rode de novo
+  `bash hostgator-setup-kit/preparar-host.sh --ssh-so-chave` depois de atualizar.
+  Para conferir agora, sem atualizar: `sshd -T | grep passwordauthentication`
+  precisa responder `no`.
+
 ## [1.17.0] — 2026-10-26
 
 ### Adicionado
@@ -2646,7 +2717,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.17.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.14.0...v1.15.0
