@@ -16,7 +16,7 @@ import { AlertsBell } from "./AlertsBell";
 import { MarcaNaBarra } from "./MarcaNaBarra";
 import { MenuMobile } from "./MenuMobile";
 import { SearchTrigger } from "./SearchTrigger";
-import { TenantSwitcher } from "./TenantSwitcher";
+import { TenantSwitcher, useTemSeletorDeOrganizacao } from "./TenantSwitcher";
 import { UserMenu } from "./UserMenu";
 
 /**
@@ -70,24 +70,46 @@ function AtalhoDeConfiguracoes() {
  * sem a outra faz o composer nascer fora da tela.
  */
 export function TopBar() {
+  const temSeletor = useTemSeletorDeOrganizacao();
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur md:gap-3 md:px-4">
       {/*
-        SEM `shrink-0` neste grupo, e COM `min-w-0`: é a marca que cede quando
-        a linha aperta. No celular (390px) a barra tem hambúrguer, marca,
-        busca, sino e menu do usuário, e a marca é a única peça de largura
-        variável — um nome comprido, ou um logo largo, era o que fazia a página
-        inteira rolar de lado (medido: 402px em 390). Agora ela trunca, e a
-        largura da barra não depende do nome de ninguém.
+        SEM `shrink-0` neste grupo, e COM `min-w-0`: quem cede quando a linha
+        aperta são as peças de LARGURA VARIÁVEL — o nome da marca e o nome da
+        organização, ambos truncam. Tudo o que tem tamanho fixo (hambúrguer,
+        selo, os botões da direita) é `shrink-0` ou tem piso. Um nome comprido,
+        ou um logo largo, era o que fazia a página inteira rolar de lado
+        (medido: 402px em 390), e a largura da barra não depende do nome de
+        ninguém.
+        ⚠️ O que o `min-w-0` NÃO faz: encolher quem está DENTRO do grupo. O
+        grupo encolhe; um filho sem `min-w-0`/truncate não, e transborda para
+        cima do vizinho. Foi assim que o seletor de organização (138px, um
+        `Button` que não trunca) passou por cima de Buscar, Chat e Avisos.
+
+        ORÇAMENTO (medido em 2026-10-27, tela de 375px = 351 úteis depois dos 12px de respiro de cada lado):
+          direita   186  = busca 42 + chat 44 + avisos 44 + menu do usuário 44 + 3×4
+          hambúrguer 44  = alvo de toque, nunca menos
+          vão        8 + 4 entre os grupos
+          sobra    ~109  para marca + seletor de organização
+        Com idioma e tema também na barra, a direita eram 290 e a esquerda
+        ficava com 45px: hambúrguer amassado em 16px, nome da marca nunca
+        visível (nem em 390) e o seletor por cima dos botões. Por isso idioma e
+        tema moram no menu do usuário abaixo de `lg` (ver `UserMenu`) — e
+        quem aumentar a direita de novo precisa refazer esta conta e rodar
+        `tests/e2e/barra-superior-nao-se-sobrepoe.spec.ts`.
+
+        Com seletor de organização a marca (selo + nome) só aparece de `xl` em
+        diante: abaixo disso o seletor precisa da largura inteira para mostrar
+        o nome da organização — e saber em qual organização se está é o que
+        importa antes do selo. Sem seletor a marca fica sempre, no piso do selo.
       */}
       <div className="flex min-w-0 items-center gap-1 md:gap-2">
         <MenuMobile />
-        <MarcaNaBarra />
+        <MarcaNaBarra className={temSeletor ? "max-xl:hidden" : undefined} />
         <TenantSwitcher />
       </div>
       <AbasPrincipais className="hidden md:flex md:ml-2" />
-      <div className="min-w-0 flex-1" />
-      <div className="flex shrink-0 items-center gap-1 md:gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
         <SearchTrigger />
         <BotaoDoChat />
         <AlertsBell />

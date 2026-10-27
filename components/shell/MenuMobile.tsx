@@ -30,7 +30,7 @@ export function MenuMobile() {
           type="button"
           variant="ghost"
           size="icon"
-          className="h-11 w-11 md:hidden"
+          className="h-11 w-11 shrink-0 md:hidden"
           aria-label={t("Abrir navegação")}
         >
           <List size={22} aria-hidden />

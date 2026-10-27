@@ -27,20 +27,30 @@ import { Check } from "@/lib/ui/icons";
  * português. O botão fica ao lado do controle de tema, que é o lugar onde este
  * produto já guarda o que muda a APARÊNCIA e não os dados.
  *
+ * ─── Onde ele mora em cada largura ─────────────────────────────────────────
+ *
+ * De `lg` em diante, na barra, como acima. Abaixo disso (celular e tablet) a
+ * barra não comporta idioma e tema ao lado de busca, chat, avisos e do menu do
+ * usuário sem esmagar o hambúrguer e o seletor de organização — medido, ver o
+ * orçamento no `TopBar` —, então os dois moram DENTRO do menu do usuário
+ * (`PreferenciasNoMenu`), que é um toque do avatar e continua a dois cliques.
+ * A troca em si é a mesma nos dois lugares: `useTrocarDeIdioma`.
+ *
  * ─── O rótulo é o código, e é de propósito ─────────────────────────────────
  *
  * "PT" / "ES" são legíveis nos dois idiomas e cabem no mesmo espaço de um
  * ícone. Um ícone de globo diria "idioma" sem dizer QUAL — e saber qual está
  * em vigor é metade da pergunta de quem procura este botão.
  */
-const NOME_DO_IDIOMA: Record<Idioma, { curto: string; completo: string }> = {
+export const NOME_DO_IDIOMA: Record<Idioma, { curto: string; completo: string }> = {
   // Cada língua no nome dela própria: é assim que se reconhece a sua numa
   // lista que você não sabe ler.
   "pt-BR": { curto: "PT", completo: "Português (BR)" },
   es: { curto: "ES", completo: "Español" },
 };
 
-export function SeletorDeIdioma() {
+/** A troca de idioma, para quem for desenhar o controle (a barra, ou o menu do usuário). */
+export function useTrocarDeIdioma() {
   const t = useT();
   const idioma = useIdioma();
   const aplicar = useAplicarIdioma();
@@ -82,6 +92,13 @@ export function SeletorDeIdioma() {
       window.location.reload();
     });
   };
+
+  return { idioma, escolher, salvando };
+}
+
+export function SeletorDeIdioma() {
+  const t = useT();
+  const { idioma, escolher, salvando } = useTrocarDeIdioma();
 
   return (
     <DropdownMenu>

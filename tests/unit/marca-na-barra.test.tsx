@@ -167,6 +167,30 @@ describe("o logo na barra superior", () => {
     expect(imagem().getAttribute("src")).toBe(LOGO_DA_INSTALACAO);
   });
 
+  it("o logo pode ENCOLHER: sem `min-w-0` um logo largo passava por cima da busca no celular", () => {
+    // Medido (27/10/2026, Chromium, logo 400x100, 320-390px): sem a classe a imagem não encolhia
+    // abaixo da largura própria e cobria o botão Buscar em 21-42px. jsdom não mede layout, então
+    // isto prende a CLASSE que tem a medida por trás — a geometria é do navegador.
+    marcaDaInstalacao = { ...marcaDaInstalacao, logoUrl: LOGO_DA_INSTALACAO };
+    contexto = { user: usuario, activeOrg: org };
+    renderMarca();
+    expect(imagem().className.split(/\s+/)).toContain("min-w-0");
+  });
+
+  it("repassa o `className` da barra ao link — é por ele que a marca cede ao seletor de organização", () => {
+    contexto = { user: usuario, activeOrg: org };
+    render(
+      <MarcaDaInstalacaoProvider marca={marcaDaInstalacao}>
+        <MarcaNaBarra className="max-xl:hidden" />
+      </MarcaDaInstalacaoProvider>,
+    );
+    const link = screen.getByRole("link");
+    expect(link.className).toContain("max-xl:hidden");
+    // E o resto do link não se perde por causa disso.
+    expect(link).toHaveAttribute("data-marca-da-barra");
+    expect(link.className).toContain("min-w-0");
+  });
+
   it("sem logo nenhum, continua sendo o nome — não uma imagem quebrada", () => {
     // Guarda de vacuidade dos três de cima: se a barra desenhasse `<img>` sempre,
     // com `src` vazio, todos passariam pelo `getByRole("img")` e o produto
