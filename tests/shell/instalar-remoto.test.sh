@@ -53,6 +53,8 @@ case "$cmd" in
   # O caminho chega entre aspas simples (é assim que o script monta o comando remoto).
   "test -e "*"/.env'")        exit "${STUB_ENV_EXISTE_RC:-1}";;
   "tail -n +"*)               [ -n "${STUB_TAIL_FALHA:-}" ] && exit 255; cat "${STUB_TAIL_ARQ}"; exit 0;;
+  "sed -n "*APP_IMAGE*)       printf 'ghcr.io/elevstudio-dev/elevcrm:%s
+' "${STUB_APP_TAG:-1.18.0}"; exit 0;;
   *)                          exit "${STUB_SSH_RC:-0}";;
 esac
 STUB
@@ -64,7 +66,12 @@ STUB
 
 anota curl <<'STUB'
 #!/usr/bin/env bash
-printf '%s' "${STUB_HTTP:-200}"
+# GHCR: o token vem como JSON e o manifest como código HTTP (é assim que o _common.sh pergunta).
+case "$*" in
+  *ghcr.io/token*) printf '{"token":"duble"}';;
+  *ghcr.io/v2*)    printf '%s' "${STUB_GHCR:-200}";;
+  *)               printf '%s' "${STUB_HTTP:-200}";;
+esac
 STUB
 
 anota sleep <<'STUB'
@@ -157,6 +164,20 @@ ENTRADA_SENHA='Ab"c$d`e\f-12345' ENTRADA_SENHA2='Ab"c$d`e\f-12345' roda "${BASE[
 ENVF="$(env_enviado)"
 check "senha com aspas, \$, crase e barra sai ESCAPADA" grep -qF 'OWNER_PASSWORD="Ab\"c\$d\`e\\f-12345"' "$ENVF"
 check "e o .env continua tendo UMA linha por variável" test "$(grep -c '^OWNER_PASSWORD=' "$ENVF")" -eq 1
+
+echo "== a versão pedida tem de existir INTEIRA, e ser a que ficou"
+STUB_GHCR=404 roda "${BASE[@]}" --versao v1.18.0
+check "imagens da versão não publicadas: recusa" test "$RC" -ne 0
+check "…explica o motivo" tem "$OUT" "três imagens"
+check "…ANTES de pedir qualquer chave e sem conectar na VPS" bash -c '[ ! -s "$1" ] && [[ "$2" != *"Supabase"* ]]' _ "$ARGV_LOG" "$OUT"
+STUB_GHCR=404 roda "${BASE[@]}" --versao v1.18.0 --ensaio
+check "no --ensaio a conferência na rede não acontece (nada é conectado)" test "$RC" -eq 0
+STUB_GHCR=200 roda "${BASE[@]}" --versao v1.18.0
+check "imagens publicadas: segue" test "$RC" -eq 0
+check "…e confirma que o app instalado é a 1.18.0" tem "$OUT" "o app instalado é a 1.18.0"
+STUB_APP_TAG=1.17.0 roda "${BASE[@]}" --versao v1.18.0
+check "instalou OUTRA versão que a pedida: recusa em voz alta" test "$RC" -ne 0
+check "…avisa que o cadastro pode estar aberto" tem "$OUT" "ABERTO"
 
 echo "== entradas inválidas"
 ENTRADA_SENHA='curta' ENTRADA_SENHA2='curta' roda "${BASE[@]}"

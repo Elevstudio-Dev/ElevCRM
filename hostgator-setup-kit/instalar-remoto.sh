@@ -70,6 +70,16 @@ esac
 [ -n "$CHAVE" ] || die "Informe --chave com o caminho da sua chave SSH privada."
 [ "$ENSAIO" = 1 ] || [ -r "$CHAVE" ] || die "Não consigo ler a chave SSH: $CHAVE"
 
+# Antes de pedir uma só chave: a versão pedida existe INTEIRA? O `install.sh` cai calado no canal
+# `stable` (a versão ANTERIOR) quando as três imagens da versão ainda não estão publicadas — e uma
+# versão anterior pode nem conhecer o `CADASTRO_PUBLICO`, subindo com o cadastro ABERTO sem aviso.
+if [ -n "$VERSAO" ] && [ "$ENSAIO" = 0 ]; then
+  step "Conferindo se a $VERSAO está publicada"
+  trio_publicado "${VERSAO#v}" \
+    || die "A $VERSAO ainda não tem as três imagens publicadas (app, worker e scheduler). Espere a publicação terminar e rode de novo."
+  c_grn "✓ as três imagens da $VERSAO existem"
+fi
+
 SSH=(ssh -i "$CHAVE" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new
      -o ConnectTimeout=15 -o ServerAliveInterval=20 "root@$HOST")
 
@@ -281,6 +291,15 @@ while [ -z "$RC" ]; do
 done
 [ "$RC" = 0 ] || die "O install.sh terminou com erro ($RC). O log completo está em $LOG na VPS."
 c_grn "✓ install.sh terminou"
+
+# Subiu a versão que se pediu? (O instalador pode ter caído em outra, e dito "deu certo".)
+if [ -n "$VERSAO" ]; then
+  IMAGEM_GRAVADA="$("${SSH[@]}" "sed -n 's/^APP_IMAGE=\"\\(.*\\)\"\$/\\1/p' '$PASTA/.env'" 2>/dev/null || true)"
+  case "$IMAGEM_GRAVADA" in
+    *":${VERSAO#v}") c_grn "✓ o app instalado é a ${VERSAO#v} ($IMAGEM_GRAVADA)";;
+    *) die "Pedi a $VERSAO, mas o .env da VPS ficou com ${IMAGEM_GRAVADA:-<nada>}. Não siga: o cadastro público pode estar ABERTO. Veja $LOG na VPS.";;
+  esac
+fi
 
 # ── A senha do administrador não precisa ficar em texto no disco ─────────────
 if [ "$MANTER_SENHA" = 0 ]; then
