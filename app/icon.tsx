@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-import { letraDoIcone } from "@/lib/branding/icone";
+import { DesenhoDoIcone } from "@/lib/branding/elev/desenho-do-icone";
 import { marcaDaSaida } from "@/lib/branding/saida";
 
 /**
@@ -65,30 +65,12 @@ export const contentType = "image/png";
 
 export default async function Icon() {
   const marca = await marcaDaSaida(null);
-  const letra = letraDoIcone(marca.nome);
 
+  // ESTE É O PRODUTO DA ELEV STUDIO: o ícone da aba é o da Elev (em `accentFg` sobre o ladrilho da
+  // cor de ação da instalação), e não mais a inicial do nome. A COR continua vindo do resolvedor — quem
+  // trocar a cor em `/admin/marca` vê a aba acompanhar. (O desenho é compartilhado com `apple-icon.tsx`.)
   return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: marca.accent,
-          color: marca.accentFg,
-          // 62% da altura: a caixa maiúscula do Geist ocupa ~72% do em, então
-          // a letra fica com respiro sem virar um selo minúsculo no meio.
-          fontSize: Math.round(size.height * 0.62),
-          // O ladrilho é quadrado e cheio: o navegador já arredonda o favicon
-          // no chrome dele, e arredondar aqui também produz canto duplo.
-          borderRadius: 0,
-        }}
-      >
-        {letra ?? ""}
-      </div>
-    ),
+    <DesenhoDoIcone lado={size.height} fundo={marca.accent} frente={marca.accentFg} />,
     {
       ...size,
       headers: {

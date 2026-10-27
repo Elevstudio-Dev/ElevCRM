@@ -48,6 +48,8 @@ export const PUBLIC_PATHS: RegExp[] = [
   // antes desta linha: `GET /icon` → 307 para `/login?next=%2Ficon`, enquanto
   // `/icon.png` (inexistente) devolvia 404 — a diferença é só a extensão.
   /^\/icon$/,
+  // O ícone de atalho do iPhone (`app/apple-icon.tsx`): mesmo `<head>`, mesma regra do `/icon`.
+  /^\/apple-icon$/,
   /^\/manifest\.webmanifest$/,
   /^\/team\/accept-invite\/.+$/,
   /^\/account-suspended$/,

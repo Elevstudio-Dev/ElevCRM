@@ -1,6 +1,7 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { estiloDoAvatar, trilhaDoAvatar } from "@/lib/contacts/cor-do-avatar";
 import { cn } from "@/lib/utils";
 
 /**
@@ -62,12 +63,15 @@ export function AvatarDoContato({
   classNameIniciais?: string;
 }) {
   const temFoto = Boolean(contato?.avatar_storage_path) && !contato?.is_anonymized;
+  // Uma cor por contato, estável (hash do id): o olho acha a pessoa antes de ler o nome. Contato
+  // anonimizado fica no cinza — a cor seria um traço persistente de quem pediu para ser esquecido.
+  const estilo = contato?.is_anonymized ? undefined : estiloDoAvatar(trilhaDoAvatar(contato?.id ?? nome ?? reserva));
   return (
     <Avatar className={cn("h-8 w-8 shrink-0", className)}>
       {temFoto && contato ? (
         <AvatarImage src={`/api/v1/contacts/${contato.id}/avatar`} alt="" className="object-cover" />
       ) : null}
-      <AvatarFallback className={cn("text-xs", classNameIniciais)}>
+      <AvatarFallback className={cn("text-xs font-medium", classNameIniciais)} style={estilo}>
         {iniciaisDoNome(nome, reserva)}
       </AvatarFallback>
     </Avatar>

@@ -42,7 +42,7 @@ export const REGUA_DO_PRODUTO: Regua = {
     base: [
       {
         chave: "--color-bg",
-        hex: "#faf9f6",
+        hex: "#f4f2ef",
       },
       {
         chave: "--color-surface",
@@ -50,7 +50,7 @@ export const REGUA_DO_PRODUTO: Regua = {
       },
       {
         chave: "--color-surface-elevated",
-        hex: "#f5f3ee",
+        hex: "#ebe8e2",
       },
     ],
     tingidas: [
@@ -143,19 +143,19 @@ export const REGUA_DO_PRODUTO: Regua = {
     semanticas: [
       {
         nome: "success",
-        hex: "#5a8a5f",
+        hex: "#1f9449",
       },
       {
         nome: "warning",
-        hex: "#b07a2b",
+        hex: "#b77700",
       },
       {
         nome: "error",
-        hex: "#a94a3c",
+        hex: "#b83832",
       },
       {
         nome: "info",
-        hex: "#4a7a93",
+        hex: "#207baf",
       },
     ],
     neutros: [
@@ -183,15 +183,15 @@ export const REGUA_DO_PRODUTO: Regua = {
     base: [
       {
         chave: "--color-bg",
-        hex: "#161510",
+        hex: "#0e0a11",
       },
       {
         chave: "--color-surface",
-        hex: "#1d1c17",
+        hex: "#18131b",
       },
       {
         chave: "--color-surface-elevated",
-        hex: "#272620",
+        hex: "#241e28",
       },
     ],
     tingidas: [
@@ -284,33 +284,33 @@ export const REGUA_DO_PRODUTO: Regua = {
     semanticas: [
       {
         nome: "success",
-        hex: "#82a077",
+        hex: "#42af62",
       },
       {
         nome: "warning",
-        hex: "#d09455",
+        hex: "#d79228",
       },
       {
         nome: "error",
-        hex: "#c87263",
+        hex: "#e05e54",
       },
       {
         nome: "info",
-        hex: "#7da9bf",
+        hex: "#57abe2",
       },
     ],
     neutros: [
-      "#f5f4ef",
-      "#e6e4dc",
-      "#bbb8ac",
-      "#8e8b7f",
-      "#605e54",
-      "#444239",
-      "#33312a",
-      "#272620",
-      "#1d1c17",
-      "#161510",
-      "#0c0b08",
+      "#f5f3f6",
+      "#e5e3e7",
+      "#bab6bd",
+      "#8d8990",
+      "#605c64",
+      "#453f49",
+      "#312b35",
+      "#241e28",
+      "#18131b",
+      "#0e0a11",
+      "#050306",
     ],
     indices: {
       accent: 4,

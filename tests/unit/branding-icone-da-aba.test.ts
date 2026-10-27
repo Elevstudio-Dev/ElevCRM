@@ -55,6 +55,17 @@ describe("o ícone carrega para quem NÃO entrou", () => {
     expect(isPublicPath("/manifest.webmanifest")).toBe(true);
   });
 
+  it("o ícone de atalho do iPhone também é público, ancorado, e existe no disco", () => {
+    expect(isPublicPath("/apple-icon")).toBe(true);
+    expect(isPublicPath("/apple-icon/../app")).toBe(false);
+    expect(isPublicPath("/admin/apple-icon")).toBe(false);
+    // Guarda de vacuidade: a regra existindo sem o arquivo seria allowlist para rota que não existe.
+    expect(fs.existsSync(path.join(RAIZ, "app/apple-icon.tsx"))).toBe(true);
+    const apple = fs.readFileSync(path.join(RAIZ, "app/apple-icon.tsx"), "utf8");
+    expect(apple).toMatch(/export const dynamic\s*=\s*"force-dynamic"/);
+    expect(apple).toMatch(/marcaDaSaida\(null\)/);
+  });
+
   it("a entrada é ancorada — não abre /icon-secreto nem /admin/icon", () => {
     // Regex de caminho público sem âncora é como allowlist vira buraco.
     expect(isPublicPath("/iconografia")).toBe(false);
@@ -90,6 +101,8 @@ describe("o ícone carrega para quem NÃO entrou", () => {
     // O 404 de /favicon.ico não é barato: em produção ele devolve a
     // `app/not-found.tsx` inteira (19.435 bytes) para um pedido de ícone.
     const layout = fs.readFileSync(path.join(RAIZ, "app/layout.tsx"), "utf8");
-    expect(layout).toMatch(/icons:\s*\{\s*icon:\s*"\/icon"\s*\}/);
+    expect(layout).toMatch(/icons:\s*\{\s*icon:\s*"\/icon"/);
+    // …e o de atalho do iPhone, que só vira `<link rel="apple-touch-icon">` se o layout o declarar.
+    expect(layout).toMatch(/apple:\s*"\/apple-icon"/);
   });
 });

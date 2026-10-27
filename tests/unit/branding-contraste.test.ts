@@ -60,7 +60,7 @@ describe("extrairRegua — os pares saem do globals.css, nunca de lista à mão"
     expect(REGUA.rampaDoProduto).toHaveLength(11);
     expect(REGUA.rampaDoProduto[6]).toBe("#506d48");
     expect(REGUA.claro.neutros).toHaveLength(11);
-    expect(REGUA.escuro.neutros[9]).toBe("#161510");
+    expect(REGUA.escuro.neutros[9]).toBe("#0e0a11");
     expect(REGUA.claro.base.map((b) => b.chave)).toEqual([
       "--color-bg",
       "--color-surface",
@@ -69,9 +69,11 @@ describe("extrairRegua — os pares saem do globals.css, nunca de lista à mão"
   });
 
   it("alcança o anel de foco, que mora em @layer base e uma lista à mão perderia", () => {
-    // ESTE é o par do relato: `accent-600` contra bg dá 5,51 e passaria qualquer gate
-    // ingênuo, mas quem pinta o anel é `accent-500` — e ele dá 3,79. Uma régua que só
-    // olhasse o stop da semente deixaria o anel pousar em ~2,07 com o gate verde.
+    // ESTE é o par do relato: `accent-600` contra bg dá 5,19 e passaria qualquer gate
+    // ingênuo, mas quem pinta o anel é `accent-500` — e ele dá 3,58. Uma régua que só
+    // olhasse o stop da semente deixaria o anel pousar bem abaixo disso com o gate verde.
+    // (Números de 27/10/2026, com o off-white `#f4f2ef` da Elev como fundo do claro; antes,
+    // com `#faf9f6`, eram 5,51 e 3,79. Conferidos por fora do código, pela fórmula WCAG.)
     const foco = REGUA.claro.papeis.find((p) => p.token.includes(":focus-visible"));
     expect(foco, "o anel de foco sumiu da régua").toBeDefined();
     expect(foco?.tipo).toBe("componente");
@@ -119,9 +121,9 @@ describe("extrairRegua — os pares saem do globals.css, nunca de lista à mão"
     const razao = (papel: string, superficie: string) =>
       pares.find((p) => p.papel === papel && p.superficie === superficie)?.razao ?? 0;
 
-    expect(razao("--color-accent", "--color-bg")).toBeCloseTo(5.51, 2);
-    expect(razao(":focus-visible/outline", "--color-bg")).toBeCloseTo(3.79, 2);
-    expect(razao(":focus-visible/outline", "--color-surface-elevated")).toBeCloseTo(3.6, 2);
+    expect(razao("--color-accent", "--color-bg")).toBeCloseTo(5.19, 2);
+    expect(razao(":focus-visible/outline", "--color-bg")).toBeCloseTo(3.58, 2);
+    expect(razao(":focus-visible/outline", "--color-surface-elevated")).toBeCloseTo(3.27, 2);
   });
 
   it("a Sage inteira, como está no CSS, cabe nos pisos", () => {
@@ -303,30 +305,46 @@ describe("derivarMarca — as 16 sementes adversariais", () => {
 });
 
 describe("reconciliação — quem se move são as NOSSAS semânticas", () => {
-  it("a Sage pura já nasce colidida e dispara a reconciliação (controle positivo)", () => {
-    // `--color-success` do bloco escuro é `#82a077`, a MESMA string de
-    // `--color-accent-400` (globals.css:167 e :193). Δ = 0,0°. Se o mecanismo não
-    // disparasse aqui, ele não dispararia em lugar nenhum.
-    expect(REGUA.escuro.semanticas.find((s) => s.nome === "success")?.hex).toBe(
-      REGUA.rampaDoProduto[4],
-    );
-
+  it("a Sage pura ainda dispara a reconciliação (controle positivo)", () => {
+    // Até 27/10/2026 o `--color-success` do bloco escuro era `#82a077`, a MESMA string de
+    // `--color-accent-400` (Δ = 0,0°): colisão LITERAL. Com a paleta Elev ele é um verde vivo
+    // (`#42af62`) e a colisão deixou de ser de string para ser PERCEPTUAL — sob dicromacia a Sage
+    // ainda fica perto de success e de error. O que este teste guarda não mudou: o mecanismo
+    // dispara no produto de fábrica. Se não disparasse aqui, não dispararia em lugar nenhum.
     const sage = derivarMarca("#506d48", REGUA);
     const movidas = sage.motivos.filter((m) => m.codigo === "semantica_deslocada");
     expect(movidas.length).toBeGreaterThan(0);
-    expect(movidas).toHaveLength(3);
-    expect(movidas.map((m) => `${m.tema}/${m.alvo}`)).toEqual([
-      "claro/error",
-      "escuro/warning",
-      "escuro/error",
-    ]);
+    expect(movidas).toHaveLength(2);
+    expect(movidas.map((m) => `${m.tema}/${m.alvo}`)).toEqual(["escuro/success", "escuro/error"]);
+  });
+
+  it("o roxo da Elev (#67298f) não colide com nenhuma semântica — nada se move", () => {
+    // O contraponto do controle acima, e a razão de a paleta Elev usar verde, âmbar, vermelho e
+    // azul firmes: o roxo da marca fica longe de todos, no claro e no escuro, sem rotação nenhuma.
+    const elev = derivarMarca("#67298f", REGUA);
+    expect(elev.motivos).toEqual([]);
+    expect(elev.claro.accent).toBe("#67298f");
   });
 
   it("devolve sinal — e não distorção — quando não há rotação que resolva", () => {
     // O laço de retorno do invariante 7 da doutrina Sistema Vivo: a peça diz o que muda
-    // no sistema quando ela não consegue resolver. Na Sage, `success` do tema escuro é
-    // literalmente o accent; girar até 60° ou colide com o accent ou colide com `info`.
-    const sage = derivarMarca("#506d48", REGUA);
+    // no sistema quando ela não consegue resolver. A paleta de fábrica deixou de ter um caso
+    // assim (a success do escuro era LITERALMENTE o accent da Sage; hoje é um verde vivo), então o
+    // controle é sintético: a régua com as semânticas do escuro como eram antes. Girar até 60° ou
+    // colide com o accent ou colide com `info`.
+    const reguaComSuccessColada: typeof REGUA = {
+      ...REGUA,
+      escuro: {
+        ...REGUA.escuro,
+        semanticas: [
+          { nome: "success", hex: "#82a077" },
+          { nome: "warning", hex: "#d09455" },
+          { nome: "error", hex: "#c87263" },
+          { nome: "info", hex: "#7da9bf" },
+        ],
+      },
+    };
+    const sage = derivarMarca("#506d48", reguaComSuccessColada);
     const sinais = sage.motivos.filter(
       (m) => m.codigo === "redundancia_nao_cromatica_necessaria",
     );
@@ -375,8 +393,9 @@ describe("reconciliação — quem se move são as NOSSAS semânticas", () => {
         }
       }
     }
-    // Guarda de vacuidade do run inteiro: 23 movimentos medidos nas 16 sementes.
-    expect(movimentosNoRun).toBe(23);
+    // Guarda de vacuidade do run inteiro: 18 movimentos medidos nas 16 sementes (eram 23 antes
+    // da paleta Elev, cujas semânticas mais vivas se separam melhor da maioria dos accents).
+    expect(movimentosNoRun).toBe(18);
   });
 });
 
@@ -407,12 +426,13 @@ describe("marca acromática — o accent do produto permanece", () => {
         separacaoDoNeutro(regua, tema.grauDoAccent, tema.accent),
       ).toBeGreaterThanOrEqual(PISO_DE_SEPARACAO_DO_NEUTRO);
     }
-    // Os números exatos, fixados: 0,0681 no claro (accent-600 × neutral-600) e 0,1994 no
-    // escuro (accent-400 × neutral-400). São eles que mostram por que o piso do briefing
+    // Os números exatos, fixados: 0,0681 no claro (accent-600 × neutral-600) e 0,2071 no
+    // escuro (accent-400 × neutral-400; era 0,1994 com os neutros marrons de antes da paleta
+    // Elev — os do escuro agora levam um fio de violeta). São eles que mostram por que o piso do briefing
     // (8, na convenção ×100 — ou seja 0,08 aqui) não podia ser aceito sem medir: ele
     // reprovaria o controle positivo do próprio produto no tema claro.
     expect(separacaoDoNeutro(REGUA.claro, marca.claro.grauDoAccent, marca.claro.accent)).toBeCloseTo(0.0681, 4);
-    expect(separacaoDoNeutro(REGUA.escuro, marca.escuro.grauDoAccent, marca.escuro.accent)).toBeCloseTo(0.1994, 4);
+    expect(separacaoDoNeutro(REGUA.escuro, marca.escuro.grauDoAccent, marca.escuro.accent)).toBeCloseTo(0.2071, 4);
     expect(separacaoDoNeutro(REGUA.claro, marca.claro.grauDoAccent, marca.claro.accent)).toBeLessThan(0.08);
 
     // Controle negativo: um accent cinza reprovaria as duas guardas. Sem esta linha, os

@@ -346,21 +346,21 @@ describe("controle positivo — o produto sem marca não pode se mexer", () => {
     expect(cor.derivada?.escuro.deslocamento).toBe(0);
 
     const p = pintadosDaSemente("#506d48");
-    // Claro: os dois números que `contraste.ts` documenta como medidos à mão.
-    expect(foco(p.claro, "--color-bg")).toBeCloseTo(3.79, 2);
-    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(3.6, 2);
-    // Escuro: 6,30 e 5,22 na rampa DERIVADA da semente; os literais do
-    // `globals.css` (`#82a077`) dão 6,31 e 5,23 — a rampa reproduz a Sage com
-    // Δ ≤ 2/255 por canal, e a diferença de 0,01 é esse arredondamento.
-    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(6.3, 2);
-    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(5.22, 2);
+    // Claro: com o off-white `#f4f2ef` da Elev como fundo (eram 3,79 e 3,6 sobre `#faf9f6`).
+    // Conferidos por fora do código, pela fórmula WCAG.
+    expect(foco(p.claro, "--color-bg")).toBeCloseTo(3.58, 2);
+    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(3.27, 2);
+    // Escuro: 6,76 e 5,60 na rampa DERIVADA da semente; os literais do
+    // `globals.css` (`#82a077`) dão 6,77 e 5,61 — a rampa reproduz a Sage com
+    // Δ ≤ 2/255 por canal, e a diferença de 0,01 é esse arredondamento. (Eram 6,30 e
+    // 5,22 sobre os neutros marrons de antes da paleta Elev.)
+    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(6.76, 2);
+    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(5.6, 2);
     // No escuro o anel NÃO fica apertado contra as bases: quem aperta é o
-    // `-soft` COMPOSTO. 4,58 aqui — é este o par que a prova em tela reportou
-    // como "4,58 no escuro", e não `foco × --color-bg` (6,30). Nos literais do
-    // `globals.css` o mesmo par dá 4,59, e `superficiesDoTema` documenta o trio
-    // 4,99 · 4,59 · 4,02.
-    expect(foco(p.escuro, "--color-accent-soft@--color-surface")).toBeCloseTo(4.58, 2);
-    expect(foco(p.escuro, "--color-accent-soft@--color-surface-elevated")).toBeCloseTo(4.03, 2);
+    // `-soft` COMPOSTO. 4,96 aqui, e não `foco × --color-bg` (6,76). Nos literais do
+    // `globals.css` o mesmo par dá 4,97 (eram 4,58 e 4,59 antes da paleta Elev).
+    expect(foco(p.escuro, "--color-accent-soft@--color-surface")).toBeCloseTo(4.96, 2);
+    expect(foco(p.escuro, "--color-accent-soft@--color-surface-elevated")).toBeCloseTo(4.34, 2);
   });
 
   it("sem marca configurada nada é injetado, e a tela fica como está", () => {
@@ -377,10 +377,12 @@ describe("a navy #0f172a — o defeito que a prova em tela achou", () => {
     // pintava `--color-accent-400: #545f77`, o stop CRU. O tema escuro anda -1,
     // então o anel agora pinta `#828a9d`, o stop 300 da rampa da marca.
     const p = pintadosDaSemente("#0f172a");
-    expect(foco(p.claro, "--color-bg")).toBeCloseTo(10.77, 2);
-    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(10.22, 2);
-    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(5.28, 2);
-    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(4.39, 2);
+    expect(foco(p.claro, "--color-bg")).toBeCloseTo(10.14, 2);
+    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(9.27, 2);
+    expect(foco(p.escuro, "--color-bg")).toBeCloseTo(5.67, 2);
+    expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(4.7, 2);
+    // (Números de 27/10/2026, com os fundos da paleta Elev. Com os de antes eram 10,77 · 10,22 ·
+    // 5,28 · 4,39. Todos seguem acima do piso 3,0 — que é o que o teste protege.)
     for (const superficie of ["--color-bg", "--color-surface-elevated"] as const) {
       expect(foco(p.escuro, superficie), superficie).toBeGreaterThanOrEqual(PISOS.componente);
     }

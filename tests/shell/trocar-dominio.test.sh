@@ -15,6 +15,11 @@
 set -uo pipefail
 
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../hostgator-setup-kit" && pwd)"
+# O namespace das imagens vem do `_common.sh` (IMG_NS) e nunca é escrito à mão: o guarda
+# `tests/unit/namespace-das-imagens.test.ts` reprova o literal fora dos arquivos permitidos.
+IMG_NS_DO_KIT="$(sed -n 's/^IMG_NS="\(.*\)"$/\1/p' "$KIT_DIR/_common.sh" | head -1)"
+[ -n "$IMG_NS_DO_KIT" ] || { echo "não consegui ler IMG_NS de _common.sh"; exit 1; }
+IMAGEM_DO_TESTE="${IMG_NS_DO_KIT}/elevcrm:1.18.0"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -102,7 +107,7 @@ INTERNAL_CRON_SECRET="$CRON_SEG"
 INTERNAL_SECRET="$INT_SEG"
 SUPABASE_SERVICE_ROLE_KEY="$SVC_SEG"
 OUTRA_URL="https://velho.hstgr.cloud/gancho"
-APP_IMAGE=ghcr.io/elevstudio-dev/elevcrm:1.18.0
+APP_IMAGE=$IMAGEM_DO_TESTE
 ENV
   chmod 600 "$PROJ/.env"
   cp -p "$PROJ/.env" "$ENV_ORIGINAL"
@@ -134,7 +139,7 @@ check "DOMAIN agora é o novo" grep -qxF 'DOMAIN="novo.elev.test"' "$PROJ/.env"
 check "NEXT_PUBLIC_APP_URL agora é o novo" grep -qxF 'NEXT_PUBLIC_APP_URL="https://novo.elev.test"' "$PROJ/.env"
 check "NEXT_PUBLIC_ADMIN_URL agora é o novo" grep -qxF 'NEXT_PUBLIC_ADMIN_URL="https://novo.elev.test"' "$PROJ/.env"
 check "o domínio velho não sobrou nas três chaves" bash -c '! grep -E "^(DOMAIN|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_ADMIN_URL)=.*velho" "$1"' _ "$PROJ/.env"
-check "as outras chaves ficam intactas (segredos e imagem)" bash -c 'grep -qxF "INTERNAL_CRON_SECRET=\"$2\"" "$1" && grep -qxF "SUPABASE_SERVICE_ROLE_KEY=\"$3\"" "$1" && grep -qxF "APP_IMAGE=ghcr.io/elevstudio-dev/elevcrm:1.18.0" "$1"' _ "$PROJ/.env" "$CRON_SEG" "$SVC_SEG"
+check "as outras chaves ficam intactas (segredos e imagem)" bash -c 'grep -qxF "INTERNAL_CRON_SECRET=\"$2\"" "$1" && grep -qxF "SUPABASE_SERVICE_ROLE_KEY=\"$3\"" "$1" && grep -qxF "APP_IMAGE=$4" "$1"' _ "$PROJ/.env" "$CRON_SEG" "$SVC_SEG" "$IMAGEM_DO_TESTE"
 check "o .env segue com permissão 600" test "$(stat -c %a "$PROJ/.env")" = "600"
 check "guarda cópia do .env anterior, igual ao original" bash -c 'c=$(ls "$1"/.env.bak-dominio-* 2>/dev/null | head -1); [ -n "$c" ] && cmp -s "$c" "$2"' _ "$PROJ" "$ENV_ORIGINAL"
 check "…com permissão 600 (tem segredo)" bash -c 'c=$(ls "$1"/.env.bak-dominio-* | head -1); [ "$(stat -c %a "$c")" = "600" ]' _ "$PROJ"

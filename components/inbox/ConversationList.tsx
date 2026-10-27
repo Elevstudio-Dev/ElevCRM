@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
+import { useLimiteDeResposta } from "@/hooks/inbox/useLimiteDeResposta";
 
 import { ConversationListItem } from "./ConversationListItem";
 import { EmptyInbox } from "@/components/empty";
@@ -57,6 +58,7 @@ export function ConversationList({
   // Uma leitura por lista, compartilhada por todas as linhas (react-query dedupa
   // com o cabeçalho, que faz a mesma pergunta).
   const automaticoDaOrg = useAutomaticoAtivo();
+  const limiteDeResposta = useLimiteDeResposta();
 
   const items = useMemo(() => {
     const all: ConversationWithContact[] = q.data?.pages.flatMap((p) => p.data) ?? [];
@@ -133,6 +135,7 @@ export function ConversationList({
             mostrarCanal={maisDeUmCanal}
             mostrarAtendente={mostrarAtendente}
             automaticoDaOrg={automaticoDaOrg.data}
+            limiteMinutos={limiteDeResposta}
           />
         ))}
         {q.hasNextPage && (

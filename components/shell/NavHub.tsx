@@ -47,6 +47,23 @@ function slug(texto: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/**
+ * O TOM de cada seção do hub: a jornada (montar → ensinar → acompanhar) ganha uma cor por etapa, e as
+ * telas de uma mesma etapa dividem o tom. Antes, todo ícone era o mesmo cinza e o olho tinha de LER 10
+ * cartões iguais para achar o que queria; com o tom, "o que eu monto" e "o que eu acompanho" se separam
+ * antes da leitura. É um segundo sinal — o título da seção e o nome de cada tela continuam ali.
+ *
+ * Os pares vêm dos tokens semânticos do tema (cada `-bg` + `-fg` já tem o contraste conferido pela
+ * régua do produto, nos dois temas). A ordem é a da jornada, então a cor de uma etapa não muda quando
+ * alguém adiciona uma tela.
+ */
+const TONS_DA_SECAO = [
+  "bg-accent-soft text-accent",
+  "bg-info-bg text-info-fg",
+  "bg-success-bg text-success-fg",
+  "bg-warning-bg text-warning-fg",
+] as const;
+
 export function NavHub({ group, isPlatformAdmin, role, title, subtitle, locale = IDIOMA_PADRAO }: NavHubProps) {
   const secoes = hubSections(group, isPlatformAdmin, role);
 
@@ -57,7 +74,7 @@ export function NavHub({ group, isPlatformAdmin, role, title, subtitle, locale =
         {subtitle && <p className="text-sm text-muted-foreground">{traduzir(subtitle, locale)}</p>}
       </header>
 
-      {secoes.map(({ section, items }) => (
+      {secoes.map(({ section, items }, indiceDaSecao) => (
         <section key={section} aria-labelledby={`hub-${group}-${slug(section)}`} className="space-y-3">
           <h2
             id={`hub-${group}-${slug(section)}`}
@@ -71,7 +88,12 @@ export function NavHub({ group, isPlatformAdmin, role, title, subtitle, locale =
               return (
                 <Link key={item.href} href={item.href} className="block">
                   <Card className="flex h-full gap-3 p-4 transition-colors hover:border-border-strong">
-                    <Icon size={20} weight="regular" aria-hidden className="mt-0.5 shrink-0 text-muted-foreground" />
+                    <span
+                      aria-hidden
+                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${TONS_DA_SECAO[indiceDaSecao % TONS_DA_SECAO.length]}`}
+                    >
+                      <Icon size={20} weight="regular" aria-hidden />
+                    </span>
                     <div>
                       <h3 className="text-sm font-semibold">{traduzir(item.label, locale)}</h3>
                       <p className="mt-1 text-xs text-muted-foreground">{traduzir(item.description, locale)}</p>

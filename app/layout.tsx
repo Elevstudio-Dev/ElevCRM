@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Atkinson_Hyperlegible, IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Source_Sans_3 } from "next/font/google";
 import { headers } from "next/headers";
 import { Toaster } from "sonner";
 import { coresDaBarraDoNavegador } from "@/lib/branding/barra-do-navegador";
@@ -25,11 +25,23 @@ import { Providers } from "./providers";
 import { PublicEnvScript } from "./public-env-script";
 import "./globals.css";
 
-const atkinson = Atkinson_Hyperlegible({
+/**
+ * A tipografia do site da Elev Studio (elevstudio.com.br): IBM Plex Sans para marca e títulos,
+ * Source Sans 3 para o texto corrido. É a mesma dupla, não uma parecida — o pedido foi "que nem a do
+ * site". O Source Sans 3 é uma fonte variável, então sem `weight` o `next/font` baixa UM arquivo que
+ * cobre todos os pesos; a Plex Sans não é variável, e por isso os pesos usados vêm listados.
+ */
+const sourceSans = Source_Sans_3({
   subsets: ["latin", "latin-ext"],
-  weight: ["400", "700"],
   display: "swap",
-  variable: "--font-atkinson",
+  variable: "--font-source-sans",
+});
+
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin", "latin-ext"],
+  weight: ["500", "600", "700"],
+  display: "swap",
+  variable: "--font-plex-sans",
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -104,7 +116,7 @@ export async function generateMetadata(): Promise<Metadata> {
     // `/icon` faz o pedido ir para `app/icon.tsx`, que desenha a marca da
     // instalação em runtime — ver o cabeçalho daquele arquivo para por que ele
     // não pode ser um arquivo estático em `public/`.
-    icons: { icon: "/icon" },
+    icons: { icon: "/icon", apple: "/apple-icon" },
   };
 }
 
@@ -278,7 +290,7 @@ export default function RootLayout({
       lang="pt-BR"
       data-theme="light"
       suppressHydrationWarning
-      className={`${atkinson.variable} ${plexMono.variable}`}
+      className={`${sourceSans.variable} ${plexSans.variable} ${plexMono.variable}`}
     >
       <head>
         {/* Primeiro de tudo: a cor da instalação, antes do CSS e do script de tema. */}

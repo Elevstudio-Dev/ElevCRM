@@ -17,6 +17,12 @@
 set -uo pipefail
 
 KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../hostgator-setup-kit" && pwd)"
+# O namespace das imagens vem do `_common.sh` (IMG_NS) e nunca é escrito à mão: o guarda
+# `tests/unit/namespace-das-imagens.test.ts` reprova o literal fora dos arquivos permitidos. O dublê do
+# ssh o lê da variável exportada (ele roda como outro processo).
+IMG_NS_DO_KIT="$(sed -n 's/^IMG_NS="\(.*\)"$/\1/p' "$KIT_DIR/_common.sh" | head -1)"
+[ -n "$IMG_NS_DO_KIT" ] || { echo "não consegui ler IMG_NS de _common.sh"; exit 1; }
+export IMG_NS_DO_KIT
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -53,8 +59,8 @@ case "$cmd" in
   # O caminho chega entre aspas simples (é assim que o script monta o comando remoto).
   "test -e "*"/.env'")        exit "${STUB_ENV_EXISTE_RC:-1}";;
   "tail -n +"*)               [ -n "${STUB_TAIL_FALHA:-}" ] && exit 255; cat "${STUB_TAIL_ARQ}"; exit 0;;
-  "sed -n "*APP_IMAGE*)       printf 'ghcr.io/elevstudio-dev/elevcrm:%s
-' "${STUB_APP_TAG:-1.18.0}"; exit 0;;
+  "sed -n "*APP_IMAGE*)       printf '%s/elevcrm:%s
+' "$IMG_NS_DO_KIT" "${STUB_APP_TAG:-1.18.0}"; exit 0;;
   *)                          exit "${STUB_SSH_RC:-0}";;
 esac
 STUB
