@@ -529,6 +529,50 @@ for _arq in install.sh update.sh backup.sh restore.sh marca-emails.sh supabase-p
   fi
 done
 
+echo "crontab: um servidor SEM crontab nenhum (o estado de toda VPS nova) não derruba a instalação"
+# `crontab -l` sai 1 quando a conta ainda não tem crontab. Com `set -o pipefail` (o install.sh
+# roda assim) esse 1 abortava o script DEPOIS de gravar a primeira automação: o CRM subia, e o
+# agente de atualização, o monitor e os backups nunca eram ligados — só um painel genérico de
+# "a instalação parou". A suíte não via: os cenários rodam `install.sh || true` e só olham o que
+# foi escrito ANTES. Aqui o teste exige chegar ao fim, com o dublê do crontab igual ao real.
+_ct="$(mktemp -d)"; mkdir -p "$_ct/bin"
+cat > "$_ct/bin/crontab" <<'STUBCT'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -l) [ -f "$CT_ARQ" ] || { echo "no crontab for $(id -un)" >&2; exit 1; }; cat "$CT_ARQ" ;;
+  -)  cat > "$CT_ARQ.novo" && mv "$CT_ARQ.novo" "$CT_ARQ" ;;
+esac
+STUBCT
+chmod +x "$_ct/bin/crontab"
+rodar_crons() {  # liga as 3 automações sem credencial externa, como o install.sh (errexit + pipefail)
+  env PATH="$_ct/bin:$PATH" CT_ARQ="$_ct/crontab.txt" PROJECT_DIR=/opt/x INTERNAL_SECRET=segredo \
+      NEXT_PUBLIC_APP_URL=https://crm.exemplo.test HEARTBEAT_URL=https://hc.exemplo.test/p \
+    bash -c 'set -euo pipefail; . ./_common.sh; psql_run() { return 0; }
+             setup_event_log_drain_cron >/dev/null; setup_update_agent_cron >/dev/null; setup_monitor_cron >/dev/null
+             echo CHEGOU_AO_FIM' 2>&1
+}
+if PATH="$_ct/bin:$PATH" CT_ARQ="$_ct/crontab.txt" crontab -l >/dev/null 2>&1; then
+  printf '  ✗ premissa: o dublê devia sair 1 sem crontab (como o real)\n'; fail=1
+else
+  printf '  ✓ premissa: sem crontab, `crontab -l` sai 1 (como o real)\n'
+fi
+_saida="$(rodar_crons)"
+case "$_saida" in
+  *CHEGOU_AO_FIM*) printf '  ✓ conta sem crontab: as três automações são ligadas e o script chega ao fim\n' ;;
+  *) printf '  ✗ conta sem crontab: o script MORREU no meio (as automações seguintes não foram ligadas)\n'; fail=1 ;;
+esac
+_n="$(grep -c '# elevcrm:/opt/x:' "$_ct/crontab.txt" 2>/dev/null || true)"
+if [ "${_n:-0}" = 3 ]; then printf '  ✓ as três linhas (drain, agente, monitor) estão no crontab\n'
+else printf '  ✗ esperava 3 linhas elevcrm no crontab, há %s\n' "${_n:-0}"; fail=1; fi
+_saida="$(rodar_crons)"
+_n="$(grep -c '# elevcrm:/opt/x:' "$_ct/crontab.txt" 2>/dev/null || true)"
+case "$_saida" in
+  *CHEGOU_AO_FIM*) [ "${_n:-0}" = 3 ] && printf '  ✓ rodar de novo não duplica nenhuma linha\n' \
+                   || { printf '  ✗ rodar de novo deixou %s linhas (esperava 3)\n' "${_n:-0}"; fail=1; } ;;
+  *) printf '  ✗ a segunda rodada morreu no meio\n'; fail=1 ;;
+esac
+rm -rf "$_ct"
+
 echo "resposta afirmativa (resposta_sim)"
 # O gate do DNS comparava a resposta com a string "s" EXATA: quem digitava "S"
 # ou "sim" — a resposta certa, com a tecla errada — era morto por um `die` que

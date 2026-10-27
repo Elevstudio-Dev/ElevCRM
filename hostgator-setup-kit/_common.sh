@@ -734,6 +734,13 @@ owner_id_by_email() {
 # SEM o drain de eventos — a automação inteira parada, em silêncio.
 cron_tag() { printf '# elevcrm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent|monitor|backup-fora|backup-midia)}"; }
 
+# O crontab ATUAL, ou nada. `crontab -l` sai 1 quando a conta ainda não tem crontab nenhum —
+# o estado de TODO servidor recém-criado — e com `set -o pipefail` esse 1 derruba o script
+# DEPOIS de a primeira automação ter sido gravada: o CRM ficava no ar e as demais (agente
+# de atualização, monitor, backups) não eram ligadas, sem erro à vista além do painel
+# genérico de "a instalação parou". Medido na primeira instalação real numa Hostinger.
+crontab_atual() { crontab -l 2>/dev/null || true; }
+
 # Puro (testável sem tocar no crontab real): lê o crontab atual em stdin e
 # imprime o novo. Tira as linhas DESTA instalação — pelo marcador, e também
 # pela `assinatura` para as linhas legadas, escritas antes de o marcador
@@ -762,7 +769,7 @@ setup_event_log_drain_cron() {
   if crontab -l 2>/dev/null | grep -qF -e "$url_drain"; then first_time=0; fi
 
   local cron_line="* * * * * curl -fsS -H \"Authorization: Bearer ${secret}\" \"${url_drain}\" >/dev/null 2>&1 ${marcador}"
-  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$url_drain" "$cron_line" ) | crontab -
+  ( crontab_atual | cron_merge "$marcador" "$url_drain" "$cron_line" ) | crontab -
   c_grn "✓ automações ativas (cron do event-log-drain, a cada minuto)"
 
   if [ "$first_time" = 1 ]; then
@@ -801,7 +808,7 @@ setup_update_agent_cron() {
   local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/agent.sh"
   local marcador; marcador="$(cron_tag agent)"
   local cron_line="*/5 * * * * ${legado} >/dev/null 2>&1 ${marcador}"
-  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  ( crontab_atual | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
   c_grn "✓ atualização pela tela ativa (agente a cada 5 minutos)"
 }
 
@@ -851,7 +858,7 @@ setup_backup_midia_cron() {
   local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/backup-midia.sh"
   local marcador; marcador="$(cron_tag backup-midia)"
   local cron_line="47 3 * * * ${legado} >> ${PROJECT_DIR}/.backup-midia.log 2>&1 ${marcador}"
-  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  ( crontab_atual | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
   c_grn "✓ backup dos arquivos de mídia ativo (todo dia às 03:47 UTC)"
 }
 
@@ -870,7 +877,7 @@ setup_monitor_cron() {
   local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/monitor.sh"
   local marcador; marcador="$(cron_tag monitor)"
   local cron_line="*/5 * * * * ${legado} >/dev/null 2>&1 ${marcador}"
-  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  ( crontab_atual | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
   c_grn "✓ monitor do servidor ativo (a cada 5 minutos)"
 }
 
@@ -889,7 +896,7 @@ setup_backup_fora_cron() {
   # 03:17 UTC (00:17 em Brasília): madrugada do cliente, e fora do :00 em que todo
   # mundo agenda e o provedor de armazenamento é mais disputado.
   local cron_line="17 3 * * * ${legado} >> ${PROJECT_DIR}/.backup-fora.log 2>&1 ${marcador}"
-  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  ( crontab_atual | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
   c_grn "✓ backup fora da VPS ativo (todo dia às 03:17 UTC)"
 }
 
