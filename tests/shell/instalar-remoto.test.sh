@@ -180,6 +180,13 @@ check "instalou OUTRA versão que a pedida: recusa em voz alta" test "$RC" -ne 0
 check "…avisa que o cadastro pode estar aberto" tem "$OUT" "ABERTO"
 
 echo "== entradas inválidas"
+DB_ORIGINAL="$DB"
+DB='postgresql://postgres.abcdefghij:[YOUR-PASSWORD]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres' roda "${BASE[@]}"
+check "connection string com [YOUR-PASSWORD]: recusa, sem conectar" bash -c '[ "$1" -ne 0 ] && [ ! -s "$2" ]' _ "$RC" "$ARGV_LOG"
+check "…e diz o que fazer" tem "$OUT" "YOUR-PASSWORD"
+DB='postgresql://postgres:senha@db.abcdefghij.supabase.co:5432/postgres' roda "${BASE[@]}"
+check "Direct connection (só IPv6): recusa, sem conectar" bash -c '[ "$1" -ne 0 ] && [ ! -s "$2" ]' _ "$RC" "$ARGV_LOG"
+DB="$DB_ORIGINAL"
 ENTRADA_SENHA='curta' ENTRADA_SENHA2='curta' roda "${BASE[@]}"
 check "senha curta (<12) é recusada, sem conectar" bash -c '[ "$1" -ne 0 ] && [ ! -s "$2" ]' _ "$RC" "$ARGV_LOG"
 ENTRADA_SENHA="$SENHA" ENTRADA_SENHA2='Outra-Senha-1234' roda "${BASE[@]}"

@@ -129,6 +129,13 @@ v_chave_supabase() {
 }
 v_db_url() {
   case "$1" in postgres://*|postgresql://*) ;; *) echo "A connection string começa com postgres:// (Settings › Database › Session pooler)"; return 1;; esac
+  # Os dois tropeços de sempre, pegos aqui para não custar uma instalação inteira:
+  case "$1" in
+    *"[YOUR-PASSWORD]"*|*"[SUA-SENHA]"*|*"[your-password]"*)
+      echo "A string veio com [YOUR-PASSWORD] no meio — troque pela senha do banco (a que você definiu ao criar o projeto)."; return 1;;
+    *db.*.supabase.co*)
+      echo "Essa é a 'Direct connection'. Use a do Session pooler (o host termina em .pooler.supabase.com)."; return 1;;
+  esac
   v_nao_vazio_sem_espaco "$1"
 }
 v_email() { case "$1" in *@*.*) ;; *) echo "E-mail inválido — precisa de @ e domínio."; return 1;; esac; v_nao_vazio_sem_espaco "$1"; }
