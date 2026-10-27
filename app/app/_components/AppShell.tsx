@@ -27,7 +27,7 @@ export function AppShell({ children }: AppShellProps) {
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
   return (
-    <div className="flex h-dvh w-full flex-col bg-background">
+    <div className="flex h-dvh min-h-0 w-full flex-col bg-background">
       <TopBar />
       {/*
         `p-6` é a moldura padrão de toda tela. A EXCEÇÃO é declarada pela
@@ -50,6 +50,14 @@ export function AppShell({ children }: AppShellProps) {
         (React Flow, que exige altura explícita) nasceu com 0px. Medido pela
         E2E: cinco specs de follow-up com `.react-flow` "hidden". A raiz
         definida devolve a cadeia; `min-h-0` deixa o `main` encolher e rolar.
+
+        `min-h-0` NA RAIZ também, por outro motivo: ela é item de uma coluna de
+        `100dvh` (`app/app/layout.tsx`) que divide a tela com os avisos de
+        impersonate e de conexão caída. `h-dvh` continua sendo a altura que ela
+        PEDE; o `min-h-0` é o que deixa o flex encolhê-la pelo tamanho do aviso
+        em vez de empurrar o fim da página para baixo da dobra. A altura
+        resultante segue DEFINIDA (item de flex num contêiner de altura definida),
+        então o `h-full` de quem está abaixo continua resolvendo.
       */}
       <main className="min-h-0 flex-1 overflow-auto p-6 [&:has([data-tela-cheia])]:p-0">{children}</main>
     </div>

@@ -294,6 +294,14 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   //
   // `dvh` em vez de `vh` porque no celular a `vh` ignora a barra do navegador — o
   // mesmo corte, só que pior e mudando conforme se rola a página.
+  //
+  // `max-h-full` é o que desconta o AVISO (impersonate, conexão caída), que divide
+  // os `100dvh` com a casca (`app/app/layout.tsx`): a casca encolhe pela altura
+  // dele, e a conta acima não sabe que ele existe — sem o teto o composer nascia
+  // 47px abaixo do fim do `main`. O teto é a altura que SOBROU ao `main`; sem
+  // aviso ele é igual à conta e não muda nada: a conta da barra segue valendo, e
+  // o teto só entra em ação quando há um aviso em cima. Medido (1920x990, aviso de
+  // 47px): sem o teto a grade terminava em 1037 e o `main`, em 990.
 
   // TRÊS COLUNAS QUE CABEM — medido, não estimado.
   //
@@ -312,7 +320,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     <OpenConversationProvider conversationId={selectedId}>
     <div
       data-tela-cheia=""
-      className="grid h-[calc(100dvh-3.5rem)] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_320px] 2xl:grid-cols-[340px_1fr_340px]"
+      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_320px] 2xl:grid-cols-[340px_1fr_340px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,

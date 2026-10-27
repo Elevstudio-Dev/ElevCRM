@@ -59,7 +59,7 @@ export function ImpersonateBanner({ impersonating }: Props) {
     <div
       role="alert"
       aria-live="polite"
-      className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-amber-300 bg-amber-100/95 px-4 py-2 text-sm text-amber-950 backdrop-blur dark:border-amber-700/60 dark:bg-amber-950/70 dark:text-amber-50"
+      className="sticky top-0 z-50 flex shrink-0 items-center justify-between gap-4 border-b border-amber-300 bg-amber-100/95 px-4 py-2 text-sm text-amber-950 backdrop-blur dark:border-amber-700/60 dark:bg-amber-950/70 dark:text-amber-50"
     >
       <div className="flex items-center gap-2">
         <span aria-hidden>🛡️</span>
