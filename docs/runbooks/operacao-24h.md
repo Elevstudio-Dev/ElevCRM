@@ -247,6 +247,39 @@ Uma instalação serve todos: uma atualização ruim derruba todos. Por isso:
    faz backup antes, confere a saúde depois e **volta a imagem anterior** se o app novo não sobe.
 3. Confirme: `GET /api/v1/health` com a versão nova e `healthy`; o domínio responde 307 (não 404).
 
+### 6.2 Trocar o domínio de uma instalação que já está no ar
+
+Do endereço provisório da hospedagem para o domínio da empresa, por exemplo. **Antes de rodar
+qualquer coisa**, no painel do DNS crie o registro **A** do nome novo apontando para o IP da VPS
+(e confira que o nome **não tem AAAA** — o Let's Encrypt tentaria o IPv6 primeiro). Depois, a
+partir da pasta do projeto na VPS:
+
+```bash
+bash hostgator-setup-kit/trocar-dominio.sh --dominio crm.suaempresa.com.br --ensaio   # só confere
+bash hostgator-setup-kit/trocar-dominio.sh --dominio crm.suaempresa.com.br
+```
+
+O script confere o DNS **antes** de escrever qualquer coisa, guarda uma cópia do `.env` (600),
+troca `DOMAIN` e as duas URLs públicas, recria os contêineres, espera o HTTPS novo responder 200
+e a saúde do app, e reescreve o cron que chama o app pelo endereço. **Se o HTTPS novo não subir
+ou o app não ficar saudável, ele volta ao `.env` anterior sozinho** e o site segue no endereço de
+antes.
+
+Rode-o a partir de um **arquivo** — nunca por `ssh … bash -s < trocar-dominio.sh`: o
+`docker compose exec` que confere a saúde consome o resto do script lido da entrada padrão, e a
+troca pararia no meio (o script recusa esse modo). Para uma VPS cuja versão ainda não traz o
+arquivo: `scp` para fora do kit e `cd /opt/elevcrm && bash /root/trocar-dominio.sh …`.
+
+O que o script **não** alcança, e você faz depois:
+
+- **Supabase → Authentication → URL Configuration:** Site URL = `https://<domínio novo>` e o
+  `/auth/confirm` do novo nos Redirect URLs. Até lá, os e-mails de recuperação de senha e de
+  confirmação de conta mandam o link para o endereço antigo.
+- O endereço antigo **deixa de responder** (o Caddy atende um nome só) e quem estava logado entra
+  de novo — o cookie é do endereço antigo. Com clientes, avise antes.
+- Integrações que gravaram o endereço (login com Google, webhook da Meta) precisam do novo.
+- Apague a cópia `.env.bak-dominio-*` quando confirmar que está tudo certo.
+
 ## 7. Quando o alerta toca
 
 Comece por: `bash hostgator-setup-kit/monitor.sh` (o que está errado) e
