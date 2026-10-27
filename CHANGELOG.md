@@ -8,6 +8,75 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.19.0] — 2026-10-27
+
+### Adicionado
+
+- **Trocar o domínio de uma instalação que já está no ar, com volta automática se algo falhar** O kit ganhou o `trocar-dominio.sh`, para quem instalou no endereço provisório da hospedagem
+  e quer passar para o domínio da empresa sem reinstalar.
+
+  Ele confere **antes de escrever qualquer coisa** que o nome novo já aponta para a VPS (e que não
+  tem um registro IPv6 que faria o certificado falhar). Depois guarda uma cópia do `.env`, troca o
+  `DOMAIN` e as duas URLs públicas, recria os contêineres e espera o HTTPS novo responder e o app
+  ficar saudável.
+  **Se qualquer passo falhar, o `.env` volta ao de antes e o site segue no endereço anterior.**
+  A mensagem diz isso, em vez de deixar o site caído.
+
+  Também reescreve o cron que chama o app pelo endereço, que levaria o domínio velho para sempre.
+  `--ensaio` só confere e não altera nada. O passo a passo, e o que fica fora da VPS (o Site URL do
+  Supabase), está em `docs/runbooks/operacao-24h.md` §6.2.
+
+### Alterado
+
+- **O sistema ganhou a cara da Elev Studio — ícone, tipografia do site e cores que dizem o que significam** Quem abre o Elev CRM agora vê de quem ele é.
+
+  A **tela de entrada** tem um painel de marca ao lado do formulário (o roxo, a grade fina e o ícone da
+  Elev Studio, como nos posts da marca), e no celular o selo da marca fica acima do campo de e-mail.
+  Na **barra superior** o ícone da Elev fica sempre ao lado do nome da organização, e o mesmo desenho
+  vira o ícone da aba. A tipografia passa a ser a do site da Elev: IBM Plex Sans nos títulos e na marca,
+  Source Sans 3 no texto corrido.
+
+  As cores passaram a significar alguma coisa:
+
+  - **Sucesso, atenção, erro e informação** ficaram mais vivas (verde, âmbar, vermelho e azul firmes),
+    mantendo o mesmo contraste de antes — a razão de cada par segue acima do piso do design system.
+  - **O tema escuro** troca o marrom-esverdeado pelo preto da Elev com um fio de violeta; o claro usa o
+    off-white do site, para o cartão branco aparecer.
+  - **Cada contato tem a sua cor** no rosto (quando não há foto), sempre a mesma, em todas as telas.
+  - **Na fila do Inbox**, "Aguardando há …" ganha um relógio e muda de cor conforme o tempo — a mesma
+    regra de faixas que o cabeçalho da conversa já usava, com o limite da organização.
+
+  A cor de ação (roxo) vem da configuração da marca da instalação, como sempre: nada disso muda quem
+  instala com outra cor. O que muda é o que vem de fábrica.
+
+### Corrigido
+
+- **A instalação num servidor novo terminava pela metade — dois defeitos do instalador, achados na primeira instalação real** Dois defeitos faziam o `install.sh` parar numa VPS recém-criada (Ubuntu 24.04), cada um
+  num ponto diferente, e os dois aparecem só num servidor novo.
+
+  **O primeiro administrador não era criado.** O instalador aplicava o schema e morria
+  com `"language" is not a known variable`. O trecho que cria o dono monta o SQL com um
+  bloco de texto sem aspas, e o bash executa qualquer coisa entre crases dentro dele,
+  até em comentário. Um comentário escrevia `locale` entre crases: o bash rodou o comando
+  `locale` e colou a saída dele (`LANG=…`, `LANGUAGE=…`) no meio do SQL. A suíte do kit
+  ganhou um guarda que reprova crase sem escape em qualquer bloco de texto sem aspas dos
+  scripts de instalação.
+
+  **As automações paravam na primeira.** Numa conta que ainda não tem crontab nenhum (todo
+  servidor novo), o `crontab -l` sai com erro, e isso derrubava o instalador logo depois de
+  gravar a primeira linha: o CRM subia, mas o agente de atualização, o monitor e os backups
+  nunca eram ligados — só aparecia o painel "a instalação parou". A suíte não via porque
+  os cenários só olhavam o que era escrito antes. Agora há um teste que exige chegar ao fim
+  numa conta sem crontab, e que rodar de novo não duplica nenhuma linha.
+
+  Quem já tentou instalar e parou num desses pontos: atualize o kit e rode o `install.sh`
+  de novo. Ele é idempotente e reaproveita o `.env` (o schema já aplicado não é refeito).
+
+  Também no `instalar-remoto.sh`: o campo de chave não mostra o que você cola, e colar a
+  mesma chave várias vezes por engano a mandava errada (o Supabase respondia 401 como se
+  ela não existisse). Agora ele mostra quantos caracteres recebeu e recusa um valor que é
+  o mesmo trecho repetido.
+
 ## [1.18.0] — 2026-10-27
 
 ### Adicionado
@@ -2717,7 +2786,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.18.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.19.0...HEAD
+[1.19.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.15.0...v1.16.0
