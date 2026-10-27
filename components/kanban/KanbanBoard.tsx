@@ -233,6 +233,10 @@ export function KanbanBoard({
     return null;
   }
 
+  // Ganho e perda ficam fora da conta: a cor das abertas é uma progressão (do claro ao escuro) e as
+  // duas terminais têm cor própria (verde e vermelho). Ver `lib/kanban/cor-da-etapa`.
+  const etapasAbertas = data.stages.filter((s) => !s.is_won && !s.is_lost);
+
   if (data.stages.length === 0) {
     return (
       <Card className="m-4 p-6 text-sm text-text-muted">
@@ -248,6 +252,8 @@ export function KanbanBoard({
           <StageColumn
             key={stage.id}
             stage={stage}
+            posicaoEntreAbertas={etapasAbertas.indexOf(stage)}
+            totalAbertas={etapasAbertas.length}
             leads={grouped.get(stage.id) ?? []}
             pipelineId={pipelineId}
             ownerNames={ownerNames}

@@ -1,4 +1,8 @@
+import { PainelDaMarca } from "@/components/branding/PainelDaMarca";
+import { SeloElev } from "@/components/branding/IconeElev";
 import { marcaDaSaida } from "@/lib/branding/saida";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { createClient } from "@/lib/supabase/server";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
@@ -41,11 +45,27 @@ export default async function PublicLayout({ children }: { children: React.React
     data: { user },
   } = await supabase.auth.getUser();
   const locale = (user?.user_metadata?.locale as string | undefined) ?? null;
+  const t = (texto: string) => traduzir(texto, normalizarIdioma(locale));
 
   return (
     <IdiomaProvider locale={locale}>
-      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      {/* Duas colunas em telas largas: o painel da marca (Elev Studio) e o formulário. No celular, só
+          o formulário, com o selo da marca em cima. */}
+      <div className="grid min-h-screen lg:grid-cols-2">
+        <PainelDaMarca
+          produto={marca.nome}
+          titulo={t("Todo o seu atendimento")}
+          destaque={t("em um só lugar.")}
+          texto={t(
+            "Conversas, funil e agenda juntos. A IA responde o que dá e passa para o time o que importa, com tudo registrado.",
+          )}
+          assinatura={t("Um sistema da Elev Studio")}
+        />
+        <div className="flex items-center justify-center bg-background p-6">
         <div className="w-full max-w-sm space-y-6">
+          <div className="flex justify-center lg:hidden">
+            <SeloElev className="h-12 w-12" />
+          </div>
           {marca.logoUrl && (
             <div className="flex justify-center">
               {/*
@@ -74,6 +94,7 @@ export default async function PublicLayout({ children }: { children: React.React
             </div>
           )}
           {children}
+        </div>
         </div>
       </div>
     </IdiomaProvider>

@@ -1061,6 +1061,8 @@ export const DICIONARIO: Traducoes = {
   "Nome desta saída (opcional)": { es: "Nombre de esta salida (opcional)" },
   Operador: { es: "Operador" },
   "Etapa do funil": { es: "Etapa del embudo" },
+  "Etapa de ganho": { es: "Etapa ganada" },
+  "Etapa de perda": { es: "Etapa perdida" },
   "Etiqueta do contato": { es: "Etiqueta del contacto" },
   "Passos já dados no fluxo": { es: "Pasos ya dados en el flujo" },
   "Desfecho do passo anterior": { es: "Desenlace del paso anterior" },
@@ -5438,6 +5440,12 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Auth: login, cadastro, recuperação de senha, MFA, códigos de recuperação ───
   "Entrar": { es: "Entrar" },
+  "Todo o seu atendimento": { es: "Toda tu atención" },
+  "em um só lugar.": { es: "en un solo lugar." },
+  "Conversas, funil e agenda juntos. A IA responde o que dá e passa para o time o que importa, com tudo registrado.": {
+    es: "Conversaciones, embudo y agenda juntos. La IA responde lo que puede y pasa al equipo lo que importa, con todo registrado.",
+  },
+  "Um sistema da Elev Studio": { es: "Un sistema de Elev Studio" },
   "Criar conta": { es: "Crear cuenta" },
   "Senha": { es: "Contraseña" },
   "Confirmar senha": { es: "Confirmar contraseña" },

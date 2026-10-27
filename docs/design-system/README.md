@@ -4,6 +4,12 @@
 > **Status:** Ativa
 > **Direção:** Soft-tech / calmo, anti-genérico
 > **Stack visual:** Sage + Atkinson Hyperlegible + IBM Plex Mono + Aerada + Phosphor (duotone)
+>
+> ⚠️ **Nesta instalação (Elev Studio), por cima do que está descrito aqui:** a tipografia é IBM Plex Sans
+> (títulos) + Source Sans 3 (corpo), os neutros do escuro levam um fio de violeta, o claro usa o off-white
+> `#f4f2ef`, as semânticas são mais vivas e a cor de ação é o roxo `#67298f` (por configuração). Ver
+> [`docs/brand/elev-studio.md`](../brand/elev-studio.md). Os documentos abaixo seguem descrevendo a Sage do
+> upstream, que é o padrão de quem não configura marca.
 
 Esta pasta é a **fonte canônica** da linguagem visual do Elev CRM. Toda decisão de UI deve consultar estes documentos antes de implementação. Quando houver conflito entre código e doc, **a doc vence** — ajuste o código.
 

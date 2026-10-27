@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import { buildCardInput } from "@/lib/kanban/card-state";
+import { corDaEtapa } from "@/lib/kanban/cor-da-etapa";
+import { CheckCircle, X } from "@/lib/ui/icons";
 import { KanbanCard } from "./KanbanCard";
 
 interface StageColumnProps {
@@ -26,6 +28,10 @@ interface StageColumnProps {
   onSelect?: (leadId: string, additive: boolean) => void;
   /** Abrir o dossiê — atravessa o board até o card, como `pulses`. */
   onOpen?: (leadId: string) => void;
+  /** Posição desta etapa entre as ABERTAS (ganho e perda ficam de fora). Define o tom da coluna. */
+  posicaoEntreAbertas?: number;
+  /** Quantas etapas abertas o funil tem. */
+  totalAbertas?: number;
 }
 
 function formatBRL(cents: number): string {
@@ -52,27 +58,40 @@ export function StageColumn({
   pulses,
   onSelect,
   onOpen,
+  posicaoEntreAbertas = 0,
+  totalAbertas = 1,
 }: StageColumnProps) {
   const t = useT();
   const totalCents = leads.reduce((sum, l) => sum + (l.value_cents ?? 0), 0);
-  const accentStyle: CSSProperties | undefined = stage.color
-    ? { backgroundColor: stage.color }
-    : undefined;
+  // A cor da coluna: a que o operador escolheu, ou a do papel da etapa (ganho/perda/progressão).
+  const cor = corDaEtapa(stage, posicaoEntreAbertas, totalAbertas);
+  const accentStyle: CSSProperties = { backgroundColor: cor };
+  // A faixa de cima é o que faz a coluna ler de longe; o ponto ao lado do nome fica para quem está perto.
+  const faixaStyle: CSSProperties = { borderTopColor: cor, borderTopWidth: 3 };
 
   return (
-    <div className="flex w-80 shrink-0 flex-col rounded-lg border border-border bg-surface-muted/40">
+    <div
+      className="flex w-80 shrink-0 flex-col rounded-lg border border-border bg-surface-muted/40"
+      style={faixaStyle}
+    >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-        <span
-          className={cn(
-            "h-2 w-2 rounded-full",
-            !stage.color && "bg-text-muted/40",
-          )}
-          style={accentStyle}
-          aria-hidden
-        />
+        <span className="h-2 w-2 rounded-full" style={accentStyle} aria-hidden />
         <h2 className="flex-1 truncate text-sm font-semibold text-text">
           {stage.name}
         </h2>
+        {/* A cor não vai sozinha: etapa de ganho e de perda também têm ícone e texto para quem não
+            distingue verde de vermelho (ou usa leitor de tela). */}
+        {stage.is_won ? (
+          <span className="inline-flex items-center text-success-fg" title={t("Etapa de ganho")}>
+            <CheckCircle size={14} weight="fill" aria-hidden />
+            <span className="sr-only">{t("Etapa de ganho")}</span>
+          </span>
+        ) : stage.is_lost ? (
+          <span className="inline-flex items-center text-error-fg" title={t("Etapa de perda")}>
+            <X size={14} weight="bold" aria-hidden />
+            <span className="sr-only">{t("Etapa de perda")}</span>
+          </span>
+        ) : null}
         <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-text-muted">
           {leads.length}
         </span>

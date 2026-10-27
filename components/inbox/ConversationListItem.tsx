@@ -5,12 +5,13 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { Phone, Robot } from "@/lib/ui/icons";
+import { Clock, Phone, Robot } from "@/lib/ui/icons";
 import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
 import { comandoDaConversa } from "@/lib/inbox/comando-da-conversa";
+import { type Faixa, PISO_MINUTOS, tempoSemResposta } from "@/lib/inbox/tempo-sem-resposta";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -47,7 +48,25 @@ interface Props {
    * afirme nada".
    */
   automaticoDaOrg?: boolean;
+  /**
+   * Em quantos minutos a primeira resposta vira alarme nesta organização. Vem por PROP, pela mesma
+   * razão do `automaticoDaOrg`: uma leitura de configuração por linha seria 50 assinaturas para
+   * responder a MESMA pergunta org-wide. Ausente = o piso.
+   */
+  limiteMinutos?: number;
 }
+
+/**
+ * A cor de "há quanto tempo esse cliente espera", pela MESMA regra de faixas do cabeçalho da conversa
+ * (`lib/inbox/tempo-sem-resposta`): a lista e o cabeçalho têm de dizer a mesma coisa sobre a mesma
+ * conversa. Verde-neutro até um terço do limite, âmbar até o limite, vermelho depois. A cor nunca vai
+ * sozinha: o relógio e o texto "Aguardando há …" continuam ao lado.
+ */
+const CLASSE_DA_ESPERA: Record<Faixa, string> = {
+  ok: "text-muted-foreground",
+  atencao: "font-medium text-warning-fg",
+  estourado: "font-medium text-error-fg",
+};
 
 /**
  * A COR SAI DE QUEM MANDA, NÃO DO STATUS.
@@ -101,6 +120,7 @@ export function ConversationListItem({
   mostrarCanal,
   mostrarAtendente,
   automaticoDaOrg,
+  limiteMinutos,
 }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
@@ -135,6 +155,18 @@ export function ConversationListItem({
     automaticoDaOrg,
   });
   const isAi = comando.quem === "automatico";
+  // A espera só é contada na visão Fila (é onde "Aguardando há …" aparece), mas a regra é a mesma
+  // do cabeçalho: nula quando a conversa está encerrada ou quando o atendente já respondeu.
+  const espera =
+    queuePosition === undefined
+      ? null
+      : tempoSemResposta({
+          lastInboundAt: conversation.last_inbound_at ?? null,
+          lastOutboundAt: conversation.last_outbound_at ?? null,
+          status: conversation.status,
+          agora: new Date(),
+          limiteMinutos: limiteMinutos ?? PISO_MINUTOS,
+        });
   const dot = COR_DO_COMANDO[comando.quem] ?? COR_DO_COMANDO.ninguem;
 
   // O número DA EMPRESA por onde esta conversa chegou — não o do cliente. Com
@@ -206,12 +238,17 @@ export function ConversationListItem({
         <div className="mt-1 flex flex-wrap items-center gap-1">
           {queuePosition !== undefined && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+              data-faixa={espera?.faixa}
+              className={cn(
+                "inline-flex items-center gap-1 text-[10px]",
+                espera ? CLASSE_DA_ESPERA[espera.faixa] : "text-muted-foreground",
+              )}
               aria-label={`${t("Posição")} ${queuePosition} ${t("na fila")}`}
             >
               <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1 font-medium tabular-nums text-primary">
                 {queuePosition}º
               </span>
+              {espera ? <Clock size={10} weight="bold" aria-hidden /> : null}
               {waitingLabel(conversation, t, localeDaData)}
             </span>
           )}

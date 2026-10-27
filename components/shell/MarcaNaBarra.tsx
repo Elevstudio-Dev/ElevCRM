@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 
+import { SeloElev } from "@/components/branding/IconeElev";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 
@@ -44,9 +45,12 @@ export function MarcaNaBarra() {
     <Link
       href="/app/inbox"
       data-marca-da-barra=""
-      className="flex h-9 min-w-0 items-center rounded-md px-1.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex h-9 min-w-0 items-center gap-2 rounded-md px-1.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={nome}
     >
+      {/* O selo da Elev Studio fica SEMPRE: mesmo com o nome ou o logo da organização ao lado, quem
+          abre o sistema vê de quem ele é. Decorativo — o nome ao lado já o rotula. */}
+      <SeloElev />
       {logo ? (
         // <img> em vez de next/image de propósito: a URL vem de quem hospeda
         // (banco ou .env), e next/image exige allowlist de domínios fechada em
@@ -59,7 +63,7 @@ export function MarcaNaBarra() {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logo} alt={nome} className="h-7 w-auto max-w-[6rem] object-contain md:max-w-[10rem]" />
       ) : (
-        <span className="max-w-[6rem] truncate font-semibold tracking-tight md:max-w-[12rem]">{nome}</span>
+        <span className="max-w-[6rem] truncate font-heading font-semibold tracking-tight md:max-w-[12rem]">{nome}</span>
       )}
     </Link>
   );
