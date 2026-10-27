@@ -484,6 +484,51 @@ else
   fi
 fi
 
+echo "heredoc não citado: nenhuma crase sem escape (o bash EXECUTA o que está entre elas)"
+# Num heredoc SEM aspas (<<SQL, não <<'SQL') o bash expande crase e $( ) mesmo dentro de
+# COMENTÁRIO. Um comentário SQL com `locale` entre crases rodou o comando `locale` e colou a
+# saída dele (LANG=…, LANGUAGE=…) no meio do PL/pgSQL: "language is not a known variable",
+# e toda instalação num Ubuntu com o comando `locale` morria ao criar o primeiro administrador
+# — depois de aplicar o schema. O comentário de cima já avisava disso para OUTRO caso.
+crases_em_heredoc() {  # crases_em_heredoc <arquivo> → "linha: texto" de cada crase sem escape
+  awk '
+    /<<-?[A-Za-z_]+/ && !/<<-?[\x27"]/ { match($0, /<<-?[A-Za-z_]+/); tag=substr($0, RSTART+2, RLENGTH-2); sub(/^-/, "", tag); dentro=1; next }
+    dentro && $0 == tag { dentro=0; next }
+    dentro && /(^|[^\\])`/ { printf "%d: %s\n", NR, substr($0, 1, 100) }
+  ' "$1"
+}
+# Controle: o detector TEM de enxergar o defeito, senão "nenhuma crase" seria um verde vazio.
+_amostra="$(mktemp)"
+printf '%s\n' 'psql <<SQL' '  -- `locale` aqui' 'SQL' > "$_amostra"
+if [ -z "$(crases_em_heredoc "$_amostra")" ]; then
+  printf '  ✗ o detector NÃO enxergou a crase de uma amostra com o defeito — o guarda está cego\n'; fail=1
+else
+  printf '  ✓ o detector enxerga a crase sem escape (controle)\n'
+fi
+printf '%s\n' 'cat <<SQL' '  \`escapada\` e `aqui não`' 'SQL' > "$_amostra"
+if [ "$(crases_em_heredoc "$_amostra" | wc -l | tr -d ' ')" != "1" ]; then
+  printf '  ✗ o detector confundiu crase ESCAPADA com crase solta\n'; fail=1
+else
+  printf '  ✓ crase escapada passa, a solta na mesma linha não (controle)\n'
+fi
+printf '%s\n' "cat <<'SQL'" '  `citado: o bash não expande` ' 'SQL' > "$_amostra"
+if [ -n "$(crases_em_heredoc "$_amostra")" ]; then
+  printf '  ✗ o detector acusou um heredoc CITADO, onde crase é só texto\n'; fail=1
+else
+  printf '  ✓ heredoc citado é ignorado (controle)\n'
+fi
+rm -f "$_amostra"
+for _arq in install.sh update.sh backup.sh restore.sh marca-emails.sh supabase-provision.sh; do
+  [ -f "$_arq" ] || continue
+  _achou="$(crases_em_heredoc "$_arq")"
+  if [ -n "$_achou" ]; then
+    printf '  ✗ %s tem crase sem escape em heredoc não citado (o bash a EXECUTA):\n%s\n' "$_arq" "$(printf '%s\n' "$_achou" | sed 's/^/       /')"
+    fail=1
+  else
+    printf '  ✓ %s: nenhuma crase solta em heredoc não citado\n' "$_arq"
+  fi
+done
+
 echo "resposta afirmativa (resposta_sim)"
 # O gate do DNS comparava a resposta com a string "s" EXATA: quem digitava "S"
 # ou "sim" — a resposta certa, com a tecla errada — era morto por um `die` que

@@ -179,6 +179,22 @@ STUB_APP_TAG=1.17.0 roda "${BASE[@]}" --versao v1.18.0
 check "instalou OUTRA versão que a pedida: recusa em voz alta" test "$RC" -ne 0
 check "…avisa que o cadastro pode estar aberto" tem "$OUT" "ABERTO"
 
+echo "== campo sem eco: dá sinal de que recebeu, e recusa a colagem repetida"
+roda "${BASE[@]}" --ensaio
+check "mostra o TAMANHO recebido de cada segredo" tem "$OUT" "recebido: ${#ANON} caracteres"
+check "…e só o tamanho: nenhum segredo na saída" nenhum_segredo_em "$OUT"
+ANON="$ANON$ANON$ANON$ANON" roda "${BASE[@]}"
+check "a MESMA chave colada 4 vezes: recusa, sem conectar" bash -c '[ "$1" -ne 0 ] && [ ! -s "$2" ]' _ "$RC" "$ARGV_LOG"
+check "…diz quantas vezes e quanto o certo teria" bash -c '[[ "$1" == *"4 vezes"* && "$1" == *"o certo teria ${2}"* ]]' _ "$OUT" "${#ANON}"
+check "…sem imprimir a chave" nenhum_segredo_em "$OUT"
+IAKEY_ORIGINAL="$IAKEY"
+IAKEY="$IAKEY$IAKEY" roda "${BASE[@]}"
+check "a chave da IA colada 2 vezes também é recusada" bash -c '[ "$1" -ne 0 ] && [ ! -s "$2" ]' _ "$RC" "$ARGV_LOG"
+IAKEY="$IAKEY_ORIGINAL"
+SENHA_LONGA='abcdefghijkl-mnopqrstuv-0123'
+ENTRADA_SENHA="$SENHA_LONGA" ENTRADA_SENHA2="$SENHA_LONGA" roda "${BASE[@]}" --ensaio
+check "uma senha comum, sem repetição, NÃO é confundida com colagem repetida" test "$RC" -eq 0
+
 echo "== entradas inválidas"
 DB_ORIGINAL="$DB"
 DB='postgresql://postgres.abcdefghij:[YOUR-PASSWORD]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres' roda "${BASE[@]}"

@@ -87,6 +87,26 @@ SSH=(ssh -i "$CHAVE" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChec
 # Lê da entrada padrão: no terminal pede sem eco (-s); num teste, vem do pipe.
 if [ -t 0 ]; then LER_S=(-s); else LER_S=(); fi
 declare -A V=()
+
+# O MESMO pedaço colado várias vezes seguidas. Campo sem eco não dá sinal nenhum de que a
+# colagem "pegou", e quem cola de novo acaba mandando a chave 4x (aconteceu: uma chave de 46
+# caracteres chegou com 184, e o Supabase respondeu 401 como se ela estivesse errada).
+# Acha o MENOR pedaço que, repetido, reproduz o valor; só olha pedaços de 8+ caracteres.
+valor_repetido() {
+  local v="$1" n=${#1} k p parte rep i
+  for k in 8 7 6 5 4 3 2; do
+    [ $((n % k)) -eq 0 ] || continue
+    p=$((n / k)); [ "$p" -ge 8 ] || continue
+    parte="${v:0:p}"; rep=""
+    for ((i = 0; i < k; i++)); do rep="$rep$parte"; done
+    if [ "$rep" = "$v" ]; then
+      echo "Isto parece o MESMO valor colado $k vezes seguidas ($n caracteres; o certo teria $p). O campo não mostra o que você cola: cole UMA vez só e tecle Enter."
+      return 0
+    fi
+  done
+  return 0
+}
+
 ler() { # ler <VAR> <pergunta> [secreto|aberto] [opcional]
   local var="$1" pergunta="$2" modo="${3:-aberto}" opcional="${4:-}" val=""
   while true; do
@@ -102,6 +122,16 @@ ler() { # ler <VAR> <pergunta> [secreto|aberto] [opcional]
       [ -n "$opcional" ] && { V[$var]=""; return 0; }
       if [ ! -t 0 ]; then die "Faltou o valor de: $pergunta"; fi
       c_ylw "  Esse campo é obrigatório."; continue
+    fi
+    if [ "$modo" = secreto ]; then
+      local repetido; repetido="$(valor_repetido "$val")"
+      if [ -n "$repetido" ]; then
+        c_red "  $repetido"
+        [ -t 0 ] || die "Valor colado repetido em: $pergunta"
+        continue
+      fi
+      # Só o TAMANHO, nunca o valor: é o único sinal de que a colagem pegou.
+      c_dim "  ✓ recebido: ${#val} caracteres"
     fi
     V[$var]="$val"; return 0
   done
