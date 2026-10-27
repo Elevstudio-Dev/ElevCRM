@@ -71,10 +71,11 @@ export function StageColumn({
 
   return (
     <div
-      className="flex w-80 shrink-0 flex-col rounded-lg border border-border bg-surface-muted/40"
+      data-testid="coluna-do-funil"
+      className="flex min-h-0 w-80 shrink-0 flex-col rounded-lg border border-border bg-surface-muted/40"
       style={faixaStyle}
     >
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
         <span className="h-2 w-2 rounded-full" style={accentStyle} aria-hidden />
         <h2 className="flex-1 truncate text-sm font-semibold text-text">
           {stage.name}
@@ -98,7 +99,7 @@ export function StageColumn({
       </div>
 
       {totalCents > 0 && (
-        <div className="border-b border-border px-3 py-1.5 text-[11px] tabular-nums text-text-muted">
+        <div className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] tabular-nums text-text-muted">
           {formatBRL(totalCents)}
         </div>
       )}
@@ -108,8 +109,17 @@ export function StageColumn({
           <div
             ref={provided.innerRef}
             {...provided.droppableProps}
+            data-testid="lista-da-coluna"
+            // Cada coluna rola SOZINHA: o título e o total ficam parados em cima e só a lista de cards
+            // desce. O Droppable é o próprio contêiner de rolagem de propósito — a biblioteca de
+            // arrastar só sabe rolar sozinha um contêiner que seja o Droppable (ou pai dele).
+            // `[&>*]:shrink-0`: numa coluna flex com teto, o padrão do flex é ENCOLHER cada card
+            // para caber — sem isto 87 cards viram 87 tiras de título cortado em vez de rolar.
+            // SEM `overscroll-contain`, de propósito: ele impede a rolagem de passar da lista para o
+            // quadro, e aí a roda lateral (ou Shift+roda) com o mouse sobre uma coluna — onde o mouse
+            // está quase sempre — deixava de rolar o quadro. Medido: 0px com ele, 400px sem.
             className={cn(
-              "flex flex-1 flex-col gap-2 p-2 transition-colors",
+              "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 transition-colors [&>*]:shrink-0",
               snapshot.isDraggingOver && "bg-accent/5",
             )}
           >
