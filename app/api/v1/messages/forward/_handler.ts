@@ -117,7 +117,7 @@ export async function forwardMessagesHandler(
       "As mensagens precisam ser da mesma conversa.",
     );
   }
-  const conversaDeOrigem = origens[0]!.conversation_id;
+  const conversaDeOrigemId = origens[0]!.conversation_id;
 
   // Nada sai se UMA das mensagens não pode ir: o atendente escolheu um conjunto, e mandar só um pedaço
   // dele (sem avisar qual ficou de fora) é pior que recusar.
@@ -209,7 +209,7 @@ export async function forwardMessagesHandler(
     actorUserId: ctx.actor.type === "user" ? ctx.actor.id : null,
     organizationId: ctx.organization_id,
     resourceType: "conversation",
-    resourceId: conversaDeOrigem,
+    resourceId: conversaDeOrigemId,
     requestId: ctx.requestId,
     metadata: {
       message_ids: input.message_ids,

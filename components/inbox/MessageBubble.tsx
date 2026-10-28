@@ -149,8 +149,9 @@ export function MessageBubble({
       aria-label={t("Encaminhar esta mensagem")}
       className={cn(
         "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-muted",
+        // `hover:` do Tailwind já só vale onde existe hover; no toque o botão nem aparece (o toque longo é o caminho).
         "[@media(hover:none)]:hidden",
-        "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100",
+        "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
       )}
     >
       <ShareFat size={14} />

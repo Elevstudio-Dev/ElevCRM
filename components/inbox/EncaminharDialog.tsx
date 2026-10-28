@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/hooks/i18n/useT";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import {
   useConversasParaEncaminhar,
@@ -34,11 +35,9 @@ interface Props {
   onConcluido: () => void;
 }
 
-const nomeDe = (c: ConversationWithContact): string =>
-  c.contacts?.display_name?.trim() ||
-  c.contacts?.name?.trim() ||
-  c.contacts?.phone_number ||
-  c.id.slice(0, 8);
+// O rótulo é o do repositório (o que uma pessoa escolheu, depois o que o canal informou, depois o número):
+// remontar a cadeia à mão é como a 7ª cópia nasce e um identificador técnico chega à tela.
+const nomeDe = (c: ConversationWithContact): string => rotuloDoContato(c.contacts);
 
 /**
  * ENCAMINHAR: escolher para quem, ver o que vai, confirmar.
