@@ -116,6 +116,8 @@ test.describe("a conversa vira lead", () => {
     await page.goto(`/app/pipelines/${creds.nascimento!.pipeline_default_id}`);
 
     await page.getByText(NOME, { exact: false }).first().click();
+    // Clicar no card abre a CONVERSA do lead (nasceu de uma conversa); a timeline mora na aba dos dados.
+    await page.getByTestId("painel-do-lead").getByRole("tab", { name: "Dados do lead" }).click();
 
     // "Entrou pelo WhatsApp" é o rótulo de `lead_created`. Card que aparece sem
     // explicação é como se perde a confiança num automatismo — o dono não sabe

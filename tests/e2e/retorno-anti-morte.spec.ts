@@ -109,7 +109,9 @@ test("a linha do tempo do negócio mostra o retorno em português de gente", asy
   await page.goto(`/app/pipelines/${creds.retorno.pipeline_id}`);
 
   await page.getByRole("button", { name: creds.retorno.lead_title, exact: true }).click();
-  const dossie = page.getByRole("dialog").first();
+  // O painel do lead (ao lado do quadro); a linha do tempo mora na aba "Dados do lead".
+  const dossie = page.getByTestId("painel-do-lead");
+  await dossie.getByRole("tab", { name: "Dados do lead" }).click();
   await expect(dossie.getByText("Retorno agendado", { exact: true }).first()).toBeVisible();
 
   // O que o operador LÊ, não o que a API devolve: rótulo humano, sem
