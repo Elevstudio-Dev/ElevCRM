@@ -41,5 +41,15 @@ export interface CanalDoQr {
   conectado: boolean;
 }
 
+/** O funil de um QR no período (`GET /api/v1/relatorios/qr-codes`), números já convertidos de bigint. */
+export interface FunilDoQr {
+  qr_code_id: string;
+  leituras: number;
+  conversas: number;
+  leads: number;
+  ganhos: number;
+  valor_ganho_cents: number;
+}
+
 export const COLUNAS_DO_QR =
   "id, codigo, nome, mensagem, channel_session_id, arquivado_em, created_at, updated_at";
