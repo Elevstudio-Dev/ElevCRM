@@ -69,16 +69,24 @@ export function StageColumn({
   // A cor da coluna: a que o operador escolheu, ou a do papel da etapa (ganho/perda/progressão).
   const cor = corDaEtapa(stage, posicaoEntreAbertas, totalAbertas);
   const accentStyle: CSSProperties = { backgroundColor: cor };
-  // A faixa de cima é o que faz a coluna ler de longe; o ponto ao lado do nome fica para quem está perto.
-  const faixaStyle: CSSProperties = { borderTopColor: cor, borderTopWidth: 3 };
 
   return (
+    // A coluna do quadro novo: canto de 16px (squircle onde o navegador sabe) e o fundo um tom abaixo
+    // da página. O `overflow-hidden` recorta a faixa de cor do topo nos cantos arredondados — por isso
+    // a faixa é um elemento próprio e não mais uma `border-top` (que ficaria quadrada contra o canto).
     <div
       data-testid="coluna-do-funil"
-      className="flex min-h-0 w-80 shrink-0 flex-col rounded-lg border border-border bg-surface-muted/40"
-      style={faixaStyle}
+      className="relative flex min-h-0 w-80 shrink-0 flex-col overflow-hidden rounded-[16px] border border-border bg-surface-muted/60 [corner-shape:squircle]"
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
+      {/* A faixa de cima é o que faz a coluna ler de longe; o ponto ao lado do nome fica para quem
+          está perto. */}
+      <span
+        aria-hidden
+        data-testid="faixa-da-coluna"
+        className="absolute inset-x-0 top-0 h-[3px]"
+        style={accentStyle}
+      />
+      <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3.5">
         <span className="h-2 w-2 rounded-full" style={accentStyle} aria-hidden />
         <h2 className="flex-1 truncate text-sm font-semibold text-text">
           {stage.name}
@@ -96,13 +104,18 @@ export function StageColumn({
             <span className="sr-only">{t("Etapa de perda")}</span>
           </span>
         ) : null}
-        <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-text-muted">
+        {/* `key` = quantidade: o número é um elemento novo a cada mudança, e a animação de entrada
+            (definida em globals.css, que respeita prefers-reduced-motion) reinicia. */}
+        <span
+          key={leads.length}
+          className="contador-da-coluna grid h-[18px] min-w-[18px] place-items-center rounded-[6px] bg-surface px-1 text-[11px] font-medium tabular-nums text-text-muted"
+        >
           {leads.length}
         </span>
       </div>
 
       {totalCents > 0 && (
-        <div className="shrink-0 border-b border-border px-3 py-1.5 text-[11px] tabular-nums text-text-muted">
+        <div className="shrink-0 px-3 pb-1.5 text-[11px] tabular-nums text-text-muted">
           {formatBRL(totalCents)}
         </div>
       )}

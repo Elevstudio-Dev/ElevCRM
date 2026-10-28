@@ -2,6 +2,9 @@
 import { Draggable } from "@hello-pangea/dnd";
 import type { MouseEvent } from "react";
 import { useT } from "@/hooks/i18n/useT";
+import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
+import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
 import { resolveCardState, stageAgeLabel, type CardInput } from "@/lib/kanban/card-state";
@@ -73,6 +76,12 @@ export function KanbanCard({
   const value = formatBRL(card.valueCents, card.currency);
   const state = resolveCardState(card, t);
   const age = stageAgeLabel(card.hoursInStage, t);
+  // O ROSTO é do CLIENTE, não do negócio: a foto dele (ou as iniciais) abre o card. Lead sem contato
+  // — criado à mão, vindo de webhook — não tem de quem tirar o nome, e então o título do negócio faz
+  // as vezes dele; o card nunca fica sem círculo, senão a coluna perde o alinhamento.
+  const contato = lead.contato ?? null;
+  const nomeDoRosto = contato ? rotuloDoContato(contato, t) : card.title;
+  const reservaDoRosto = contato?.phone_number ? phoneForDisplay(contato.phone_number) : "?";
 
   // Clique ABRE o dossiê; ctrl/cmd+clique SELECIONA. "Clicar abre" é a
   // convenção mais forte, e seleção múltipla é recurso de poder, que tolera
@@ -103,9 +112,14 @@ export function KanbanCard({
           // Tags saem do card (Lei A): ficam a um hover, sem ocupar altura.
           title={card.tags.length > 0 ? `Tags: ${card.tags.join(", ")}` : undefined}
           className={cn(
-            "group relative overflow-hidden rounded-md border border-border bg-surface",
-            "py-2.5 pl-3 pr-3 shadow-xs transition-colors",
-            "hover:border-border-strong",
+            // O desenho do quadro novo: canto macio de 12px (squircle onde o navegador sabe, raio
+            // comum onde não), sombra fina e um levantar de 1px ao passar o mouse. O levantar usa a
+            // propriedade `translate`, que NÃO é a `transform` que a biblioteca de arrastar escreve
+            // no estilo do card — os dois não brigam.
+            "group relative overflow-hidden rounded-[12px] border border-border bg-surface [corner-shape:squircle]",
+            "py-2.5 pl-3 pr-3 shadow-xs transition-[translate,box-shadow,border-color] duration-150",
+            "hover:-translate-y-px hover:border-border-strong hover:shadow-sm",
+            "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
             snapshot.isDragging && "rotate-1 shadow-md ring-1 ring-accent/40",
             isSelected && "ring-2 ring-accent",
             // O aberto ao lado: borda e anel na cor de ação, mais discretos que a seleção múltipla.
@@ -137,51 +151,64 @@ export function KanbanCard({
             )}
           />
 
-          {/* ① identidade — altura FIXA de 2 linhas, com ou sem texto longo. */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex min-w-0 flex-1 items-start gap-1.5">
-              {card.canonicalTag && (
-                <span
-                  className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-                  title={card.canonicalTag}
-                  // role="img": um span nu não aceita aria-label (aria-prohibited-attr).
-                  role="img"
-                  aria-label={`${t("Tag")}: ${card.canonicalTag}`}
-                />
-              )}
-              {/* O TÍTULO é o elemento ativável, não o card inteiro.
-                  `role="group"` no card foi decisão da wave 2 (o dnd marca o
-                  handle como button, e com o menu de ações dentro isso vira
-                  nested-interactive no axe). Voltar o card para `button`
-                  reintroduziria aquele defeito com cara de melhoria de
-                  acessibilidade; deixar só onKeyDown daria uma ação que existe
-                  e NÃO É DESCOBERTA por leitor de tela. O título como button
-                  atende mouse, teclado e leitor sem desfazer a decisão antiga. */}
-              <h3 className="line-clamp-2 h-10 text-sm font-medium leading-5 text-text">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpen?.(card.id);
-                  }}
-                  className="text-left hover:underline"
-                >
-                  {card.title}
-                </button>
-              </h3>
-            </div>
-            <KanbanCardActions lead={lead} pipelineId={pipelineId} />
-          </div>
+          {/* O ROSTO DO CLIENTE à esquerda, e ao lado dele as duas primeiras faixas (identidade e
+              valor). `data-bloco` marca o conjunto para a prova. */}
+          <div className="flex items-start gap-2.5" data-bloco="rosto-e-identidade">
+            <AvatarDoContato
+              contato={contato}
+              nome={nomeDoRosto}
+              reserva={reservaDoRosto}
+              className="mt-0.5 h-9 w-9"
+              classNameIniciais="text-[11px]"
+            />
+            <div className="min-w-0 flex-1">
+              {/* ① identidade — altura FIXA de 2 linhas, com ou sem texto longo. */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                  {card.canonicalTag && (
+                    <span
+                      className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                      title={card.canonicalTag}
+                      // role="img": um span nu não aceita aria-label (aria-prohibited-attr).
+                      role="img"
+                      aria-label={`${t("Tag")}: ${card.canonicalTag}`}
+                    />
+                  )}
+                  {/* O TÍTULO é o elemento ativável, não o card inteiro.
+                      `role="group"` no card foi decisão da wave 2 (o dnd marca o
+                      handle como button, e com o menu de ações dentro isso vira
+                      nested-interactive no axe). Voltar o card para `button`
+                      reintroduziria aquele defeito com cara de melhoria de
+                      acessibilidade; deixar só onKeyDown daria uma ação que existe
+                      e NÃO É DESCOBERTA por leitor de tela. O título como button
+                      atende mouse, teclado e leitor sem desfazer a decisão antiga. */}
+                  <h3 className="line-clamp-2 h-10 text-sm font-medium leading-5 text-text">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen?.(card.id);
+                      }}
+                      className="text-left hover:underline"
+                    >
+                      {card.title}
+                    </button>
+                  </h3>
+                </div>
+                <KanbanCardActions lead={lead} pipelineId={pipelineId} />
+              </div>
 
-          {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}
-          <p
-            className={cn(
-              "mt-1 h-5 text-xs font-medium leading-5 tabular-nums",
-              value ? "text-text" : "text-text-muted",
-            )}
-          >
-            {value ?? "—"}
-          </p>
+              {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}
+              <p
+                className={cn(
+                  "mt-1 h-5 text-xs font-medium leading-5 tabular-nums",
+                  value ? "text-text" : "text-text-muted",
+                )}
+              >
+                {value ?? "—"}
+              </p>
+            </div>
+          </div>
 
           {/* ③ a linha do agente — um slot, três estados, nunca três blocos. */}
           <div className="mt-1.5 flex h-6 items-center gap-2 text-xs">
@@ -228,7 +255,7 @@ export function KanbanCard({
           <ConversaSlot conversa={lead.conversa} />
 
           {/* ④ dono · ⑤ tempo no estágio */}
-          <div className="mt-1 flex h-6 items-center justify-between gap-2">
+          <div className="mt-1.5 flex h-7 items-center justify-between gap-2 border-t border-border pt-1">
             <OwnerBadge
               ownerKind={card.owner.kind}
               ownerName={card.owner.name}

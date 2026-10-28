@@ -88,6 +88,25 @@ export interface Lead {
     last_message_at: string | null;
     unread: number;
   } | null;
+  /**
+   * Derivado (não é coluna): QUEM é o cliente deste negócio — o rosto que abre o card.
+   *
+   * Só o que o rosto precisa (nome para as iniciais, o caminho da foto para saber SE existe foto e o
+   * gate de LGPD). A imagem em si nunca viaja aqui: a tela pede `/api/v1/contacts/{id}/avatar`, que
+   * assina a URL. Contato anonimizado chega SEM o caminho da foto — apagar o nome e manter a foto não
+   * anonimiza ninguém, e o servidor é o último lugar em que isso pode ser garantido.
+   *
+   * Ausente é estado LEGÍTIMO (lead criado à mão ou por webhook não tem contato): o card cai nas
+   * iniciais do título do negócio.
+   */
+  contato?: {
+    id: string;
+    display_name: string | null;
+    name: string | null;
+    phone_number: string | null;
+    avatar_storage_path: string | null;
+    is_anonymized: boolean;
+  } | null;
   score?: {
     probability: number;
     reason: string;
