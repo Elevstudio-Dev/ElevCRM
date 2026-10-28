@@ -8,6 +8,22 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.21.0] — 2026-10-28
+
+### Alterado
+
+- **O funil ganhou um desenho novo e a foto do cliente em cada card** O quadro do funil foi redesenhado: colunas e cards de cantos macios, uma faixa de cor no topo de cada coluna, o contador da coluna que desce ao mudar e o card que se levanta de leve ao passar o mouse. Onde antes havia uma barra fina de probabilidade, agora há um anel que se preenche. O arrastar continua o mesmo (mouse, toque e teclado), e a posição segue sendo gravada ao soltar.
+
+  Cada card passa a mostrar o rosto do cliente, à esquerda do título: a foto de perfil do WhatsApp quando existe, e as iniciais dele quando não existe. Lead criado à mão, sem cliente ligado, mostra as iniciais do título do negócio. Cliente anonimizado nunca mostra foto, nome nem telefone: o dado deixa de sair do servidor, e não apenas de aparecer na tela.
+
+  Não há migração nem ação do operador: a foto vem do mesmo arquivo que o Inbox já usa.
+
+- **A lista de conversas do Inbox ficou parecida com a do WhatsApp** Cada conversa agora mostra a hora no jeito do WhatsApp (a hora de hoje, "Ontem", o dia da semana, depois a data), quem falou por último, o tipo da mensagem (um áudio aparece como "Áudio", com o ícone, e não mais como "[audio]") e os tiques da nossa mensagem: ✓ enviada, ✓✓ entregue, ✓✓ azul quando o cliente leu, relógio enquanto espera para sair e um aviso quando falhou. O tique muda sozinho quando a confirmação chega, sem recarregar a tela. A quantidade de não lidas virou um círculo verde, e a hora fica verde quando há mensagem nova.
+
+  A busca virou uma pílula e as visões mais usadas (Fila, Minhas, Grupos e Não lidas) viraram botões à vista; o menu ▾ continua listando todas as visões, sem esconder nenhuma. As informações que só o CRM tem (posição na fila, setor, tags, atendente, número) ficam numa terceira linha pequena, que só aparece quando há o que dizer, e as tags ganharam a cor do marcador da empresa.
+
+  A atualização aplica sozinha uma migração (0219) que guarda, em cada conversa, a direção, o tipo e o status da última mensagem. Conversas antigas são preenchidas na própria atualização; nada precisa ser feito pelo operador.
+
 ## [1.20.0] — 2026-10-28
 
 ### Adicionado
@@ -2921,7 +2937,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.20.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.21.0...HEAD
+[1.21.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.17.0...v1.18.0
