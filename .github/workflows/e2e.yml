@@ -173,6 +173,7 @@ jobs:
         funil-conversa-ao-lado.spec.ts
         inbox-responder-melhor.spec.ts
         inbox-encaminhar.spec.ts
+        inbox-lista-estilo-whatsapp.spec.ts
         conversa-vira-lead.spec.ts contato-salva-email.spec.ts
         confirmar-dado-do-contato.spec.ts
         credenciais-de-ia.spec.ts

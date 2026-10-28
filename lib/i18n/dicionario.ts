@@ -158,6 +158,15 @@ export const DICIONARIO: Traducoes = {
   "Sem mensagens": { es: "Sin mensajes" },
   "Nenhuma conversa": { es: "Ninguna conversación" },
 
+  // ─── Inbox: a linha da lista, no jeito do WhatsApp ───
+  "Você:": { es: "Tú:" },
+  "Atendimento automático": { es: "Atención automática" },
+  "mensagens não lidas": { es: "mensajes no leídos" },
+  "Na fila para enviar": { es: "En cola para enviar" },
+  "Falhou ao enviar": { es: "Falló al enviar" },
+  "Não lidas": { es: "No leídas" },
+  "Todas as visões": { es: "Todas las vistas" },
+
   // ─── Inbox: cabeçalho e ações da conversa ───
   Assumir: { es: "Asumir" },
   Liberar: { es: "Liberar" },

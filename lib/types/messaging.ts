@@ -30,6 +30,15 @@ export interface Conversation {
   last_outbound_at: string | null;
   last_message_at: string | null;
   last_message_preview: string | null;
+  /**
+   * O espelho da ÚLTIMA mensagem (migration 0219) — o que a linha da lista precisa
+   * para dizer "Você:", trocar o literal `[audio]` por ícone e desenhar os tiques.
+   * Opcionais e nuláveis: ausente é resposta em cache de antes das colunas
+   * existirem; `null` é conversa sem mensagem (ou ainda sem backfill).
+   */
+  last_message_direction?: "inbound" | "outbound" | null;
+  last_message_type?: string | null;
+  last_message_status?: string | null;
   unread_count_for_assignee: number;
   is_group: boolean;
   group_chat_id: string | null;

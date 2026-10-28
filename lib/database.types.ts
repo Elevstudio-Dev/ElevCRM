@@ -2799,7 +2799,11 @@ export type Database = {
           last_handoff_reason: string | null
           last_inbound_at: string | null
           last_message_at: string | null
+          last_message_direction: string | null
+          last_message_id: string | null
           last_message_preview: string | null
+          last_message_status: string | null
+          last_message_type: string | null
           last_outbound_at: string | null
           metadata: Json
           organization_id: string
@@ -2837,7 +2841,11 @@ export type Database = {
           last_handoff_reason?: string | null
           last_inbound_at?: string | null
           last_message_at?: string | null
+          last_message_direction?: string | null
+          last_message_id?: string | null
           last_message_preview?: string | null
+          last_message_status?: string | null
+          last_message_type?: string | null
           last_outbound_at?: string | null
           metadata?: Json
           organization_id: string
@@ -2875,7 +2883,11 @@ export type Database = {
           last_handoff_reason?: string | null
           last_inbound_at?: string | null
           last_message_at?: string | null
+          last_message_direction?: string | null
+          last_message_id?: string | null
           last_message_preview?: string | null
+          last_message_status?: string | null
+          last_message_type?: string | null
           last_outbound_at?: string | null
           metadata?: Json
           organization_id?: string
@@ -6903,7 +6915,11 @@ export type Database = {
           last_handoff_reason: string | null
           last_inbound_at: string | null
           last_message_at: string | null
+          last_message_direction: string | null
+          last_message_id: string | null
           last_message_preview: string | null
+          last_message_status: string | null
+          last_message_type: string | null
           last_outbound_at: string | null
           metadata: Json
           organization_id: string

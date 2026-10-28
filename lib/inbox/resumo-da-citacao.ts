@@ -43,6 +43,19 @@ const MIDIAS: Record<string, { icone: IconeDaCitacao; rotulo: string }> = {
   location: { icone: "localizacao", rotulo: "Localização" },
 };
 
+/**
+ * O ícone e o nome de um tipo de mídia, ou `null` para o que não é mídia (texto, reação, sistema…).
+ * Existe para a linha da lista de conversas dizer "Áudio"/"Foto" com o MESMO vocabulário da
+ * citação — duas listas de tipos mantidas em arquivos diferentes divergem na primeira mídia nova.
+ * `hasOwn` porque o tipo vem do banco: um valor como "constructor" não pode achar um membro do
+ * protótipo e virar "mídia".
+ */
+export function midiaDoTipo(
+  tipo: string | null | undefined,
+): { icone: IconeDaCitacao; rotulo: string } | null {
+  return (tipo && Object.hasOwn(MIDIAS, tipo) ? MIDIAS[tipo] : null) ?? null;
+}
+
 export function resumoDaCitacao(
   m: Pick<Message, "type" | "body" | "revoked_at" | "media_url" | "media_storage_path">,
 ): ResumoDaCitacao {

@@ -3,15 +3,19 @@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
-import { format, formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { Clock, Phone, Robot } from "@/lib/ui/icons";
+import { Check, Checks, Clock, Phone, Robot, Warning } from "@/lib/ui/icons";
 import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
+import { ICONE_DA_MIDIA } from "@/components/inbox/CitacaoResumo";
 import { comandoDaConversa } from "@/lib/inbox/comando-da-conversa";
+import { horaDaLinha, previaDaLinha, type Tique, tiqueDaUltima } from "@/lib/inbox/linha-da-conversa";
 import { type Faixa, PISO_MINUTOS, tempoSemResposta } from "@/lib/inbox/tempo-sem-resposta";
+import { CLASSE_DE_COR } from "@/lib/marcadores/cores";
+import { COR_DE_MARCADOR_PADRAO, type CorDeMarcador } from "@/lib/schemas/settings";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -54,7 +58,27 @@ interface Props {
    * responder a MESMA pergunta org-wide. Ausente = o piso.
    */
   limiteMinutos?: number;
+  /**
+   * A cor de cada marcador da empresa, pelo NOME. Vem por PROP pela mesma razão do
+   * `automaticoDaOrg`: o vocabulário é da organização, e uma leitura por linha seriam 50
+   * assinaturas para a mesma pergunta. Marcador fora do mapa (nasceu digitado, ou o vocabulário
+   * ainda não chegou) cai no cinza — o mesmo que o editor de tags da conversa faz.
+   */
+  coresDasTags?: ReadonlyMap<string, CorDeMarcador>;
 }
+
+/**
+ * Os tiques da nossa última mensagem. O ícone sozinho não diz nada a quem usa leitor de tela, então
+ * cada um carrega o nome do estado — e a cor nunca vai sozinha: ✓✓ azul é "lida", ✓✓ cinza é
+ * "entregue", e o formato (um ou dois) já separa "enviada" das duas.
+ */
+const TIQUES: Record<Tique, { icone: typeof Check; rotulo: string; classe: string }> = {
+  relogio: { icone: Clock, rotulo: "Na fila para enviar", classe: "text-muted-foreground" },
+  enviada: { icone: Check, rotulo: "Enviada", classe: "text-muted-foreground" },
+  entregue: { icone: Checks, rotulo: "Entregue", classe: "text-muted-foreground" },
+  lida: { icone: Checks, rotulo: "Lida", classe: "text-info" },
+  falhou: { icone: Warning, rotulo: "Falhou ao enviar", classe: "text-error-fg" },
+};
 
 /**
  * A cor de "há quanto tempo esse cliente espera", pela MESMA regra de faixas do cabeçalho da conversa
@@ -91,17 +115,6 @@ const COR_DO_COMANDO: Record<string, string> = {
 };
 
 
-function relativeTime(iso: string | null, locale: Locale): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return format(d, "HH:mm");
-  const diff = (now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
-  if (diff < 7) return formatDistanceToNowStrict(d, { addSuffix: false, locale: locale });
-  return format(d, "dd/MM");
-}
-
 /** "Aguardando há 5 min" — desde a última mensagem do cliente (fallback: criação). */
 function waitingLabel(
   conversation: ConversationWithContact,
@@ -121,6 +134,7 @@ export function ConversationListItem({
   mostrarAtendente,
   automaticoDaOrg,
   limiteMinutos,
+  coresDasTags,
 }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
@@ -130,10 +144,23 @@ export function ConversationListItem({
   const tags = c?.tags ?? [];
   const visibleTags = tags.slice(0, 2);
   const overflow = tags.length - visibleTags.length;
-  const preview = conversation.last_message_preview?.trim() || t("Sem mensagens");
-  const truncated = preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
-  const time = relativeTime(conversation.last_message_at, localeDaData);
   const unread = conversation.unread_count_for_assignee ?? 0;
+
+  // A linha do WhatsApp: hora no formato dele, quem falou por último, o tipo da mensagem e o
+  // tique. As regras moram em `lib/inbox/linha-da-conversa` (testadas sem montar tela).
+  const hora = horaDaLinha(conversation.last_message_at, new Date(), localeDaData, t("Ontem"));
+  const previa = previaDaLinha({
+    type: conversation.last_message_type,
+    preview: conversation.last_message_preview,
+    direction: conversation.last_message_direction,
+  });
+  const tique = tiqueDaUltima(conversation.last_message_direction, conversation.last_message_status);
+  const IconeDaMidia = previa.icone ? ICONE_DA_MIDIA[previa.icone] : null;
+  const TiqueIcone = tique ? TIQUES[tique].icone : null;
+  // "Você:" cobre o que o tique não diz: em grupo (onde dizer QUEM falou importa) e quando o
+  // status é desconhecido (conversa antiga, sem tique). Com o tique à vista ele já diz "é nossa" —
+  // repetir viraria ruído, e o WhatsApp também não repete.
+  const mostrarVoce = previa.voce && (conversation.is_group || tique === null);
 
 
   /**
@@ -174,6 +201,20 @@ export function ConversationListItem({
   // respondendo. Cai no nome do canal quando não há número (canal recém-criado).
   const canal = conversation.channel_sessions ?? null;
   const rotuloCanal = canal?.phone_number ?? canal?.display_name ?? null;
+
+  const atendenteVisivel = Boolean(mostrarAtendente) && comando.quem === "humano";
+  const canalVisivel = Boolean(mostrarCanal) && rotuloCanal !== null;
+  // A terceira linha é para o que só o CRM sabe (fila, setor, tags, atendente, número). Na maioria
+  // das conversas não há nada a dizer ali, e então a linha NÃO existe: o WhatsApp tem duas linhas,
+  // e a lista fica densa como a dele em vez de reservar espaço vazio em cada conversa.
+  const temDetalhe =
+    queuePosition !== undefined ||
+    Boolean(conversation.sector_id) ||
+    visibleTags.length > 0 ||
+    atendenteVisivel ||
+    canalVisivel ||
+    Boolean(c?.is_blocked) ||
+    Boolean(c?.is_anonymized);
 
   return (
     <button
@@ -219,77 +260,123 @@ export function ConversationListItem({
         <div className="flex items-baseline justify-between gap-2">
           <span
             className={cn(
-              "truncate text-sm font-medium",
+              "truncate text-[15px] font-medium",
               c?.is_anonymized && "italic text-muted-foreground",
             )}
           >
             {displayName}
           </span>
-          <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-            {time}
-          </span>
+          {/* Verde e em negrito quando há não lida: é como o WhatsApp avisa, de longe, que a
+              conversa pede o olho — a hora vira o sinal, sem precisar ler o contador. */}
+          <time
+            dateTime={conversation.last_message_at ?? undefined}
+            data-testid="hora-da-conversa"
+            className={cn(
+              "shrink-0 text-xs tabular-nums",
+              unread > 0 ? "font-medium text-success-fg" : "text-muted-foreground",
+            )}
+          >
+            {hora}
+          </time>
         </div>
 
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {isAi ? <Robot size={10} weight="duotone" className="mr-1 inline" aria-hidden /> : null}
-          {truncated}
-        </p>
-
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          {queuePosition !== undefined && (
+        <div className="mt-0.5 flex items-center gap-1 text-[13px] leading-5 text-muted-foreground">
+          {tique && TiqueIcone ? (
             <span
-              data-faixa={espera?.faixa}
-              className={cn(
-                "inline-flex items-center gap-1 text-[10px]",
-                espera ? CLASSE_DA_ESPERA[espera.faixa] : "text-muted-foreground",
-              )}
-              aria-label={`${t("Posição")} ${queuePosition} ${t("na fila")}`}
+              role="img"
+              aria-label={t(TIQUES[tique].rotulo)}
+              data-tique={tique}
+              className={cn("inline-flex shrink-0", TIQUES[tique].classe)}
             >
-              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1 font-medium tabular-nums text-primary">
-                {queuePosition}º
-              </span>
-              {espera ? <Clock size={10} weight="bold" aria-hidden /> : null}
-              {waitingLabel(conversation, t, localeDaData)}
+              <TiqueIcone size={16} weight="bold" aria-hidden />
             </span>
-          )}
-          {/* O setor vem ANTES das tags: é a fila em que a conversa está, e
-              a pergunta "isso é com quem?" vem antes de "isso é sobre o quê?". */}
-          <ChipDeSetor sectorId={conversation.sector_id} compacto />
-          {visibleTags.map((t) => (
-            <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[10px]">
-              {t}
-            </Badge>
-          ))}
-          {overflow > 0 && (
-            <span className="text-[10px] text-muted-foreground">+{overflow}</span>
-          )}
-          {mostrarAtendente && comando.quem === "humano" && (
-            <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} compacto />
-          )}
-          {mostrarCanal && rotuloCanal && (
-            <Badge
-              variant="outline"
-              className="h-4 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
-              title={`${t("Entrou por")} ${rotuloCanal}`}
+          ) : null}
+          <span className="flex min-w-0 flex-1 items-center gap-1">
+            {mostrarVoce ? <span className="shrink-0">{t("Você:")}</span> : null}
+            {IconeDaMidia ? <IconeDaMidia size={14} weight="fill" className="shrink-0" aria-hidden /> : null}
+            <span className="truncate" data-testid="previa-da-conversa">
+              {previa.trecho ?? t(previa.rotulo ?? "Sem mensagens")}
+            </span>
+          </span>
+          {isAi ? (
+            <Robot size={14} weight="duotone" className="shrink-0" aria-label={t("Atendimento automático")} role="img" />
+          ) : null}
+          {unread > 0 ? (
+            <span
+              data-testid="nao-lidas"
+              aria-label={`${unread} ${t("mensagens não lidas")}`}
+              className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-success-fg px-1.5 text-[11px] font-semibold tabular-nums text-background"
             >
-              <Phone size={9} weight="regular" aria-hidden />
-              {rotuloCanal}
-            </Badge>
-          )}
-          {c?.is_blocked && (
-            <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
-              {t("Bloqueado")}
-            </Badge>
-          )}
-          {c?.is_anonymized && (
-            <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
-              {t("Anonimizado")}
-            </Badge>
-          )}
-          {unread > 0 && (
-            <Badge className="ml-auto h-4 min-w-4 px-1.5 text-[10px]">{unread}</Badge>
-          )}
+              {unread > 99 ? "99+" : unread}
+            </span>
+          ) : null}
         </div>
+
+        {temDetalhe ? (
+          <div
+            data-testid="detalhes-da-conversa"
+            className="mt-1 flex flex-wrap items-center gap-1"
+          >
+            {queuePosition !== undefined && (
+              <span
+                data-faixa={espera?.faixa}
+                className={cn(
+                  "inline-flex items-center gap-1 text-[10px]",
+                  espera ? CLASSE_DA_ESPERA[espera.faixa] : "text-muted-foreground",
+                )}
+                aria-label={`${t("Posição")} ${queuePosition} ${t("na fila")}`}
+              >
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/10 px-1 font-medium tabular-nums text-primary">
+                  {queuePosition}º
+                </span>
+                {espera ? <Clock size={10} weight="bold" aria-hidden /> : null}
+                {waitingLabel(conversation, t, localeDaData)}
+              </span>
+            )}
+            {/* O setor vem ANTES das tags: é a fila em que a conversa está, e
+                a pergunta "isso é com quem?" vem antes de "isso é sobre o quê?". */}
+            <ChipDeSetor sectorId={conversation.sector_id} compacto />
+            {/* Etiquetas coloridas, como as do WhatsApp Business: a cor é a do marcador da empresa. */}
+            {visibleTags.map((tag) => {
+              const cor = CLASSE_DE_COR[coresDasTags?.get(tag) ?? COR_DE_MARCADOR_PADRAO];
+              return (
+                <Badge
+                  key={tag}
+                  variant="secondary"
+                  className={cn("h-4 border-transparent px-1.5 text-[10px]", cor.fundo, cor.texto)}
+                >
+                  {tag}
+                </Badge>
+              );
+            })}
+            {overflow > 0 && (
+              <span className="text-[10px] text-muted-foreground">+{overflow}</span>
+            )}
+            {atendenteVisivel && (
+              <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} compacto />
+            )}
+            {canalVisivel && (
+              <Badge
+                variant="outline"
+                className="h-4 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground"
+                title={`${t("Entrou por")} ${rotuloCanal}`}
+              >
+                <Phone size={9} weight="regular" aria-hidden />
+                {rotuloCanal}
+              </Badge>
+            )}
+            {c?.is_blocked && (
+              <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+                {t("Bloqueado")}
+              </Badge>
+            )}
+            {c?.is_anonymized && (
+              <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
+                {t("Anonimizado")}
+              </Badge>
+            )}
+          </div>
+        ) : null}
       </div>
     </button>
   );

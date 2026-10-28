@@ -98,9 +98,29 @@ export interface ConversationsFilters {
   sector_id?: string;
 }
 
-interface ListResponse {
+export interface ListResponse {
   data: ConversationWithContact[];
   meta?: { cursor?: string | null; has_more?: boolean };
+}
+
+/**
+ * O que caracteriza o estado da lista na tela, para o refetch de segurança comparar antes e depois.
+ *
+ * É a contagem de conversas, o maior `last_message_at` e — desde que a linha ganhou os tiques
+ * (migration 0219) — o STATUS da última mensagem de cada conversa. Sem o último, um ack perdido pelo
+ * canal (✓ virou ✓✓ azul no servidor) não mudava a assinatura: o refetch curava a tela, mas o
+ * detector não via a perda, e o tique atrasado ficava sem aviso nenhum. `updated_at` não serviria:
+ * ele muda por qualquer motivo, e o que se quer é ser sensível ao que a LINHA mostra.
+ */
+export function assinaturaDaLista(d: { pages: ListResponse[] } | undefined): string {
+  const conversas = d?.pages.flatMap((p) => p.data) ?? [];
+  let maior = "";
+  for (const c of conversas) {
+    const t = c.last_message_at ?? "";
+    if (t > maior) maior = t;
+  }
+  const tiques = conversas.map((c) => c.last_message_status ?? "-").join(",");
+  return `${conversas.length}:${maior}:${tiques}`;
 }
 
 export function useConversationsRealtime(
@@ -199,15 +219,7 @@ export function useConversationsRealtime(
    */
   const seguranca = useRefetchDeSeguranca<{ pages: ListResponse[] }>({
     queryKey,
-    assinatura: (d) => {
-      const conversas = d?.pages.flatMap((p) => p.data) ?? [];
-      let maior = "";
-      for (const c of conversas) {
-        const t = c.last_message_at ?? "";
-        if (t > maior) maior = t;
-      }
-      return `${conversas.length}:${maior}`;
-    },
+    assinatura: assinaturaDaLista,
     ultimaEntrega,
     enabled: !!orgId,
   });

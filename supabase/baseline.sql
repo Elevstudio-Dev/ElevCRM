@@ -18498,6 +18498,121 @@ $$;
 alter table public.team_messages replica identity full;
 
 
+-- ---- a lista sabe o que a última mensagem é, e em que pé ela está (migration 0219) ----
+--
+-- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, pelo mesmo motivo das funções acima:
+-- `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` proíbe `create function` depois dele.
+--
+-- Espelho DESNORMALIZADO na conversa (quem falou por último, tipo e status da mensagem) para a
+-- linha da lista mostrar "Você:", o ícone do áudio e os tiques sem uma subconsulta por conversa —
+-- e para o Realtime da lista (que escuta `conversations`) acordar quando o ack vira ✓✓ azul.
+-- Explicação completa no cabeçalho de supabase/migrations/20261028120000_0219_*.sql.
+alter table public.conversations
+  add column if not exists last_message_id uuid,
+  add column if not exists last_message_direction text,
+  add column if not exists last_message_type text,
+  add column if not exists last_message_status text;
+
+comment on column public.conversations.last_message_id is
+  'A mensagem que last_message_preview resume. Sem FK de propósito (apagar mensagem não pode varrer conversations); o trigger de status casa por igualdade. Migration 0219.';
+comment on column public.conversations.last_message_direction is
+  'inbound | outbound — quem falou por último. A lista mostra "Você:" quando é outbound. Migration 0219.';
+comment on column public.conversations.last_message_type is
+  'messages.type da última mensagem (text, audio, image...). A lista troca o literal "[audio]" por ícone + rótulo. Migration 0219.';
+comment on column public.conversations.last_message_status is
+  'messages.status da última mensagem (queued/sending/sent/delivered/read/failed). Vira os tiques da lista; mantido por trg_messages_espelham_status_na_conversa. Migration 0219.';
+
+create or replace function public.fn_mark_conversation_message(
+  p_conv uuid, p_direction text, p_preview text, p_at timestamptz
+) returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_msg record;
+begin
+  -- A mensagem foi gravada ANTES desta chamada pelos três canais; a mais recente daquela direção
+  -- é ela. `sent_at` e não `created_at`: é o que o índice (conversation_id, sent_at desc) serve,
+  -- e o WAHA grava `sent_at` com a hora do aparelho enquanto `p_at` é a hora da chegada — os dois
+  -- não se igualam, então casar por `p_at` não identificaria a mensagem.
+  select m.id, m.type, m.status into v_msg
+    from public.messages m
+   where m.conversation_id = p_conv
+     and m.direction = p_direction
+   order by m.sent_at desc, m.created_at desc
+   limit 1;
+
+  update public.conversations set
+    last_message_at = p_at, last_message_preview = p_preview,
+    last_message_id = v_msg.id,
+    last_message_direction = p_direction,
+    last_message_type = v_msg.type,
+    last_message_status = v_msg.status,
+    last_inbound_at  = case when p_direction = 'inbound'  then p_at else last_inbound_at  end,
+    last_outbound_at = case when p_direction = 'outbound' then p_at else last_outbound_at end,
+    unread_count_for_assignee = case
+      when p_direction = 'inbound'  then unread_count_for_assignee + 1
+      when p_direction = 'outbound' then 0
+      else unread_count_for_assignee
+    end,
+    updated_at = now()
+  where id = p_conv;
+
+  update public.contacts c
+     set last_activity_at = greatest(coalesce(c.last_activity_at, '-infinity'::timestamptz), p_at)
+    from public.conversations v
+   where v.id = p_conv
+     and c.id = v.contact_id;
+end; $$;
+
+comment on function public.fn_mark_conversation_message is
+  'Atualiza agregados da conversa (inbound incrementa unread; outbound zera), espelha direção/tipo/status da última mensagem (0219) e carimba contacts.last_activity_at.';
+
+revoke all     on function public.fn_mark_conversation_message(uuid, text, text, timestamptz) from public;
+revoke execute on function public.fn_mark_conversation_message(uuid, text, text, timestamptz) from anon, authenticated;
+grant  execute on function public.fn_mark_conversation_message(uuid, text, text, timestamptz) to service_role;
+
+create or replace function public.fn_conversa_espelha_status_da_ultima_mensagem()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Só a ÚLTIMA mensagem aparece na linha da lista; o ack de uma mensagem do meio da conversa não
+  -- mexe na conversa (e não acorda o Realtime de ninguém).
+  update public.conversations c
+     set last_message_status = new.status
+   where c.id = new.conversation_id
+     and c.last_message_id = new.id
+     and c.last_message_status is distinct from new.status;
+  return null;
+end;
+$$;
+
+revoke all     on function public.fn_conversa_espelha_status_da_ultima_mensagem() from public;
+revoke execute on function public.fn_conversa_espelha_status_da_ultima_mensagem() from anon, authenticated;
+
+drop trigger if exists trg_messages_espelham_status_na_conversa on public.messages;
+create trigger trg_messages_espelham_status_na_conversa
+  after update of status on public.messages
+  for each row
+  when (old.status is distinct from new.status)
+  execute function public.fn_conversa_espelha_status_da_ultima_mensagem();
+
+-- Conversa com histórico e sem espelho: uma subconsulta correlata por conversa, pelo índice
+-- (conversation_id, sent_at desc) — idempotente, só onde `last_message_id is null`.
+update public.conversations c
+   set (last_message_id, last_message_direction, last_message_type, last_message_status) = (
+     select m.id, m.direction, m.type, m.status
+       from public.messages m
+      where m.conversation_id = c.id
+      order by m.sent_at desc, m.created_at desc
+      limit 1
+   )
+ where c.last_message_id is null
+   and c.last_message_at is not null;
+
+notify pgrst, 'reload schema';
+
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
