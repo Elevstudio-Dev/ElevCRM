@@ -8,6 +8,141 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.20.0] — 2026-10-28
+
+### Adicionado
+
+- **O áudio do cliente vira texto na conversa — e o agente passa a ouvir também com a chave da OpenRouter** Dois pedaços do mesmo problema: o sistema transcrevia áudio, mas quem atendia não via o texto, e quem
+  usava a OpenRouter não tinha transcrição nenhuma.
+
+  **A atendente lê o áudio sem ouvir.** Embaixo de cada áudio que o cliente manda aparece **Ver texto**.
+  Um clique abre a transcrição (dá para selecionar e copiar); outro fecha. Enquanto o texto não fica
+  pronto, a tela diz "Transcrevendo…", e o texto aparece sozinho, sem recarregar a página. Quando não dá
+  para transcrever, ou o áudio não tem fala, a tela diz isso com todas as letras — o texto interno que o
+  agente recebe nesses casos nunca aparece como se fosse o que o cliente falou. O áudio que a própria
+  atendente grava não ganha texto: ela sabe o que disse.
+
+  **O agente ouve sem uma chave OpenAI à parte.** Até aqui a transcrição só funcionava com uma chave da
+  OpenAI, mesmo que a IA de conversa fosse outra. Numa instalação que escolheu a **OpenRouter** no
+  instalador, o áudio ficava sem transcrição e o agente respondia como se não o tivesse recebido. Agora, sem
+  chave OpenAI, o áudio é transcrito pela OpenRouter com a mesma chave que já atende a conversa (o mesmo
+  Whisper). Quem já tem chave OpenAI continua exatamente como estava: nenhum áudio muda de caminho. Com
+  Anthropic ou Google como IA de conversa ainda é preciso uma chave da OpenAI ou da OpenRouter — o Claude
+  não ouve áudio —, e a tela "Agente de IA → Provedores" passou a dizer isso corretamente (antes prometia
+  um serviço rodando na própria máquina, que o sistema nunca aceitou).
+
+  Nada para fazer ao atualizar. O texto aparece nos áudios que chegarem a partir daí; áudios antigos, que
+  nunca foram transcritos, seguem sem texto.
+
+- **Dá para encaminhar mensagens para outras conversas, como no WhatsApp** Antes, para mandar a outro cliente (ou a um colega no WhatsApp) o que alguém tinha dito, era preciso copiar
+  e colar — e áudio e foto não dava para levar. Agora:
+
+  - **Começar.** Passe o mouse numa mensagem e clique na seta **Encaminhar**; no celular, **segure** a
+    mensagem. A conversa entra em modo de seleção: cada mensagem ganha uma caixa, a que você escolheu já vem
+    marcada, e dá para marcar até **5 mensagens** (texto, áudio, foto, vídeo, figurinha ou documento). A barra
+    de baixo conta quantas estão marcadas. **Esc** (ou **Cancelar**) desiste — e o campo de envio volta com o
+    que você estava digitando.
+  - **Escolher para quem.** O diálogo mostra o que vai e deixa buscar por nome ou telefone; dá para marcar até
+    **5 conversas**. Contato bloqueado não pode ser escolhido.
+  - **Conferir antes de enviar.** O aviso diz de quem são as mensagens e para quem vão — "as mensagens são de
+    Fulana e vão chegar ao WhatsApp de Beltrano". É o que uma pessoa disse chegando à conversa de outra, e o
+    botão só liga com pelo menos um destino.
+  - **O resultado, por conversa.** Mostra o que saiu e o que não saiu (conversa fechada, contato bloqueado,
+    canal que recusou) — sem fingir que foi tudo. As mensagens saem na ordem em que foram ditas.
+  - **Nada some do histórico.** A mensagem encaminhada aparece na conversa de destino com o rótulo
+    **Encaminhada**, e cada encaminhamento fica na trilha de auditoria (quem, de qual conversa, para quais,
+    quantas saíram) — **sem o conteúdo**.
+
+  O que não dá para encaminhar: mensagem apagada, mensagem que nunca chegou a ser enviada, contato,
+  localização e modelo. O arquivo (áudio, foto…) é **copiado** para a conversa de destino.
+
+  Um limite que vale saber: quem recebe vê uma cópia comum da mensagem — o rótulo "Encaminhada" aparece só
+  para a equipe, no CRM, e não no celular do cliente.
+
+  Nada para fazer ao atualizar.
+
+- **No funil, clicar no lead abre a conversa dele na metade da tela — dá para responder sem sair do quadro** Antes, clicar num card do funil abria uma gaveta estreita só com os dados do negócio e um link para o
+  Inbox. Para responder um cliente, saía-se do funil, procurava-se a conversa e voltava-se — e o lugar no
+  quadro se perdia a cada ida.
+
+  Agora o clique abre a **conversa do lead na metade direita da tela**, na altura toda, e o título, os
+  filtros e o quadro encolhem para a metade esquerda. É a mesma conversa do Inbox — o mesmo campo de envio,
+  com áudio, anexo, modelos e nota interna, e as mesmas travas: a janela de 24h do canal oficial, o contato
+  bloqueado, a conversa fechada. Duas abas no painel: **Conversa** (a que abre primeiro) e **Dados do lead**
+  (linha do tempo e campos). Trocar de aba não apaga o que se estava digitando.
+
+  - O quadro continua à vista e **arrastável** enquanto se conversa; clicar em outro lead troca a conversa.
+    O card aberto fica destacado, para saber de quem é a conversa.
+  - Lead sem conversa (criado à mão, ou contato que nunca escreveu) abre direto nos dados, e o painel diz
+    que ainda não há conversa.
+  - O **×** fecha o painel e devolve o quadro inteiro; "Abrir no Inbox" leva à tela cheia da conversa.
+  - No celular (e em janelas estreitas) o painel cobre a tela inteira, com o × no alto.
+  - Filtrar o quadro não fecha a conversa que está aberta.
+
+  Nada para fazer ao atualizar.
+
+- **Responder uma mensagem ficou mais como no WhatsApp — citar áudio e foto, tocar na citação e deslizar** O responder já existia (a seta ao passar o mouse na mensagem, a faixa acima do campo, a citação dentro da
+  bolha). Três acabamentos que faltavam:
+
+  - **A citação diz o que a mensagem é.** Responder a um áudio ou a uma foto mostrava "(sem texto)", como
+    se a mensagem estivesse vazia. Agora a faixa e a bolha mostram o ícone e o nome do tipo — **Áudio**,
+    **Foto**, **Vídeo**, **Figurinha**, **Documento**, **Contato**, **Localização** — ou a legenda, quando
+    ela existe. Uma mensagem que o cliente apagou continua sem mostrar o conteúdo, também dentro das
+    respostas que a citaram.
+  - **Tocar na citação leva até a mensagem original.** A conversa rola até ela e a destaca por um instante,
+    como no WhatsApp. (A citação só aparece quando a original está na parte da conversa já carregada.)
+  - **Deslizar a mensagem para a direita responde** — no celular e em qualquer tela de toque. A bolha
+    acompanha o dedo, uma seta aparece atrás dela, e soltar depois de passar do ponto abre a resposta.
+    Rolar a conversa para cima e para baixo não responde por engano, e arrastar a barra do player de áudio
+    continua sendo buscar no áudio.
+
+  Nada para fazer ao atualizar.
+
+### Corrigido
+
+- **Com um aviso no topo (WhatsApp desconectado, modo impersonate), a página não passa mais do tamanho da tela** Quando aparecia a faixa vermelha de "WhatsApp está desconectado" — ou a amarela do modo impersonate —, a tela
+  inteira ganhava uma rolagem de uns 47 pixels a mais. A faixa ocupava o seu espaço no topo e o resto do sistema
+  continuava com a altura da tela inteira, então tudo terminava um pouco abaixo da borda de baixo: o fim de cada
+  página, o campo de escrever mensagem do inbox e a barra de rolagem lateral do quadro do funil ficavam para
+  além do que dava para ver, e a janela rolava para alcançá-los.
+
+  Agora a faixa e o sistema dividem a tela: o sistema fica com o que sobrar embaixo da faixa, seja ela de uma linha
+  (computador) ou de várias (celular, onde o texto quebra). Sem faixa, nada muda.
+
+- **No celular, a barra de cima não embaralha mais — o seletor de organização, a busca e os avisos cabem cada um no seu lugar** Quem usa o sistema em mais de uma organização via, no celular, a barra de cima toda amontoada: o nome da organização
+  passava por cima dos botões de buscar, de conversa da equipe e de avisos, e o texto e os ícones ficavam um sobre o
+  outro. O defeito aparecia em todas as larguras de celular e também em tablet; para quem usa uma organização só,
+  o botão de abrir o menu ficava espremido e, nos celulares mais estreitos, a busca encostava na marca.
+
+  Agora a barra respeita o espaço: o botão do menu mantém o tamanho de toque, o nome da organização aparece
+  (cortado com reticências quando é longo) e nada passa por cima de nada, de 320 pixels de largura até a tela grande.
+
+  Quem usa marca própria (logo da empresa no canto da barra) com um logo largo também ganhou: no celular ele passava por
+  cima do botão de buscar, e agora encolhe para caber.
+
+  O que mudou de lugar para isso caber: **idioma e tema (claro/escuro)** deixaram a barra no celular e no tablet e agora
+  ficam dentro do menu do usuário (toque no círculo com as suas iniciais). No computador continuam na barra, como
+  sempre. E quem tem mais de uma organização, abaixo da tela grande, vê o nome da organização no lugar do selo da Elev
+  — o selo volta nas telas largas.
+
+- **No funil, cada coluna rola sozinha — e arrastar um card até o fim não leva mais a página junto** O quadro do funil tinha dois defeitos que apareciam juntos.
+
+  **A página ia junto.** Dentro do quadro havia texto escondido (o aviso de "etapa de ganho" e "etapa de
+  perda" para leitor de tela) e faixas de cards que escapavam do recorte do quadro e esticavam a janela
+  inteira para o lado. Quem arrastava um card até o fim via a *página* rolar, não o quadro, e sobrava uma
+  parte vazia. O quadro agora recorta o que é dele e a janela fica parada.
+
+  **As colunas desciam todas juntas.** Os cards passavam da borda da coluna e quem rolava era o quadro
+  inteiro. Agora o quadro ocupa só a altura que sobra na tela, o título e o total de cada coluna ficam
+  parados em cima, e cada coluna rola a sua própria lista de cards — ver uma etapa comprida não mexe nas
+  outras. Só a rolagem para os lados continua no quadro.
+
+  Um limite que vale saber: durante o arraste a roda e o trackpad **laterais** ficam travados no quadro,
+  porque a biblioteca de arrastar mede onde cada coluna está uma vez, ao levantar o card, e rolar para o
+  lado no meio do gesto faz o card achar a coluna errada (medido: o mouse sobre "Em separação", a
+  biblioteca dizendo "Aguardando pagamento"). Por isso arrastar para uma etapa que está fora da tela
+  exige rolar o quadro antes de pegar o card; a roda lateral fora do arraste funciona como sempre.
+
 ## [1.19.0] — 2026-10-27
 
 ### Adicionado
@@ -2786,7 +2921,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.19.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.16.0...v1.17.0
