@@ -227,6 +227,13 @@ export const DICIONARIO: Traducoes = {
   Salvar: { es: "Guardar" },
   vazio: { es: "vacío" },
   "Abrir conversa no Inbox": { es: "Abrir conversación en el Inbox" },
+  "Abrir no Inbox": { es: "Abrir en el Inbox" },
+  "Fechar painel do lead": { es: "Cerrar el panel del lead" },
+  "Dados do lead": { es: "Datos del lead" },
+  "Este lead ainda não tem uma conversa.": { es: "Este lead todavía no tiene una conversación." },
+  "Não consegui abrir a conversa. Feche o painel e tente de novo.": {
+    es: "No pude abrir la conversación. Cierra el panel e inténtalo de nuevo.",
+  },
 
   // ─── Contatos ───
   "Buscar contatos…": { es: "Buscar contactos…" },
@@ -353,6 +360,10 @@ export const DICIONARIO: Traducoes = {
   // portugues. Consertar o rotulo pt-BR e mudanca de UX, com PR proprio.
   Close: { es: "Cerrar" },
   "Menu do usuário": { es: "Menú del usuario" },
+  // Idioma e tema dentro do menu do usuário, onde a barra não os comporta (`PreferenciasNoMenu`).
+  Tema: { es: "Tema" },
+  Claro: { es: "Claro" },
+  Escuro: { es: "Oscuro" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
   "em aberto": { es: "abiertos" },
@@ -2154,8 +2165,8 @@ export const DICIONARIO: Traducoes = {
   "Transforma o áudio que o cliente mandou em texto que o agente lê.": {
     es: "Transforma el audio que envió el cliente en texto que el agente lee.",
   },
-  "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Aceita apontar para outro serviço compatível — inclusive um rodando na sua própria máquina — mas exige uma chave desse serviço, separada da chave do modelo de conversa.": {
-    es: "Usa el estándar de transcripción de OpenAI, que es el formato que implementan los servicios del mercado. Acepta apuntar a otro servicio compatible — incluso uno corriendo en tu propia máquina — pero exige una clave de ese servicio, separada de la clave del modelo de conversación.",
+  "Usa o Whisper da OpenAI. Com chave da OpenAI cadastrada, vai direto para ela; sem, e com a OpenRouter, a mesma chave da OpenRouter serve. Com Anthropic ou Google, é preciso uma dessas duas chaves, separada da chave do modelo de conversa.": {
+    es: "Usa el Whisper de OpenAI. Con una clave de OpenAI registrada, va directo a ella; sin ella, y con OpenRouter, la misma clave de OpenRouter sirve. Con Anthropic o Google, hace falta una de esas dos claves, separada de la clave del modelo de conversación.",
   },
   "O cliente manda áudio e o agente responde como se não tivesse recebido nada.": {
     es: "El cliente manda audio y el agente responde como si no hubiera recibido nada.",
@@ -3877,6 +3888,53 @@ export const DICIONARIO: Traducoes = {
   Você: { es: "Tú" },
   Cliente: { es: "Cliente" },
   "(sem texto)": { es: "(sin texto)" },
+  Foto: { es: "Foto" },
+  Anexo: { es: "Adjunto" },
+  Localização: { es: "Ubicación" },
+  "Ir para a mensagem citada": { es: "Ir al mensaje citado" },
+  // ─── Encaminhar mensagens ───
+  Encaminhar: { es: "Reenviar" },
+  Encaminhada: { es: "Reenviado" },
+  "Encaminhar mensagens": { es: "Reenviar mensajes" },
+  "Encaminhar esta mensagem": { es: "Reenviar este mensaje" },
+  "Selecionar mensagem": { es: "Seleccionar mensaje" },
+  "mensagem selecionada": { es: "mensaje seleccionado" },
+  "mensagens selecionadas": { es: "mensajes seleccionados" },
+  "No máximo": { es: "Como máximo" },
+  "mensagens por vez": { es: "mensajes a la vez" },
+  "Escolha para quem enviar. Cada pessoa recebe uma cópia no WhatsApp dela.": {
+    es: "Elige a quién enviar. Cada persona recibe una copia en su WhatsApp.",
+  },
+  "O que vai ser encaminhado": { es: "Qué se va a reenviar" },
+  "O que vai": { es: "Qué va" },
+  "Para quem": { es: "A quién" },
+  "Buscar por nome ou telefone": { es: "Buscar por nombre o teléfono" },
+  "Buscar conversa para encaminhar": { es: "Buscar conversación para reenviar" },
+  "conversas escolhidas": { es: "conversaciones elegidas" },
+  "Não consegui buscar as conversas.": { es: "No pude buscar las conversaciones." },
+  "Conversa atual": { es: "Conversación actual" },
+  "As mensagens são de": { es: "Los mensajes son de" },
+  "e vão chegar ao WhatsApp de": { es: "y llegarán al WhatsApp de" },
+  "Confira antes de enviar.": { es: "Revisa antes de enviar." },
+  "Não consegui encaminhar. Nada foi enviado — tente de novo.": {
+    es: "No pude reenviar. No se envió nada — inténtalo de nuevo.",
+  },
+  "Encaminhado.": { es: "Reenviado." },
+  "Encaminhado só em parte.": { es: "Reenviado solo en parte." },
+  "Nada foi encaminhado.": { es: "No se reenvió nada." },
+  "enviada(s)": { es: "enviada(s)" },
+  "não saiu": { es: "no salió" },
+  "Mensagem apagada não pode ser encaminhada": { es: "Un mensaje eliminado no se puede reenviar" },
+  "Mensagem que não chegou a ser enviada não pode ser encaminhada": {
+    es: "Un mensaje que no llegó a enviarse no se puede reenviar",
+  },
+  "Este tipo de mensagem ainda não pode ser encaminhado": {
+    es: "Este tipo de mensaje todavía no se puede reenviar",
+  },
+  "O arquivo desta mensagem não está disponível para encaminhar": {
+    es: "El archivo de este mensaje no está disponible para reenviar",
+  },
+  "Mensagem sem conteúdo": { es: "Mensaje sin contenido" },
   "Cancelar resposta": { es: "Cancelar respuesta" },
   // ─── Saúde do canal (bolinha da barra superior + estado do canal) ───
   "Todas as conexões ativas": { es: "Todas las conexiones activas" },
@@ -4207,6 +4265,11 @@ export const DICIONARIO: Traducoes = {
   "Reproduzir áudio": { es: "Reproducir audio" },
   "Progresso do áudio": { es: "Progreso del audio" },
   "Velocidade de reprodução": { es: "Velocidad de reproducción" },
+  "Ver texto": { es: "Ver texto" },
+  "Ocultar texto": { es: "Ocultar texto" },
+  "Transcrevendo…": { es: "Transcribiendo…" },
+  "Não foi possível transcrever este áudio.": { es: "No fue posible transcribir este audio." },
+  "Não identifiquei fala neste áudio.": { es: "No identifiqué voz en este audio." },
   "Ampliar imagem": { es: "Ampliar imagen" },
   "Imagem recebida": { es: "Imagen recibida" },
   Baixar: { es: "Descargar" },

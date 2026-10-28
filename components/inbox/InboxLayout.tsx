@@ -1,11 +1,8 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/auth/AuthProvider";
-import { estadoDaJanela, formatarDecorrido } from "@/lib/channels/janela";
-import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
-import { useMarkAsRead } from "@/hooks/inbox/useMarkAsRead";
 import {
   useConversationsRealtime,
   type ConversationsFilters,
@@ -14,12 +11,8 @@ import {
 import { useConversation, isNotFound } from "@/hooks/inbox/useConversation";
 import { ConversationList } from "./ConversationList";
 import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilters";
-import { ChatThread } from "./ChatThread";
-import { Composer, type ComposerHandle } from "./Composer";
-import { ConversationHeader } from "./ConversationHeader";
-import { RetentionNotice } from "./RetentionNotice";
+import { ConversaAberta } from "./ConversaAberta";
 import { CRMSidePanel } from "./CRMSidePanel";
-import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 
 import { OpenConversationProvider } from "@/hooks/notifications/OpenConversationContext";
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
@@ -120,7 +113,7 @@ interface InboxLayoutProps {
 
 export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {}) {
   const t = useT();
-  const { activeOrg, user } = useAuth();
+  const { activeOrg } = useAuth();
   const orgId = activeOrg?.orgId ?? null;
 
   const router = useRouter();
@@ -150,13 +143,8 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   /** A ficha do contato como painel deslizante — só existe abaixo do `xl`. */
   const [fichaAberta, setFichaAberta] = useState(false);
-  /**
-   * A mensagem escolhida para responder "em cima".
-   *
-   * Mora aqui, e não no composer, porque quem ESCOLHE é a lista de mensagens e
-   * quem MOSTRA é o composer — são irmãos, e o estado comum é do pai.
-   */
-  const [respondendo, setRespondendo] = useState<ConversationMensagem | null>(null);
+  // A mensagem escolhida para responder "em cima" mora em `ConversaAberta`, junto
+  // do composer que a mostra — e some sozinha ao trocar de conversa (a `key`).
 
   /**
    * A ORG tem automático de pé? Sobe para cá porque agora é a ABA que precisa —
@@ -169,7 +157,6 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
    * discorda do filtro, porque os dois usam a mesma convenção.
    */
   const { data: automaticoDaOrg } = useAutomaticoAtivo();
-  const composerRef = useRef<ComposerHandle | null>(null);
 
   const filters: ConversationsFilters = useMemo(
     () => ({
@@ -216,13 +203,6 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
 
   const colunas = colunasDoCelular(Boolean(selectedId));
 
-  // A leitura da conversa aberta é do upstream e fica: sem ela o contador de
-  // não-lidas nunca zera para quem abre a conversa.
-  useMarkAsRead(
-    selectedConversation?.id ?? null,
-    selectedConversation?.unread_count_for_assignee ?? 0,
-  );
-
   // Aceita `null`: é o VOLTAR do celular, que limpa a seleção e devolve a lista.
   // É um SUPERCONJUNTO do `handleSelect` do upstream — o tipo dele não aceita
   // `null`, e sem isso o botão de voltar não teria o que chamar.
@@ -233,9 +213,6 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // conversa, que hoje entra por `initialSelectedId` vindo da rota.
   const handleSelect = useCallback((id: string | null) => {
     setSelectedId(id);
-    // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
-    // a citação junto — e a resposta sairia citando mensagem de outro cliente.
-    setRespondendo(null);
   }, []);
   // `handleClaim` e `handleClose` viviam aqui e SÓ os atalhos de tecla os
   // chamavam. Assumir e arquivar continuam existindo — pelos botões do
@@ -243,41 +220,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // `useCloseConversation`. Manter as duas copias mortas aqui seria deixar duas
   // réguas para a mesma ação, esperando divergir.
 
-  // A janela vence SOZINHA com a aba aberta. Sem este relógio, quem deixa o
-  // inbox aberto a tarde inteira seguiria com o composer liberado numa conversa
-  // que já venceu — e o bloqueio só apareceria no próximo recarregamento.
-  const [agoraJanela, setAgoraJanela] = useState(() => new Date());
-  useEffect(() => {
-    const t = setInterval(() => setAgoraJanela(new Date()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  // A janela de 24h fecha o composer, e o motivo DIZ há quanto tempo fechou.
-  //
-  // Antes disto o texto livre saía, o CRM marcava `failed` e o operador via um
-  // `131047` — descobrindo a regra pelo erro, uma mensagem por vez. Barrar aqui
-  // é o pedido explícito do dono: se não dá para enviar, que não deixe tentar.
-  //
-  // Reusa o `blockedReason` que já existe (contato bloqueado/anonimizado) em vez
-  // de um segundo mecanismo de bloqueio: dois caminhos para desabilitar o mesmo
-  // composer divergem, e o segundo esquece de cobrir o áudio ou o anexo.
-  const janela = estadoDaJanela(
-    selectedConversation?.channel_sessions?.provider ?? null,
-    selectedConversation?.last_inbound_at ?? null,
-    agoraJanela,
-  );
-  const motivoDaJanela =
-    janela.tipo === "fechada"
-      ? janela.fechadaHaMs === null
-        ? t("O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.")
-        : `${t("A janela de 24h fechou há")} ${formatarDecorrido(janela.fechadaHaMs)}. ${t("Só um modelo aprovado sai daqui — texto livre é recusado pela plataforma.")}`
-      : null;
-
-  const blockedReason = selectedConversation?.contacts?.is_blocked
-    ? t("Contato bloqueado — envio de mensagens desabilitado.")
-    : selectedConversation?.contacts?.is_anonymized
-      ? t("Contato anonimizado — não é possível enviar mensagens.")
-      : null;
+  // A janela de 24h (e o relógio que a faz vencer sozinha com a aba aberta), o
+  // contato bloqueado e a leitura da conversa moram em `ConversaAberta`: o funil
+  // abre a MESMA conversa, e as duas telas não podem ter réguas diferentes.
 
   // A GRADE OCUPA A TELA INTEIRA ABAIXO DA BARRA — de borda a borda.
   //
@@ -294,6 +239,14 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   //
   // `dvh` em vez de `vh` porque no celular a `vh` ignora a barra do navegador — o
   // mesmo corte, só que pior e mudando conforme se rola a página.
+  //
+  // `max-h-full` é o que desconta o AVISO (impersonate, conexão caída), que divide
+  // os `100dvh` com a casca (`app/app/layout.tsx`): a casca encolhe pela altura
+  // dele, e a conta acima não sabe que ele existe — sem o teto o composer nascia
+  // 47px abaixo do fim do `main`. O teto é a altura que SOBROU ao `main`; sem
+  // aviso ele é igual à conta e não muda nada: a conta da barra segue valendo, e
+  // o teto só entra em ação quando há um aviso em cima. Medido (1920x990, aviso de
+  // 47px): sem o teto a grade terminava em 1037 e o `main`, em 990.
 
   // TRÊS COLUNAS QUE CABEM — medido, não estimado.
   //
@@ -312,7 +265,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     <OpenConversationProvider conversationId={selectedId}>
     <div
       data-tela-cheia=""
-      className="grid h-[calc(100dvh-3.5rem)] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_320px] 2xl:grid-cols-[340px_1fr_340px]"
+      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_320px] 2xl:grid-cols-[340px_1fr_340px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -420,32 +373,8 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
           </div>
         )}
         {selectedConversation ? (
-          <>
-            <ConversationHeader conversation={selectedConversation} />
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <ChatThread conversationId={selectedConversation.id} onResponder={setRespondendo} />
-            </div>
-            <RetentionNotice conversationId={selectedConversation.id} />
-            {motivoDaJanela && (
-              <JanelaFechadaAviso
-                conversationId={selectedConversation.id}
-                provider={selectedConversation.channel_sessions?.provider ?? null}
-                motivo={motivoDaJanela}
-              />
-            )}
-            <Composer
-              ref={composerRef}
-              conversationId={selectedConversation.id}
-              blockedReason={blockedReason}
-              janelaFechada={motivoDaJanela}
-              disabled={selectedConversation.status === "closed"}
-              contactName={selectedConversation.contacts?.name ?? null}
-              attendantName={user.full_name}
-              respondendo={respondendo}
-              onCancelarResposta={() => setRespondendo(null)}
-              currentContactId={selectedConversation.contact_id}
-            />
-          </>
+          // `key`: trocar de conversa REMONTA, e a citação escolhida não vai junto.
+          <ConversaAberta key={selectedConversation.id} conversation={selectedConversation} />
         ) : selectionNotFound ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
             {t("Conversa não encontrada ou fora do seu acesso.")}

@@ -119,6 +119,18 @@ export const sendMessageSchema = z
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
+/**
+ * Encaminhar mensagens de UMA conversa para até 5 outras. Os tetos moram em
+ * `lib/messaging/encaminhar.ts` (`MAX_*`) — aqui só o formato; a conferência dos números e das
+ * duplicatas é de `validarPedido`, que roda antes de qualquer envio.
+ */
+export const forwardMessagesSchema = z.object({
+  message_ids: z.array(z.string().uuid()).min(1).max(20),
+  destination_conversation_ids: z.array(z.string().uuid()).min(1).max(20),
+});
+
+export type ForwardMessagesInput = z.infer<typeof forwardMessagesSchema>;
+
 export const claimConversationSchema = z.object({
   expected_assignee: z.string().uuid().nullable().optional(),
 });

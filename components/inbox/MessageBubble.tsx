@@ -3,7 +3,10 @@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, Check, Checks, Robot, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, Check, Checks, Robot, ShareFat, WarningOctagon } from "@/lib/ui/icons";
+import { useDeslizarParaResponder } from "@/hooks/inbox/useDeslizarParaResponder";
+import { foiEncaminhada, podeEncaminhar } from "@/lib/messaging/encaminhar";
+import { CitacaoResumo } from "@/components/inbox/CitacaoResumo";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/types/messaging";
@@ -23,6 +26,20 @@ interface Props {
   /** A mensagem citada por ESTA, quando houver — desenha o fio. */
   citada?: Message | null;
   /**
+   * Tocar na citação leva até a mensagem ORIGINAL (rola o fio e a destaca). Sem isto a citação é só
+   * texto: não vira botão, para não prometer um clique que não faz nada.
+   */
+  onIrParaMensagem?: (id: string) => void;
+  /** Esta bolha acabou de ser o destino de um "ir para a citada": pisca para o olho achá-la. */
+  destacada?: boolean;
+  /** Começar a ENCAMINHAR a partir desta mensagem (botão ao passar o mouse; toque longo no celular). */
+  onEncaminhar?: (m: Message) => void;
+  /**
+   * Modo de seleção (encaminhar): a bolha ganha a caixa de marcar e tocar nela alterna a marca. Fora
+   * dele (`undefined`) nada muda. `motivo` diz por que uma mensagem não pode ser marcada.
+   */
+  selecao?: { marcada: boolean; podeMarcar: boolean; motivo?: string; aoAlternar: () => void };
+  /**
    * Esta bolha ABRE um bloco de falas seguidas do mesmo lado?
    *
    * Só a primeira leva rabinho. É assim no WhatsApp e não é enfeite: o rabinho
@@ -33,6 +50,56 @@ interface Props {
    * seu bloco — assim quem renderiza uma sozinha não precisa saber desta regra.
    */
   primeiraDoGrupo?: boolean;
+}
+
+/**
+ * A CITAÇÃO, dentro da bolha e acima do texto — o fio.
+ *
+ * Mostra de quem era e um resumo (`CitacaoResumo`: a legenda, ou o ícone e o nome do tipo para áudio,
+ * foto, vídeo…). `line-clamp-2` porque serve para reconhecer, não para reler: a original está no
+ * histórico. Quando `aoIr` existe, tocar nela rola até a original e a destaca.
+ *
+ * A CITADA PODE TER SIDO APAGADA — e aí o texto dela não volta aqui. A bolha principal já trata isto:
+ * "mostrá-lo seria expor justamente o que o cliente pediu para tirar do ar". A citação é o mesmo texto
+ * num segundo lugar da tela; sem essa regra, o "apagar para todos" do cliente sumia da bolha original e
+ * continuava legível dentro de cada resposta que a citou (a regra mora em `resumoDaCitacao`).
+ */
+function CitacaoNaBolha({
+  citada,
+  isOutbound,
+  aoIr,
+  rotuloDoAutor,
+  rotuloDoBotao,
+}: {
+  citada: Message;
+  isOutbound: boolean;
+  aoIr?: (id: string) => void;
+  rotuloDoAutor: string;
+  rotuloDoBotao: string;
+}) {
+  const classes = cn(
+    "mb-1 block w-full rounded-md border-l-2 px-2 py-1 text-left text-xs",
+    isOutbound
+      ? "border-[var(--chat-out-fg)]/50 bg-[var(--chat-out-fg)]/10"
+      : "border-[var(--chat-out)] bg-black/[0.04] dark:bg-white/[0.06]",
+    aoIr && "cursor-pointer transition-colors hover:bg-black/[0.08] focus-visible:outline-2 focus-visible:outline-ring dark:hover:bg-white/[0.1]",
+  );
+  const conteudo = (
+    <>
+      <span className="block font-medium opacity-80">{rotuloDoAutor}</span>
+      <CitacaoResumo mensagem={citada} className="opacity-70" />
+    </>
+  );
+  return aoIr ? (
+    // O nome acessível é o TEXTO da citação precedido da ação — um `aria-label` o substituiria, e quem
+    // usa leitor de tela perderia justamente o que está sendo citado.
+    <button type="button" className={classes} onClick={() => aoIr(citada.id)}>
+      <span className="sr-only">{rotuloDoBotao}: </span>
+      {conteudo}
+    </button>
+  ) : (
+    <div className={classes}>{conteudo}</div>
+  );
 }
 
 function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
@@ -53,11 +120,43 @@ export function MessageBubble({
   debugCitations,
   onResponder,
   citada,
+  onIrParaMensagem,
+  destacada,
+  onEncaminhar,
+  selecao,
   primeiraDoGrupo = true,
 }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const isOutbound = message.direction === "outbound";
+  // Em seleção, a bolha só marca: responder e começar outro encaminhamento ficam de fora (os botões e
+  // os gestos), senão tocar para marcar poderia abrir uma resposta.
+  const emSelecao = Boolean(selecao);
+  const responderDisponivel = Boolean(onResponder) && !emSelecao;
+  const podeComecarAEncaminhar = Boolean(onEncaminhar) && !emSelecao && podeEncaminhar(message).ok;
+  // Deslizar a mensagem para o lado responde, e segurá-la começa a encaminhar — como no WhatsApp do
+  // celular. Só com toque; sem os callbacks (telas que não respondem) os gestos nem existem.
+  const gesto = useDeslizarParaResponder(
+    responderDisponivel ? () => onResponder!(message) : undefined,
+    podeComecarAEncaminhar ? () => onEncaminhar!(message) : undefined,
+  );
+  // Encaminhar pelo mouse: um botão ao lado do de responder. No toque ele não aparece (o toque longo é o
+  // caminho): dois ícones por bolha num telefone espremeriam o texto.
+  const botaoEncaminhar = podeComecarAEncaminhar ? (
+    <button
+      type="button"
+      onClick={() => onEncaminhar!(message)}
+      aria-label={t("Encaminhar esta mensagem")}
+      className={cn(
+        "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-muted",
+        // `hover:` do Tailwind já só vale onde existe hover; no toque o botão nem aparece (o toque longo é o caminho).
+        "[@media(hover:none)]:hidden",
+        "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+      )}
+    >
+      <ShareFat size={14} />
+    </button>
+  ) : null;
   const time = format(new Date(message.sent_at), "HH:mm", { locale: localeDaData });
   const isFailed = message.status === "failed";
   const hasMedia = Boolean(message.media_url || message.media_storage_path);
@@ -104,8 +203,28 @@ export function MessageBubble({
 
   return (
     <div
+      // É por este atributo que "ir para a citada" acha a bolha no fio.
+      data-mensagem-id={message.id}
+      {...gesto.props}
+      style={gesto.style}
+      // Em seleção, tocar em qualquer lugar da linha alterna a marca — menos nos controles de dentro (o
+      // player de áudio, a citação, "Ver texto"), que continuam fazendo o que fazem.
+      onClick={
+        selecao
+          ? (e) => {
+              if ((e.target as HTMLElement).closest("button, a, input, audio, video")) return;
+              if (selecao.podeMarcar) selecao.aoAlternar();
+            }
+          : undefined
+      }
       className={cn(
-        "group flex w-full items-center gap-1 px-4",
+        "group relative flex w-full items-center gap-1 px-4",
+        // Destino de "ir para a citada": a linha inteira tinge e volta, como no WhatsApp.
+        "transition-colors duration-700",
+        destacada && "bg-primary/15",
+        // Em seleção: a caixa mora na margem esquerda (a linha ganha folga para ela) e a marcada tinge.
+        selecao && "cursor-pointer pl-9",
+        selecao?.marcada && "bg-primary/10",
         // O ESPAÇAMENTO CONTA A MESMA HISTÓRIA QUE O RABINHO: dentro de um
         // bloco as bolhas quase se encostam; entre blocos abre. É o que faz
         // "três mensagens seguidas do cliente" ser lido como um turno de fala,
@@ -117,6 +236,30 @@ export function MessageBubble({
         isOutbound ? "justify-end" : "justify-start",
       )}
     >
+      {selecao && (
+        <input
+          type="checkbox"
+          className="absolute left-3 top-1/2 size-4 -translate-y-1/2 accent-primary"
+          checked={selecao.marcada}
+          disabled={!selecao.podeMarcar}
+          onChange={selecao.aoAlternar}
+          aria-label={t("Selecionar mensagem")}
+          title={selecao.motivo}
+        />
+      )}
+      {/* A dica do gesto: a seta aparece de trás da bolha conforme ela anda, e fica cheia quando
+          soltar já vale como "responder". Só existe durante o deslize. */}
+      {gesto.progresso > 0 && (
+        <span
+          aria-hidden
+          // `-left-9`: FORA da linha, à esquerda dela. A linha inteira anda para a direita junto com a
+          // bolha, então a seta, presa a ela, sai de trás da borda da tela e entra à vista.
+          className="pointer-events-none absolute -left-9 top-1/2 flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground"
+          style={{ opacity: gesto.progresso, transform: `translateY(-50%) scale(${0.6 + 0.4 * gesto.progresso})` }}
+        >
+          <ArrowBendUpLeft size={14} />
+        </span>
+      )}
       {/*
         RESPONDER — aparece ao passar o mouse, como no WhatsApp Web.
         Fica FORA da bolha para não disputar espaço com o texto, e do lado de
@@ -127,10 +270,11 @@ export function MessageBubble({
         quando o mouse entra. Em telas de toque não há hover — por isso
         `focus-visible` também revela, e o teclado alcança.
       */}
-      {onResponder && isOutbound && (
+      {isOutbound && botaoEncaminhar}
+      {responderDisponivel && isOutbound && (
         <button
           type="button"
-          onClick={() => onResponder(message)}
+          onClick={() => onResponder!(message)}
           aria-label={t("Responder a esta mensagem")}
           className={cn(
             "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-muted",
@@ -190,34 +334,24 @@ export function MessageBubble({
           Mostra de quem era e um trecho. `line-clamp-2` porque serve para
           reconhecer, não para reler: a original está logo acima no histórico.
         */}
+        {/* "Encaminhada": esta mensagem veio de outra conversa. A marca é do CRM (o cliente recebe uma
+            cópia comum) e serve a quem atende: saber que o que lê não foi dito ali. */}
+        {foiEncaminhada(message.metadata) && (
+          <span className="mb-0.5 flex items-center gap-1 text-[11px] italic opacity-70">
+            <ShareFat size={11} aria-hidden />
+            {t("Encaminhada")}
+          </span>
+        )}
         {citada && (
-          <div
-            className={cn(
-              "mb-1 rounded-md border-l-2 px-2 py-1 text-xs",
-              isOutbound
-                ? "border-[var(--chat-out-fg)]/50 bg-[var(--chat-out-fg)]/10"
-                : "border-[var(--chat-out)] bg-black/[0.04] dark:bg-white/[0.06]",
-            )}
-          >
-            <div className="font-medium opacity-80">
-              {citada.direction === "outbound" ? t("Você") : t("Cliente")}
-            </div>
-            {/*
-              A CITADA PODE TER SIDO APAGADA — e aí o texto dela não volta aqui.
-
-              A bolha principal já trata isto (`apagada`, acima): "mostrá-lo
-              seria expor justamente o que o cliente pediu para tirar do ar". A
-              citação é o mesmo texto, num segundo lugar da tela — sem esta
-              linha, o "apagar para todos" do cliente sumia da bolha original e
-              continuava legível dentro de cada resposta que a citou. O fio
-              permanece (a citação some, não a resposta); o conteúdo, não.
-            */}
-            <div className={cn("line-clamp-2 opacity-70", citada.revoked_at && "italic")}>
-              {citada.revoked_at
-                ? t("Esta mensagem foi apagada")
-                : citada.body?.trim() || t("(sem texto)")}
-            </div>
-          </div>
+          // Botão só quando há para onde ir: sem `onIrParaMensagem` a citação é só texto, e um botão
+          // que não faz nada é pior que nenhum.
+          <CitacaoNaBolha
+            citada={citada}
+            isOutbound={isOutbound}
+            aoIr={onIrParaMensagem}
+            rotuloDoAutor={citada.direction === "outbound" ? t("Você") : t("Cliente")}
+            rotuloDoBotao={t("Ir para a mensagem citada")}
+          />
         )}
         {/*
           O nome de quem falou, só na PRIMEIRA bolha do bloco.
@@ -330,10 +464,10 @@ export function MessageBubble({
           )}
         </div>
       </div>
-      {onResponder && !isOutbound && (
+      {responderDisponivel && !isOutbound && (
         <button
           type="button"
-          onClick={() => onResponder(message)}
+          onClick={() => onResponder!(message)}
           aria-label={t("Responder a esta mensagem")}
           className={cn(
             "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-muted",
@@ -355,6 +489,7 @@ export function MessageBubble({
           <ArrowBendUpLeft size={14} />
         </button>
       )}
+      {!isOutbound && botaoEncaminhar}
     </div>
   );
 }

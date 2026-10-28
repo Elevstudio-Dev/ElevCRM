@@ -12,6 +12,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { PreferenciasNoMenu } from "@/components/shell/PreferenciasNoMenu";
 import { SeletorDeIdioma } from "@/components/shell/SeletorDeIdioma";
 import { PontoDeVersaoNova, VersaoNoMenu } from "@/components/shell/VersaoNoMenu";
 import { useT } from "@/hooks/i18n/useT";
@@ -32,8 +33,13 @@ export function UserMenu() {
 
   return (
     <div className="flex items-center gap-2">
-      <SeletorDeIdioma />
-      <ThemeToggle />
+      {/* Abaixo de `lg` a barra não comporta os dois (eram 96px de 351 no celular) e eles moram
+          no menu abaixo — `PreferenciasNoMenu`. O `ThemeToggle` continua montado, escondido: é ele
+          quem registra o atalho Cmd+Shift+L, que não deve sumir junto com o botão. */}
+      <div className="hidden items-center gap-2 lg:flex">
+        <SeletorDeIdioma />
+        <ThemeToggle />
+      </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="relative rounded-full" aria-label={t("Menu do usuário")}>
@@ -52,6 +58,7 @@ export function UserMenu() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <PreferenciasNoMenu />
           <DropdownMenuItem disabled={isPending} onClick={() => startTransition(async () => { await signOut(); })}>
             <SignOut size={16} className="mr-2" aria-hidden />
             {t("Sair")}

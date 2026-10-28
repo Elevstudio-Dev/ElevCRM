@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { useT } from "@/hooks/i18n/useT";
 import { Card } from "@/components/ui/card";
@@ -13,8 +13,6 @@ import { midpoint } from "@/lib/kanban/fractional-indexing";
 import type { Lead } from "@/lib/types/leads";
 import type { Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
-import { LeadDossier } from "./LeadDossier";
-import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 
 interface KanbanBoardProps {
   pipelineId: string;
@@ -33,8 +31,13 @@ interface KanbanBoardProps {
    */
   pulses?: Map<string, number>;
   onSelectionChange?: (ids: string[]) => void;
-  /** Lead a abrir já na montagem (deep link `?lead=` — ver o dossiê abaixo). */
-  leadInicial?: string | null;
+  /**
+   * O lead cujo painel está aberto. O painel mora na PÁGINA, e não aqui: ele ocupa a altura toda ao
+   * lado do título, dos filtros e do quadro, e só a página enxerga os três. O quadro só sabe qual card
+   * destacar e a quem avisar quando um é clicado.
+   */
+  leadAbertoId?: string | null;
+  onAbrirLead?: (leadId: string) => void;
 }
 
 function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> {
@@ -77,7 +80,8 @@ export function KanbanBoard({
   selectedIds,
   pulses: pulsesProp,
   onSelectionChange,
-  leadInicial,
+  leadAbertoId,
+  onAbrirLead,
 }: KanbanBoardProps) {
   const t = useT();
   const useExternal = stagesProp !== undefined && leadsProp !== undefined;
@@ -117,14 +121,6 @@ export function KanbanBoard({
     return Array.isArray(raw) ? raw.filter((t): t is string => typeof t === "string") : [];
   }, [pipelineProp, queryResult.data?.pipeline]);
 
-  // O dossiê é do BOARD e não da página: ele precisa do lead inteiro e do nome
-  // do estágio, que só existem aqui depois do agrupamento.
-  //
-  // `leadInicial` é o deep link: até aqui o dossiê SÓ abria por clique, então
-  // nenhuma outra tela do produto conseguia apontar para um lead específico —
-  // o histórico de captação tinha o id e nenhum lugar para levá-lo. Uma vez
-  // aberto, o estado local manda (fechar não reabre pela URL).
-  const [dossieId, setDossieId] = useState<string | null>(leadInicial ?? null);
   const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
   const selectedLeadIds = useMemo(
     () => (selectedIds ? new Set(selectedIds) : internalSelected),
@@ -141,10 +137,6 @@ export function KanbanBoard({
   const isLoading = useExternal ? false : queryResult.isLoading;
   const isError = useExternal ? false : queryResult.isError;
   const error = useExternal ? null : queryResult.error;
-
-  const leadDoDossie = dossieId
-    ? (data?.leads.find((l) => l.id === dossieId) ?? null)
-    : null;
 
   const grouped = useMemo(() => {
     if (!data) return null;
@@ -172,8 +164,34 @@ export function KanbanBoard({
     [onSelectionChange, selectedLeadIds],
   );
 
+  // ROLAGEM LATERAL TRAVADA ENQUANTO UM CARD É ARRASTADO. A biblioteca de arrastar mede onde cada
+  // coluna está UMA vez, ao levantar o card, e só acompanha a rolagem da lista de cada coluna (que é
+  // o contêiner de rolagem dela) — rolagem aninhada ela documenta como não suportada. Se o quadro
+  // andar para os lados no meio do arraste, o card continua "achando" a coluna que estava ali antes:
+  // medido (Chromium, mouse real): depois de rolar 664px o mouse estava sobre "Em separação" e a
+  // biblioteca seguia dizendo "Aguardando pagamento" — soltar ali moveria o lead para a etapa errada.
+  // Roda e trackpad são o único caminho que sobra durante um arraste (o mouse está ocupado, e o
+  // teclado a própria biblioteca já filtra), então é só eles que se travam. A rolagem VERTICAL da
+  // coluna continua livre: essa a biblioteca acompanha.
+  const arrastando = useRef(false);
+  const desligaTravaLateral = useRef<(() => void) | null>(null);
+  const aoMontarQuadro = useCallback((el: HTMLDivElement | null) => {
+    desligaTravaLateral.current?.();
+    desligaTravaLateral.current = null;
+    if (!el) return;
+    const trava = (e: WheelEvent) => {
+      if (arrastando.current && (e.deltaX !== 0 || e.shiftKey)) e.preventDefault();
+    };
+    // Não-passivo de propósito: `preventDefault` num ouvinte passivo é ignorado em silêncio.
+    el.addEventListener("wheel", trava, { passive: false });
+    desligaTravaLateral.current = () => el.removeEventListener("wheel", trava);
+  }, []);
+
   const handleDragEnd = useCallback(
     (result: DropResult) => {
+      // Todo fim de arraste passa aqui — soltar, cancelar com Esc, soltar fora. Destravar ANTES dos
+      // retornos antecipados abaixo, senão cancelar deixaria o quadro travado até o próximo arraste.
+      arrastando.current = false;
       if (!data || !grouped) return;
       const { source, destination, draggableId } = result;
       if (!destination) return;
@@ -246,8 +264,28 @@ export function KanbanBoard({
   }
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex h-full gap-3 overflow-x-auto p-4">
+    <DragDropContext
+      onDragStart={() => {
+        arrastando.current = true;
+      }}
+      onDragEnd={handleDragEnd}
+    >
+      {/* O QUADRO É A ALTURA QUE SOBRA NA TELA, e só rola para os lados. Antes era `h-full` — 100% da
+          página, que já gastou uma parte com título e filtros — e as colunas não tinham teto: os
+          cards passavam da borda da coluna e quem rolava era o quadro inteiro, todas as colunas
+          juntas. `flex-1 min-h-0` faz o quadro ocupar exatamente o resto; `overflow-y-hidden`
+          garante que a rolagem vertical mora em cada coluna (ver StageColumn), não aqui.
+
+          `relative` NÃO é enfeite: um filho `position: absolute` só é recortado pelo `overflow` do quadro
+          se o quadro (ou algo entre os dois) for o bloco de contenção dele. Sem isto, o texto `sr-only`
+          da etapa de ganho/perda e as faixas dos cards escapavam do quadro e esticavam o DOCUMENTO em
+          milhares de pixels para a direita — a janela ganhava rolagem horizontal e, ao arrastar um card
+          para o fim, quem rolava era a PÁGINA INTEIRA, deixando um pedaço vazio. */}
+      <div
+        ref={aoMontarQuadro}
+        data-testid="quadro-do-funil"
+        className="relative flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden p-4"
+      >
         {data.stages.map((stage) => (
           <StageColumn
             key={stage.id}
@@ -262,24 +300,12 @@ export function KanbanBoard({
             pulses={pulsesProp ?? queryResult.pulses}
             canonicalTags={canonicalTags}
             selectedLeadIds={selectedLeadIds}
+            abertoId={leadAbertoId ?? null}
             onSelect={handleSelect}
-            onOpen={setDossieId}
+            onOpen={onAbrirLead}
           />
         ))}
       </div>
-      {leadDoDossie && (
-        <LeadDossier
-          open
-          onOpenChange={(v: boolean) => !v && setDossieId(null)}
-          lead={leadDoDossie}
-          pipelineId={pipelineId}
-          fieldDefs={camposDoFunil(data.pipeline.settings ?? null)}
-          stageName={
-            data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
-          }
-          ownerNames={ownerNames}
-        />
-      )}
     </DragDropContext>
   );
 }

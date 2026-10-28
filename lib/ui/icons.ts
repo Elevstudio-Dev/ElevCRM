@@ -96,6 +96,10 @@ export {
   MusicNote,
   Note,
   FileText,
+  // citação de vídeo (o resumo da mensagem citada mostra o ícone do tipo)
+  VideoCamera,
+  // encaminhar mensagens (a seta do WhatsApp)
+  ShareFat,
   Lock,
   Receipt,
   Tag,

@@ -177,16 +177,40 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       */}
       <div data-marca-org="" className="contents">
         <EstiloDaMarcaDaOrganizacao css={cssDaOrganizacao} />
-        <ImpersonateBanner impersonating={impersonating} />
-        <ConexaoCaidaBanner caidas={conexoesCaidas} />
-        {needsMfaGate ? (
-          // Gate always mounted for MFA-required roles; it latches the blocking
-          // decision client-side so the enroll Server Action's revalidation
-          // can't tear down the recovery-codes screen mid-flow.
-          <MfaEnrollGate enrolled={enrolled}>{shell}</MfaEnrollGate>
-        ) : (
-          shell
-        )}
+        {/*
+          A COLUNA DA TELA: os avisos e a casca dividem os `100dvh` — nenhum
+          dos dois cresce além dele.
+
+          Os avisos são irmãos ACIMA da casca, e a raiz da casca (`AppShell`) é
+          `h-dvh`. Soltos numa página sem altura, eles somavam: o aviso ocupava
+          ~47px e a casca, que começava embaixo dele, terminava 47px abaixo da
+          tela. Medido (1920x990): `scrollHeight` 1037 contra `innerHeight` 990 —
+          o fim de toda página, e a barra de rolagem lateral do quadro do funil,
+          ficavam além da dobra, e a janela rolava 47px. Sem aviso, 990 = 990.
+
+          Aqui a altura é DEFINIDA (`h-dvh`) e a soma é feita pelo próprio CSS:
+          o aviso fica com a altura que tem (`shrink-0`, e ele pode quebrar em
+          duas linhas no celular — um número fixo não acompanharia) e a casca
+          encolhe o que sobrar (`min-h-0` na raiz dela). Sem aviso, a casca ocupa
+          a coluna inteira e nada muda. Nada para medir, nada para piscar: não há
+          variável CSS que o servidor pinte com 0 e o navegador corrija depois.
+
+          Fica DENTRO do marcador `contents` (o teste da marca exige o literal) e
+          os avisos continuam FORA do `MfaEnrollGate`: o impersonate não pode
+          sumir enquanto o gate de MFA bloqueia.
+        */}
+        <div className="flex h-dvh w-full flex-col">
+          <ImpersonateBanner impersonating={impersonating} />
+          <ConexaoCaidaBanner caidas={conexoesCaidas} />
+          {needsMfaGate ? (
+            // Gate always mounted for MFA-required roles; it latches the blocking
+            // decision client-side so the enroll Server Action's revalidation
+            // can't tear down the recovery-codes screen mid-flow.
+            <MfaEnrollGate enrolled={enrolled}>{shell}</MfaEnrollGate>
+          ) : (
+            shell
+          )}
+        </div>
       </div>
     </AuthProvider>
     </IdiomaProvider>

@@ -20,6 +20,8 @@ interface KanbanCardProps {
   index: number;
   pipelineId: string;
   isSelected?: boolean;
+  /** O painel deste lead está aberto ao lado: o card se destaca, para saber de quem é a conversa. */
+  isOpen?: boolean;
   /**
    * Contador de pulsos deste card (evento REMOTO). Muda a cada evento novo — é
    * a MUDANÇA que remonta o overlay e reinicia a animação; um booleano deixaria
@@ -62,6 +64,7 @@ export function KanbanCard({
   index,
   pipelineId,
   isSelected,
+  isOpen,
   pulseCount = 0,
   onSelect,
   onOpen,
@@ -105,6 +108,8 @@ export function KanbanCard({
             "hover:border-border-strong",
             snapshot.isDragging && "rotate-1 shadow-md ring-1 ring-accent/40",
             isSelected && "ring-2 ring-accent",
+            // O aberto ao lado: borda e anel na cor de ação, mais discretos que a seleção múltipla.
+            isOpen && !isSelected && "border-primary ring-1 ring-primary/40",
           )}
         >
           {/* key = contador: cada evento remoto monta um overlay NOVO, e é isso

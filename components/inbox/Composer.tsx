@@ -14,6 +14,7 @@ import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
 import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
+import { CitacaoResumo } from "@/components/inbox/CitacaoResumo";
 import { DraftReplyButton } from "@/components/inbox/composer/DraftReplyButton";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
 import { PreencherParametrosDialog } from "@/components/inbox/composer/PreencherParametrosDialog";
@@ -24,6 +25,7 @@ import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
+import type { Message } from "@/lib/types/messaging";
 import {
   extrairParametros,
   precisaDeJanela,
@@ -57,7 +59,10 @@ interface Props {
    * Vem de fora e não daqui porque quem escolhe é a lista de mensagens: o
    * composer só precisa mostrar o que foi escolhido e mandá-lo junto.
    */
-  respondendo?: { id: string; body: string | null; direction: string } | null;
+  respondendo?: Pick<
+    Message,
+    "id" | "body" | "direction" | "type" | "revoked_at" | "media_url" | "media_storage_path"
+  > | null;
   /** Desfaz a escolha — o `x` da faixa de citação. */
   onCancelarResposta?: () => void;
   /** Nome do contato da conversa — preenche {{nome}}/{{primeiro_nome}} da mensagem pronta. */
@@ -310,9 +315,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               <div className="text-[11px] font-medium text-primary">
                 {respondendo.direction === "outbound" ? t("Você") : t("Cliente")}
               </div>
-              <div className="line-clamp-2 text-xs text-muted-foreground">
-                {respondendo.body?.trim() || t("(sem texto)")}
-              </div>
+              <CitacaoResumo mensagem={respondendo} className="text-xs text-muted-foreground" />
             </div>
             <button
               type="button"
