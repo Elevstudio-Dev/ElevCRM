@@ -71,7 +71,7 @@ export function mergeThreadItems(
  * que não cabe mais (o teto de mensagens por vez) fica com a caixa desabilitada e o MOTIVO na dica —
  * uma caixa cinza sem explicação parece defeito.
  */
-function selecaoDaBolha(
+export function selecaoDaBolha(
   m: Message,
   s: NonNullable<Props["selecao"]>,
   t: (texto: string) => string,

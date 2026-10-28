@@ -171,6 +171,8 @@ jobs:
         kanban-owner-filter.spec.ts queue-assign.spec.ts
         funil-rolagem.spec.ts
         funil-conversa-ao-lado.spec.ts
+        inbox-responder-melhor.spec.ts
+        inbox-encaminhar.spec.ts
         conversa-vira-lead.spec.ts contato-salva-email.spec.ts
         confirmar-dado-do-contato.spec.ts
         credenciais-de-ia.spec.ts

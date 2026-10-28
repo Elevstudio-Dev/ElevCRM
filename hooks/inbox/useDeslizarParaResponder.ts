@@ -84,7 +84,7 @@ export function useDeslizarParaResponder(
     onPointerUp: (e: PointerEvent<HTMLElement>) => {
       const i = inicio.current;
       if (!i || e.pointerId !== i.id) return;
-      const valeu = soltouParaResponder(ultimo.current) && !toqueLongoDisparou.current;
+      const valeu = soltouParaResponder(ultimo.current);
       reiniciar();
       if (valeu) aoResponder?.();
     },

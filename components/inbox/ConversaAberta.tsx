@@ -6,11 +6,14 @@ import { useT } from "@/hooks/i18n/useT";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { useMarkAsRead } from "@/hooks/inbox/useMarkAsRead";
 import { estadoDaJanela, formatarDecorrido } from "@/lib/channels/janela";
+import { MAX_MENSAGENS_POR_ENCAMINHAMENTO } from "@/lib/messaging/encaminhar";
 import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 
+import { BarraDeSelecao } from "./BarraDeSelecao";
 import { ChatThread } from "./ChatThread";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
+import { EncaminharDialog } from "./EncaminharDialog";
 import { JanelaFechadaAviso } from "./JanelaFechadaAviso";
 import { RetentionNotice } from "./RetentionNotice";
 
@@ -44,6 +47,42 @@ export function ConversaAberta({ conversation }: { conversation: ConversationWit
    */
   const [respondendo, setRespondendo] = useState<ConversationMensagem | null>(null);
   const composerRef = useRef<ComposerHandle | null>(null);
+
+  /**
+   * O MODO DE SELEÇÃO do encaminhar: `null` = desligado; ligado, o que foi marcado (por id).
+   *
+   * Mora aqui pelo mesmo motivo da citação: quem marca é o fio de mensagens, quem mostra a contagem é
+   * a barra de baixo e quem confirma é o diálogo — três irmãos, e o estado comum é do pai. E some
+   * junto com a conversa (a `key`): marcar mensagens de uma conversa e encaminhá-las "da outra" seria
+   * mandar o que o cliente A disse como se fosse do cliente B.
+   */
+  const [selecao, setSelecao] = useState<Map<string, ConversationMensagem> | null>(null);
+  /** As mensagens do diálogo, congeladas no clique em "Encaminhar" (a barra pode mudar por baixo). */
+  const [paraEncaminhar, setParaEncaminhar] = useState<ConversationMensagem[] | null>(null);
+
+  const comecarASelecionar = (m: ConversationMensagem) => {
+    setRespondendo(null);
+    setSelecao(new Map([[m.id, m]]));
+  };
+  const alternarSelecao = (m: ConversationMensagem) =>
+    setSelecao((prev) => {
+      if (!prev) return prev;
+      const next = new Map(prev);
+      if (next.has(m.id)) next.delete(m.id);
+      else if (next.size < MAX_MENSAGENS_POR_ENCAMINHAMENTO) next.set(m.id, m);
+      return next;
+    });
+  const sairDaSelecao = () => setSelecao(null);
+
+  // Esc desiste da seleção — e só dela: com o diálogo aberto o Esc é do diálogo.
+  useEffect(() => {
+    if (!selecao || paraEncaminhar) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelecao(null);
+    };
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [selecao, paraEncaminhar]);
 
   // A leitura da conversa aberta é do upstream e fica: sem ela o contador de
   // não-lidas nunca zera para quem abre a conversa.
@@ -89,7 +128,20 @@ export function ConversaAberta({ conversation }: { conversation: ConversationWit
     <>
       <ConversationHeader conversation={conversation} />
       <div className="min-h-0 flex-1 overflow-hidden">
-        <ChatThread conversationId={conversation.id} onResponder={setRespondendo} />
+        <ChatThread
+          conversationId={conversation.id}
+          onResponder={setRespondendo}
+          onEncaminhar={comecarASelecionar}
+          selecao={
+            selecao
+              ? {
+                  ids: new Set(selecao.keys()),
+                  aoAlternar: alternarSelecao,
+                  maximo: MAX_MENSAGENS_POR_ENCAMINHAMENTO,
+                }
+              : undefined
+          }
+        />
       </div>
       <RetentionNotice conversationId={conversation.id} />
       {motivoDaJanela && (
@@ -99,18 +151,44 @@ export function ConversaAberta({ conversation }: { conversation: ConversationWit
           motivo={motivoDaJanela}
         />
       )}
-      <Composer
-        ref={composerRef}
-        conversationId={conversation.id}
-        blockedReason={blockedReason}
-        janelaFechada={motivoDaJanela}
-        disabled={conversation.status === "closed"}
-        contactName={conversation.contacts?.name ?? null}
-        attendantName={user.full_name}
-        respondendo={respondendo}
-        onCancelarResposta={() => setRespondendo(null)}
-        currentContactId={conversation.contact_id}
-      />
+      {/* Durante a seleção o campo de envio é ESCONDIDO, não desmontado: o rascunho digitado
+          sobrevive a um "encaminhar" começado no meio de uma resposta. */}
+      <div className={selecao ? "hidden" : undefined}>
+        <Composer
+          ref={composerRef}
+          conversationId={conversation.id}
+          blockedReason={blockedReason}
+          janelaFechada={motivoDaJanela}
+          disabled={conversation.status === "closed"}
+          contactName={conversation.contacts?.name ?? null}
+          attendantName={user.full_name}
+          respondendo={respondendo}
+          onCancelarResposta={() => setRespondendo(null)}
+          currentContactId={conversation.contact_id}
+        />
+      </div>
+      {selecao && (
+        <BarraDeSelecao
+          quantidade={selecao.size}
+          onCancelar={sairDaSelecao}
+          onEncaminhar={() =>
+            setParaEncaminhar(
+              [...selecao.values()].sort(
+                (a, b) => a.sent_at.localeCompare(b.sent_at) || a.id.localeCompare(b.id),
+              ),
+            )
+          }
+        />
+      )}
+      {paraEncaminhar && (
+        <EncaminharDialog
+          mensagens={paraEncaminhar}
+          origem={conversation}
+          onFechar={() => setParaEncaminhar(null)}
+          // Saiu ao menos uma: sai do modo de seleção, mas o diálogo FICA — é nele que se lê o resultado.
+          onConcluido={sairDaSelecao}
+        />
+      )}
     </>
   );
 }
