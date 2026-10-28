@@ -106,6 +106,9 @@ export const AUDIT_ACTIONS = [
   "lead.tags_changed",
   "message.sent",
   "message.received",
+  // Encaminhar mensagens de uma conversa para outras: o que uma pessoa disse chega ao WhatsApp de OUTRA,
+  // e isso fica gravado (quem, de qual conversa, para quais, quantas saíram) — sem o conteúdo.
+  "message.forwarded",
   // Uma rodada do cron `recover-stuck-messages` que de fato marcou mensagem
   // como falha (rodada vazia não vira linha — varredura não é mutação).
   "message.recover_stuck_run",

@@ -3877,6 +3877,10 @@ export const DICIONARIO: Traducoes = {
   Você: { es: "Tú" },
   Cliente: { es: "Cliente" },
   "(sem texto)": { es: "(sin texto)" },
+  Foto: { es: "Foto" },
+  Anexo: { es: "Adjunto" },
+  Localização: { es: "Ubicación" },
+  "Ir para a mensagem citada": { es: "Ir al mensaje citado" },
   "Cancelar resposta": { es: "Cancelar respuesta" },
   // ─── Saúde do canal (bolinha da barra superior + estado do canal) ───
   "Todas as conexões ativas": { es: "Todas las conexiones activas" },

@@ -3,7 +3,7 @@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { format, isToday, isYesterday } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -21,12 +21,20 @@ import { useDeleteNote } from "@/hooks/inbox/useDeleteNote";
 import { useDebugToggle } from "@/hooks/ai/useDebugToggle";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { podeEncaminhar, TEXTO_DO_MOTIVO } from "@/lib/messaging/encaminhar";
 import type { Message, Note } from "@/lib/types/messaging";
 
 interface Props {
   conversationId: string | null;
   /** Escolher uma mensagem para responder. Sobe até o composer. */
   onResponder?: (m: Message) => void;
+  /** Começar a encaminhar a partir de uma mensagem (liga o modo de seleção, que mora em quem monta). */
+  onEncaminhar?: (m: Message) => void;
+  /**
+   * O modo de seleção, quando ligado: as mensagens marcadas, como alternar uma e quantas cabem. Em
+   * quem monta (e não aqui) porque a barra de baixo e o diálogo precisam do mesmo conjunto.
+   */
+  selecao?: { ids: ReadonlySet<string>; aoAlternar: (m: Message) => void; maximo: number };
 }
 
 /** Onda 5.2: union de item do thread — mensagem real ou nota interna (nunca vai ao cliente). */
@@ -56,13 +64,40 @@ export function mergeThreadItems(
   return items;
 }
 
+/**
+ * O que a bolha precisa saber do modo de seleção: está marcada? dá para marcar? se não, por quê?
+ *
+ * Uma mensagem que não pode ser encaminhada (apagada, que falhou, de um tipo ainda não suportado) ou
+ * que não cabe mais (o teto de mensagens por vez) fica com a caixa desabilitada e o MOTIVO na dica —
+ * uma caixa cinza sem explicação parece defeito.
+ */
+function selecaoDaBolha(
+  m: Message,
+  s: NonNullable<Props["selecao"]>,
+  t: (texto: string) => string,
+) {
+  const elegivel = podeEncaminhar(m);
+  const marcada = s.ids.has(m.id);
+  const semVaga = s.ids.size >= s.maximo && !marcada;
+  return {
+    marcada,
+    podeMarcar: elegivel.ok && !semVaga,
+    motivo: !elegivel.ok
+      ? t(TEXTO_DO_MOTIVO[elegivel.motivo])
+      : semVaga
+        ? `${t("No máximo")} ${s.maximo} ${t("mensagens por vez")}`
+        : undefined,
+    aoAlternar: () => s.aoAlternar(m),
+  };
+}
+
 function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, locale: Locale): string {
   if (isToday(d)) return t("Hoje");
   if (isYesterday(d)) return t("Ontem");
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder }: Props) {
+export function ChatThread({ conversationId, onResponder, onEncaminhar, selecao }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
@@ -91,6 +126,32 @@ export function ChatThread({ conversationId, onResponder }: Props) {
    * melhor que segurar a conversa esperando por um texto de enfeite.
    */
   const porId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+
+  /**
+   * IR PARA A MENSAGEM CITADA — rola o fio até ela e a destaca por um instante.
+   *
+   * A bolha é achada pelo `data-mensagem-id` dentro do PRÓPRIO rolador, e não por um mapa de refs: o
+   * fio é o que está montado agora, e o que não está montado (a citada ficou numa página mais antiga
+   * que não foi carregada) já nem mostra citação — ver `porId`. Se por algum motivo a bolha não
+   * estiver lá, não faz nada, em vez de fingir.
+   */
+  const [destacadaId, setDestacadaId] = useState<string | null>(null);
+  const fimDoDestaque = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const irParaMensagem = useCallback((id: string) => {
+    const alvo = scrollerRef.current?.querySelector<HTMLElement>(`[data-mensagem-id="${id}"]`);
+    if (!alvo) return;
+    const semAnimacao = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    alvo.scrollIntoView({ behavior: semAnimacao ? "auto" : "smooth", block: "center" });
+    setDestacadaId(id);
+    if (fimDoDestaque.current) clearTimeout(fimDoDestaque.current);
+    fimDoDestaque.current = setTimeout(() => setDestacadaId(null), 1800);
+  }, []);
+  useEffect(
+    () => () => {
+      if (fimDoDestaque.current) clearTimeout(fimDoDestaque.current);
+    },
+    [],
+  );
 
   const items: ThreadItem[] = useMemo(
     () => mergeThreadItems(messages, notes, eventosDeResponsavel),
@@ -218,7 +279,9 @@ export function ChatThread({ conversationId, onResponder }: Props) {
 
   return (
     <div {...sinalDoCanal} className="flex h-full flex-col">
-      <div ref={scrollerRef} className="inbox-conversa flex-1 overflow-y-auto py-2">
+      {/* `overflow-x-hidden`: deslizar uma bolha para responder a empurra para a direita, e sem isto a
+          sobra criaria rolagem lateral (o `overflow-y: auto` sozinho já faz o x virar `auto`). */}
+      <div ref={scrollerRef} className="inbox-conversa flex-1 overflow-x-hidden overflow-y-auto py-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button
@@ -296,6 +359,10 @@ export function ChatThread({ conversationId, onResponder }: Props) {
                   // citada é antiga demais e ficou fora da página, o fio some —
                   // que é melhor que segurar a conversa esperando.
                   citada={porId.get(item.data.reply_to_message_id ?? "") ?? null}
+                  onIrParaMensagem={irParaMensagem}
+                  destacada={destacadaId === item.data.id}
+                  onEncaminhar={onEncaminhar}
+                  selecao={selecao ? selecaoDaBolha(item.data, selecao, t) : undefined}
                   primeiraDoGrupo={primeiraDoGrupo}
                 />
               );
