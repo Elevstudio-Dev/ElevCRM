@@ -112,6 +112,9 @@ export const DICIONARIO: Traducoes = {
   "QR removido": { es: "QR eliminado" },
   "Anúncio sem título": { es: "Anuncio sin título" },
   "Formulário sem campanha": { es: "Formulario sin campaña" },
+  "QR:": { es: "Código QR:" },
+  Anúncio: { es: "Anuncio" },
+  "Anúncio:": { es: "Anuncio:" },
   "Para cartaz, panfleto, cartão e vitrine. Cada leitura, conversa e venda é contada.": {
     es: "Para cartel, folleto, tarjeta y vitrina. Cada lectura, conversación y venta se cuenta.",
   },

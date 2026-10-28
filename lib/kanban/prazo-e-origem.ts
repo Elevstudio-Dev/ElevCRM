@@ -56,7 +56,7 @@ export function prazoDoCard(
   };
 }
 
-export type IconeDaOrigem = "manual" | "whatsapp" | "automatica" | "importada" | "agente" | "outra";
+export type IconeDaOrigem = "manual" | "whatsapp" | "automatica" | "importada" | "agente" | "qr" | "anuncio" | "outra";
 
 export interface OrigemDoLead {
   icone: IconeDaOrigem;
@@ -71,12 +71,28 @@ export interface OrigemDoLead {
 export function origemDoLead(
   source: string | null | undefined,
   t: (texto: string) => string = (texto) => texto,
+  /** `crm_leads.source_metadata`: dá o NOME do QR e o TÍTULO do anúncio, que a origem sozinha não sabe. */
+  metadata?: Record<string, unknown> | null,
 ): OrigemDoLead | null {
   const bruto = source?.trim();
   if (!bruto) return null;
   const chave = bruto.toLowerCase();
+  const texto = (campo: string): string | null => {
+    const v = metadata?.[campo];
+    return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+  };
 
   switch (chave) {
+    case "qr_code": {
+      // O nome é do usuário (ele batizou o QR): vai como está, sem tradução.
+      const nome = texto("qr_code_nome");
+      return { icone: "qr", rotulo: nome ? `${t("QR:")} ${nome}` : t("QR code") };
+    }
+    case "meta_ads":
+    case "google_ads": {
+      const titulo = texto("ad_title");
+      return { icone: "anuncio", rotulo: titulo ? `${t("Anúncio:")} ${titulo}` : t("Anúncio") };
+    }
     case "manual":
       return { icone: "manual", rotulo: t("Manual") };
     case "whatsapp":

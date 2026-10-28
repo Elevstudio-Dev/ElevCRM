@@ -61,4 +61,27 @@ describe("origemDoLead", () => {
   it("texto livre desconhecido aparece legível, não escondido", () => {
     expect(origemDoLead("landing_page")).toEqual({ icone: "outra", rotulo: "Landing page" });
   });
+
+  it("QR code: 'QR: <nome do QR>', e sem nome só 'QR code'", () => {
+    expect(origemDoLead("qr_code", undefined, { qr_code_nome: "Cartaz da recepção" })).toEqual({
+      icone: "qr",
+      rotulo: "QR: Cartaz da recepção",
+    });
+    expect(origemDoLead("qr_code")).toEqual({ icone: "qr", rotulo: "QR code" });
+    expect(origemDoLead("qr_code", undefined, { qr_code_nome: "   " })).toEqual({ icone: "qr", rotulo: "QR code" });
+    expect(origemDoLead("qr_code", undefined, { qr_code_nome: 42 })).toEqual({ icone: "qr", rotulo: "QR code" });
+  });
+
+  it("anúncio: 'Anúncio', e com o título do anúncio 'Anúncio: <título>'", () => {
+    expect(origemDoLead("meta_ads")).toEqual({ icone: "anuncio", rotulo: "Anúncio" });
+    expect(origemDoLead("google_ads", undefined, { ad_title: "Clareamento" })).toEqual({
+      icone: "anuncio",
+      rotulo: "Anúncio: Clareamento",
+    });
+  });
+
+  it("os rótulos passam pela tradução (o nome do QR, que é do usuário, não)", () => {
+    const es = (s: string) => (s === "QR:" ? "Código QR:" : s);
+    expect(origemDoLead("qr_code", es, { qr_code_nome: "Cartaz" })?.rotulo).toBe("Código QR: Cartaz");
+  });
 });
