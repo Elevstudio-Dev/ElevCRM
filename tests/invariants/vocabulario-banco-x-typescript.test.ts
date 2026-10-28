@@ -231,6 +231,14 @@ const PARES: Array<{
     simbolo: "DESFECHOS_DA_CAPTACAO",
   },
   {
+    tabela: "qr_code_leituras",
+    coluna: "dispositivo",
+    // lib/qr-codes/leitura.ts → DISPOSITIVOS_DE_LEITURA. A rota pública grava; um valor novo só no TypeScript
+    // viraria 23514 dentro dela e a leitura simplesmente não seria contada.
+    arquivo: "lib/qr-codes/leitura.ts",
+    simbolo: "DISPOSITIVOS_DE_LEITURA",
+  },
+  {
     tabela: "automation_rule_runs",
     coluna: "status",
     // hooks/webhooks/useAutomationRules.ts → AutomationRunStatus.

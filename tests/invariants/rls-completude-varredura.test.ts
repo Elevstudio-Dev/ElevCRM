@@ -85,6 +85,21 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "por ACERTO ali.",
   },
   {
+    tabela: "qr_codes",
+    razao:
+      "tests/invariants/qr-codes-rls.test.ts prova isolamento cross-tenant E o gate de papel (agent não lê " +
+      "nem cria). Fora de TABLES pelo mesmo motivo de webhook_lead_captures: a policy exige manager.",
+  },
+  {
+    tabela: "qr_code_leituras",
+    razao: "tests/invariants/qr-codes-rls.test.ts — mesmo caso da linha acima.",
+  },
+  {
+    tabela: "qr_code_conversas",
+    razao:
+      "tests/invariants/qr-codes-rls.test.ts — mesma policy manager+ das outras duas; só o service role escreve.",
+  },
+  {
     tabela: "meta_templates",
     razao:
       "tests/invariants/meta-templates-rls.test.ts (\"membro da org B NÃO vê " +
