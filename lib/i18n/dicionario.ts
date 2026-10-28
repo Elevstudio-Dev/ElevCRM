@@ -360,6 +360,10 @@ export const DICIONARIO: Traducoes = {
   // portugues. Consertar o rotulo pt-BR e mudanca de UX, com PR proprio.
   Close: { es: "Cerrar" },
   "Menu do usuário": { es: "Menú del usuario" },
+  // Idioma e tema dentro do menu do usuário, onde a barra não os comporta (`PreferenciasNoMenu`).
+  Tema: { es: "Tema" },
+  Claro: { es: "Claro" },
+  Escuro: { es: "Oscuro" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
   "em aberto": { es: "abiertos" },
