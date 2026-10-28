@@ -111,6 +111,8 @@ describe("o valor nunca é um traço", () => {
     const valor = screen.getByTestId("valor-do-card");
     expect(valor.textContent?.replace(/\s/g, " ")).toBe("R$ 0,00");
     expect(valor).toHaveAttribute("data-sem-valor", "true");
+    // O tom apagado É o aviso de "ninguém preencheu": o atributo sozinho não pinta nada.
+    expect(valor.className).toContain("text-text-muted");
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -119,6 +121,7 @@ describe("o valor nunca é um traço", () => {
     const valor = screen.getByTestId("valor-do-card");
     expect(valor.textContent?.replace(/\s/g, " ")).toBe("R$ 1.200,00");
     expect(valor).not.toHaveAttribute("data-sem-valor");
+    expect(valor.className).not.toContain("text-text-muted");
   });
 
   it("valor 0 (cadastrado) também aparece como R$ 0,00, mas NÃO apagado: alguém digitou", () => {
