@@ -42,6 +42,17 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/legal/privacy")).toBe(true);
   });
 
+  it("libera o QR impresso (/q/<código>) — quem lê é cliente, sem conta", () => {
+    expect(isPublicPath("/q/R7K2QH")).toBe(true);
+  });
+
+  it("e só ele: /q sozinho, sub-path e código longo demais não passam de carona", () => {
+    expect(isPublicPath("/q")).toBe(false);
+    expect(isPublicPath("/q/")).toBe(false);
+    expect(isPublicPath("/q/R7K2QH/x")).toBe(false);
+    expect(isPublicPath("/q/ABCDEFGHIJKLMNOPQ")).toBe(false);
+  });
+
   it("e só esses dois: /legal não é um portão aberto", () => {
     // Entrada larga aqui é furo de auth em toda a aplicação, não só nesta tela.
     expect(isPublicPath("/legal")).toBe(false);

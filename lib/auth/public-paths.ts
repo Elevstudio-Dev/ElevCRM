@@ -39,6 +39,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/integrations\/nuvemshop\/callback$/,
   /^\/api\/internal\//,
   /^\/api\/mcp(\/.*)?$/,
+  // O QR impresso (`app/q/[codigo]/route.ts`). Quem lê é o CLIENTE da empresa, sem conta nenhuma — exigir sessão
+  // mandaria para o login quem só queria abrir o WhatsApp. Ancorado: só `/q/<código>`, nada abaixo.
+  /^\/q\/[A-Za-z0-9]{1,16}$/,
   /^\/_next\//,
   /^\/favicon\.ico$/,
   // O ícone da aba (`app/icon.tsx`), que o `<head>` de TODA página pede —
