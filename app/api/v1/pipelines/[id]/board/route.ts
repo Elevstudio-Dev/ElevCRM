@@ -23,6 +23,11 @@ import {
 } from "@/lib/leads/next-action";
 import type { LeadCandidate } from "@/lib/leads/active-lead";
 import { createClient } from "@/lib/supabase/server";
+import {
+  type ContatoDoCard,
+  contatoDoCard,
+  type LinhaDeContato,
+} from "@/lib/kanban/contato-do-card";
 import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
 import type { Lead } from "@/lib/types/leads";
 
@@ -286,6 +291,47 @@ async function withConversas(
   };
 }
 
+/**
+ * Anexa QUEM é o cliente do negócio — o rosto do card.
+ *
+ * LEFT, como o score e a conversa: lead sem contato é estado normal e não pode sumir do quadro. Uma
+ * consulta só para todos os contatos do quadro (`in`), não uma por card.
+ *
+ * Sob a RLS do usuário — o que ele não pode ler de `contacts`, ele não vê no card. E contato
+ * ANONIMIZADO sai daqui sem o caminho da foto e sem nome de exibição: o gate de LGPD vale na origem,
+ * porque a tela só esconde o que o servidor já entregou.
+ */
+async function withContatos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  leads: Lead[],
+): Promise<{ leads: Lead[]; error: string | null }> {
+  const contactIds = [...new Set(leads.map((l) => l.contact_id).filter((c): c is string => !!c))];
+  if (contactIds.length === 0) return { leads, error: null };
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id, display_name, name, phone_number, avatar_storage_path, is_anonymized")
+    .eq("organization_id", organizationId)
+    .in("id", contactIds);
+  if (error) return { leads, error: error.message };
+
+  // A linha vira `ContatoDoCard` por `contatoDoCard`: é lá que o contato anonimizado perde nome,
+  // telefone e foto antes de sair na resposta.
+  const porId = new Map<string, ContatoDoCard>();
+  for (const row of (data ?? []) as LinhaDeContato[]) {
+    porId.set(row.id, contatoDoCard(row));
+  }
+
+  return {
+    leads: leads.map((lead) => {
+      const contato = lead.contact_id ? porId.get(lead.contact_id) : undefined;
+      return contato ? { ...lead, contato } : lead;
+    }),
+    error: null,
+  };
+}
+
 async function withNextActions(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
@@ -416,10 +462,21 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail("internal_error", leadsComScore.error, 500, { requestId });
   }
 
-  const leadsComConversa = await withConversas(
+  // O rosto do cliente (foto/iniciais do card). Antes da conversa: a resposta continua saindo do
+  // último elo da cadeia, `leadsComConversa`.
+  const leadsComContato = await withContatos(
     supabase,
     (pipeline as Pipeline).organization_id,
     leadsComScore.leads,
+  );
+  if (leadsComContato.error) {
+    return fail("internal_error", leadsComContato.error, 500, { requestId });
+  }
+
+  const leadsComConversa = await withConversas(
+    supabase,
+    (pipeline as Pipeline).organization_id,
+    leadsComContato.leads,
   );
   if (leadsComConversa.error) {
     return fail("internal_error", leadsComConversa.error, 500, { requestId });

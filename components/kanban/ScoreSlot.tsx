@@ -21,6 +21,46 @@ interface ScoreSlotProps {
   factors: Fator[];
 }
 
+const RAIO_DO_ANEL = 6;
+const CIRCUNFERENCIA = 2 * Math.PI * RAIO_DO_ANEL;
+
+/**
+ * O anel: um círculo de 14px cujo arco vai de 0 a 100%. Decorativo (`aria-hidden`) — o número e a
+ * faixa estão no rótulo do botão e no texto ao lado. `probability` fora de 0–100 é contido, porque
+ * um arco que passa de 100% desenharia um anel "mais que cheio" sem erro nenhum.
+ */
+export function AnelDeProbabilidade({
+  probability,
+  band,
+}: {
+  probability: number;
+  band: ScoreBand;
+}) {
+  const p = Math.max(0, Math.min(100, probability));
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden className="h-[14px] w-[14px] shrink-0 -rotate-90">
+      <circle cx="8" cy="8" r={RAIO_DO_ANEL} fill="none" strokeWidth="2" className="stroke-border" />
+      <circle
+        cx="8"
+        cy="8"
+        r={RAIO_DO_ANEL}
+        fill="none"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={CIRCUNFERENCIA}
+        strokeDashoffset={CIRCUNFERENCIA - (CIRCUNFERENCIA * p) / 100}
+        data-anel-arco={p}
+        className={cn(
+          "transition-[stroke-dashoffset] duration-300",
+          band === "quente" && "stroke-accent",
+          band === "morno" && "stroke-warning",
+          band === "frio" && "stroke-text-muted",
+        )}
+      />
+    </svg>
+  );
+}
+
 /**
  * A faixa ③ quando há score: medidor, número, e o porquê a um gesto de distância.
  *
@@ -58,20 +98,9 @@ export function ScoreSlot({ probability, band, reason, factors }: ScoreSlotProps
           aria-label={`${t("Probabilidade")} ${probability}%, ${bandLabel(band, t)}. ${t("Ver o porquê.")}`}
           className="flex min-w-0 items-center gap-2 rounded-md text-left"
         >
-          <span
-            className="h-[3px] w-16 shrink-0 overflow-hidden rounded-full bg-border"
-            aria-hidden
-          >
-            <span
-              className={cn(
-                "block h-full rounded-full",
-                band === "quente" && "bg-accent",
-                band === "morno" && "bg-warning",
-                band === "frio" && "bg-text-muted",
-              )}
-              style={{ width: `${probability}%` }}
-            />
-          </span>
+          {/* O ANEL de probabilidade (o "progresso" do quadro novo): a trilha cinza e o arco na cor da
+              faixa. A faixa continua vindo PRONTA do banco — o arco só desenha o número. */}
+          <AnelDeProbabilidade probability={probability} band={band} />
           <span className="tabular-nums text-text-muted">{probability}%</span>
         </button>
       </PopoverTrigger>
