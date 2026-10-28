@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Relatórios de origem e QR codes — do cartaz à venda",
+    "subtitle": "o QR conta a leitura, a mensagem com #código conta a conversa e o lead nasce com a origem; o relatório agrega no banco",
+    "output": "relatorios-e-qr-codes.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o gestor vê" },
+    { "id": "publica", "label": "Porta pública (o cliente, sem conta)" },
+    { "id": "entrada", "label": "Entrada da mensagem (os dois canais)" },
+    { "id": "api", "label": "API gestor+" },
+    { "id": "regra", "label": "Regra pura" },
+    { "id": "banco", "label": "Banco (RLS manager+)" },
+    { "id": "volta", "label": "O laço de retorno" }
+  ],
+  "mainPath": ["cartaz", "rotaq", "qrcodes", "webhookcanal", "posentrada", "reconhecer", "nascimento", "leads", "fnrel", "apirel", "telarel"],
+  "nodes": [
+    { "id": "cartaz", "lane": "humano", "col": 1, "type": "frontend", "label": "Cartaz, panfleto, cartão, vitrine", "sublabel": "o QR impresso aponta para /q/<código> do próprio CRM" },
+    { "id": "telaqr", "lane": "humano", "col": 2, "type": "frontend", "label": "Relatórios › QR codes", "sublabel": "criar, baixar PNG/SVG, copiar link, arquivar; funil de cada QR" },
+    { "id": "telarel", "lane": "humano", "col": 3, "type": "frontend", "label": "Relatórios (6ª aba, só gestor+)", "sublabel": "leads por origem, vendas, conversão, R$ ganho, gráfico por dia" },
+    { "id": "cardfunil", "lane": "humano", "col": 4, "type": "frontend", "label": "Card do funil", "sublabel": "a origem diz \"QR: <nome>\" (ou \"Anúncio: <título>\")" },
+
+    { "id": "rotaq", "lane": "publica", "col": 1, "type": "api", "label": "GET /q/[codigo]", "sublabel": "conta a leitura e responde 302 para wa.me; robô, limite e erro só deixam de CONTAR — nunca barram a pessoa" },
+
+    { "id": "webhookcanal", "lane": "entrada", "col": 1, "type": "service", "label": "webhook do canal → ingest", "sublabel": "a mensagem do cliente, pelo caminho de produção" },
+    { "id": "posentrada", "lane": "entrada", "col": 2, "type": "service", "label": "aplicarEfeitosPosEntrada", "sublabel": "opt-out → 1b QR → lead → menu → campanha → agente" },
+    { "id": "reconhecer", "lane": "entrada", "col": 3, "type": "service", "label": "reconhecerQrCodeNaEntrada (passo 1b)", "sublabel": "grupo não conta; código de outra organização não casa; arquivado CONTA" },
+    { "id": "nascimento", "lane": "entrada", "col": 4, "type": "service", "label": "garantirLeadDaConversa(origem)", "sublabel": "QR da mensagem > anúncio do contato > whatsapp; lead aberto não muda de origem" },
+
+    { "id": "apiqr", "lane": "api", "col": 1, "type": "api", "label": "/api/v1/qr-codes (GET, POST, PATCH)", "sublabel": "requireRole manager; organization_id vem da sessão; o código nunca muda" },
+    { "id": "apirel", "lane": "api", "col": 2, "type": "api", "label": "/api/v1/relatorios/origens e /qr-codes", "sublabel": "requireRole manager; período no fuso de quem lê, ate exclusivo" },
+
+    { "id": "codigo", "lane": "regra", "col": 1, "type": "service", "label": "lib/qr-codes/codigo.ts", "sublabel": "6 caracteres sem ambíguos, sorteio sem viés; extrai #CÓDIGO da mensagem" },
+    { "id": "leitura", "lane": "regra", "col": 2, "type": "service", "label": "lib/qr-codes/leitura.ts", "sublabel": "robô e pré-visualização de link não contam; celular ou computador" },
+    { "id": "linkwa", "lane": "regra", "col": 3, "type": "service", "label": "lib/qr-codes/link-do-whatsapp.ts", "sublabel": "wa.me/<dígitos>?text=<mensagem> #código" },
+    { "id": "agrupar", "lane": "regra", "col": 4, "type": "service", "label": "lib/relatorios/origens.ts", "sublabel": "8 grupos com rótulo, conversão = ganhos ÷ (ganhos + perdidos), dia sem lead entra com zero" },
+
+    { "id": "qrcodes", "lane": "banco", "col": 1, "type": "database", "label": "qr_codes", "sublabel": "código único na INSTALAÇÃO; arquivar em vez de apagar" },
+    { "id": "leituras", "lane": "banco", "col": 2, "type": "database", "label": "qr_code_leituras", "sublabel": "sem IP e sem user-agent (minimização LGPD)" },
+    { "id": "conversas", "lane": "banco", "col": 3, "type": "database", "label": "qr_code_conversas", "sublabel": "única por (QR, conversa); guarda o lead_id que nasceu" },
+    { "id": "leads", "lane": "banco", "col": 4, "type": "database", "label": "crm_leads (source = qr_code)", "sublabel": "source_metadata: qr_code_id, nome e código; tag \"QR code\"" },
+    { "id": "fnrel", "lane": "banco", "col": 5, "type": "database", "label": "fn_relatorio_de_origens / _por_dia / _de_qr_codes", "sublabel": "security invoker: a RLS vale através delas; agregam no banco (o PostgREST corta em 1.000 linhas)" },
+
+    { "id": "audit", "lane": "volta", "col": 1, "type": "service", "label": "audit qr_code.created/updated/archived/restored", "sublabel": "a leitura NÃO é auditada: pública, sem ator, alto volume" },
+    { "id": "avisos", "lane": "volta", "col": 2, "type": "service", "label": "Avisos do cartão do QR", "sublabel": "10+ leituras e nenhuma conversa; sem número ligado — é o que muda quando o QR não funciona" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "cartaz", "to": "rotaq", "label": "câmera do celular lê" },
+    { "id": "e2", "from": "rotaq", "to": "qrcodes", "label": "acha o QR pelo código; arquivado → 410" },
+    { "id": "e3", "from": "rotaq", "to": "leitura", "label": "isto conta como leitura?" },
+    { "id": "e4", "from": "rotaq", "to": "leituras", "label": "insert (service role)" },
+    { "id": "e5", "from": "rotaq", "to": "linkwa", "label": "monta o destino" },
+    { "id": "e6", "from": "telaqr", "to": "apiqr", "label": "criar, editar, arquivar" },
+    { "id": "e7", "from": "apiqr", "to": "codigo", "label": "sorteia o código" },
+    { "id": "e8", "from": "apiqr", "to": "qrcodes", "label": "insert/update pela sessão (RLS manager+)" },
+    { "id": "e9", "from": "apiqr", "to": "audit", "label": "quem criou, mudou, arquivou" },
+    { "id": "e10", "from": "webhookcanal", "to": "posentrada", "label": "mensagem de entrada gravada" },
+    { "id": "e11", "from": "posentrada", "to": "reconhecer", "label": "passo 1b, depois do opt-out" },
+    { "id": "e12", "from": "reconhecer", "to": "codigo", "label": "extrai #CÓDIGO" },
+    { "id": "e13", "from": "reconhecer", "to": "qrcodes", "label": "casa na MESMA organização" },
+    { "id": "e14", "from": "reconhecer", "to": "conversas", "label": "insert (23505 = já contada)" },
+    { "id": "e15", "from": "reconhecer", "to": "nascimento", "label": "origem QR para o lead novo" },
+    { "id": "e16", "from": "posentrada", "to": "nascimento", "label": "abre a demanda" },
+    { "id": "e17", "from": "nascimento", "to": "leads", "label": "insert com a origem" },
+    { "id": "e18", "from": "nascimento", "to": "conversas", "label": "vincula o lead_id" },
+    { "id": "e19", "from": "telarel", "to": "apirel", "label": "período 7/30/90 dias ou datas" },
+    { "id": "e20", "from": "telaqr", "to": "apirel", "label": "funil de cada QR" },
+    { "id": "e21", "from": "apirel", "to": "fnrel", "label": "rpc pela sessão (RLS manager+)" },
+    { "id": "e22", "from": "apirel", "to": "agrupar", "label": "linhas do banco → grupos" },
+    { "id": "e23", "from": "fnrel", "to": "leads", "label": "agrega por origem e por dia" },
+    { "id": "e24", "from": "fnrel", "to": "leituras", "label": "conta leituras do QR" },
+    { "id": "e25", "from": "fnrel", "to": "conversas", "label": "conta conversas do QR" },
+    { "id": "e26", "from": "leads", "to": "cardfunil", "label": "source + source_metadata" },
+    { "id": "e27", "from": "apirel", "to": "avisos", "label": "funil do período alimenta os avisos" },
+    { "id": "e28", "from": "avisos", "to": "telaqr", "label": "o gestor corrige o número ou a mensagem" }
+  ]
+}
