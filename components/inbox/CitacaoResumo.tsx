@@ -14,7 +14,8 @@ import {
 } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
-const ICONES: Record<IconeDaCitacao, typeof Microphone> = {
+/** Exportado para a linha da lista de conversas: o áudio é o mesmo microfone nos dois lugares. */
+export const ICONE_DA_MIDIA: Record<IconeDaCitacao, typeof Microphone> = {
   audio: Microphone,
   imagem: ImageIcon,
   video: VideoCamera,
@@ -41,7 +42,7 @@ export function CitacaoResumo({
 }) {
   const t = useT();
   const r = resumoDaCitacao(mensagem);
-  const Icone = r.icone ? ICONES[r.icone] : null;
+  const Icone = r.icone ? ICONE_DA_MIDIA[r.icone] : null;
   return (
     <span className={cn("flex min-w-0 items-start gap-1", r.apagada && "italic", className)}>
       {Icone && <Icone size={13} weight="fill" aria-hidden className="mt-px shrink-0" />}

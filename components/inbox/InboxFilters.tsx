@@ -1,6 +1,6 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useState } from "react";
+import { type ComponentPropsWithoutRef, forwardRef, useEffect, useState } from "react";
 import { CaretDown, MagnifyingGlass } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -71,6 +69,45 @@ export interface InboxFiltersValue {
   /** Um setor (uuid) ou `"sem"`. Só aparece quando a organização tem setores. */
   sector_id?: string;
 }
+
+/** As visões que viram botão à vista; as demais ficam só no menu ▾. */
+const CHIPS_DE_VISAO: InboxTab[] = ["unassigned", "mine", "grupos"];
+
+/**
+ * Os seletores de número, setor e tag, em pílula: filtro secundário não pode brigar com a busca e
+ * os chips pelo olho. `w-auto` — o `SelectTrigger` nasce `w-full`, e três seletores de largura
+ * cheia empilhariam de volta o que a pílula veio compactar.
+ */
+const SELETOR_EM_PILULA =
+  "h-7 w-auto max-w-full gap-1.5 rounded-full border-border bg-muted px-3 py-0 text-xs shadow-none";
+
+/**
+ * O chip: um botão de pílula que liga e desliga. `aria-pressed` e não `role="tab"` — não há painel
+ * associado, e leitor de tela anuncia "botão, pressionado", que é exatamente o que ele é. Aceita o
+ * resto das props de botão e o `ref` porque o menu ▾ o usa como gatilho (`asChild`).
+ */
+const ChipDoInbox = forwardRef<
+  HTMLButtonElement,
+  { ativo: boolean } & Omit<ComponentPropsWithoutRef<"button">, "className">
+>(function ChipDoInbox({ ativo, children, ...props }, ref) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-pressed={ativo}
+      className={cn(
+        "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[13px] transition-colors",
+        "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+        ativo
+          ? "border-transparent bg-success-bg font-medium text-success-fg"
+          : "border-border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+});
 
 interface Props {
   value: InboxFiltersValue;
@@ -214,161 +251,214 @@ export function InboxFilters({ value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
+  // As visões que ganham um botão à vista. As outras (Todas, Arquivadas, Automático) continuam
+  // todas no menu ▾ — decisão do dono de 2026-09-04 ("nenhuma visão invisível") não mudou: o chip
+  // é atalho, o menu é a lista completa.
+  const visoesEmChip = CHIPS_DE_VISAO.filter((tab) => tabs.includes(tab));
+  const visaoAtual = INBOX_TABS.find((x) => x.value === value.tab) ?? {
+    value: "unassigned" as const,
+    label: "Fila",
+  };
+  const visaoAtualForaDosChips = !visoesEmChip.includes(value.tab);
+  const contagemAtual = countFor[value.tab];
+  const temContagemAtual = typeof contagemAtual === "number" && contagemAtual > 0;
+  const temSeletores =
+    showChannelSwitch || (setores?.length ?? 0) > 0 || (tagVocabulary?.length ?? 0) > 0;
+
   return (
-    <div className="space-y-3 border-b border-border bg-background px-3 py-3">
+    <div className="space-y-2 border-b border-border bg-background px-3 py-2">
+      {/* A busca em pílula, como a do WhatsApp: fundo próprio, sem borda, canto todo redondo. */}
       <div className="relative">
         <MagnifyingGlass
-          size={14}
+          size={16}
           weight="regular"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
           aria-hidden
         />
         <Input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder={t("Buscar por nome, telefone ou mensagem…")}
-          className="h-8 pl-8 text-sm"
+          className="h-9 rounded-full border-transparent bg-muted pl-9 pr-4 text-sm hover:border-transparent"
           aria-label={t("Buscar conversas")}
         />
       </div>
 
-      {showChannelSwitch && (
-        <Select
-          value={value.channel_session_id ?? "all"}
-          onValueChange={(v) =>
-            onChange({ ...value, channel_session_id: v === "all" ? undefined : v })
-          }
-        >
-          <SelectTrigger className="h-8 text-sm" aria-label={t("Filtrar por número de WhatsApp")}>
-            <SelectValue placeholder={t("Todos os números")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("Todos os números")}</SelectItem>
-            {filtroForaDaLista && value.channel_session_id != null && (
-              <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
-            )}
-            {channels?.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {channelLabel(c)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      {(setores?.length ?? 0) > 0 && (
-        <Select
-          value={value.sector_id ?? "all"}
-          onValueChange={(v) => onChange({ ...value, sector_id: v === "all" ? undefined : v })}
-        >
-          <SelectTrigger className="h-8 text-sm" aria-label={t("Filtrar por setor")}>
-            <SelectValue placeholder={t("Todos os setores")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("Todos os setores")}</SelectItem>
-            {setores?.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                <span className="flex items-center gap-2">
-                  <span className={cn("size-2 shrink-0 rounded-full", CLASSE_DE_COR[s.color]?.ponto)} aria-hidden />
-                  {s.name}
-                </span>
-              </SelectItem>
-            ))}
-            <SelectItem value="sem">{t("Sem setor")}</SelectItem>
-          </SelectContent>
-        </Select>
-      )}
-
-      {(tagVocabulary?.length ?? 0) > 0 && (
-        <Select
-          value={value.tag ?? "all"}
-          onValueChange={(v) => onChange({ ...value, tag: v === "all" ? undefined : v })}
-        >
-          <SelectTrigger className="h-8 text-sm" aria-label={t("Filtrar por tag")}>
-            <SelectValue placeholder={t("Todas as tags")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("Todas as tags")}</SelectItem>
-            {tagVocabulary?.map((marcador) => (
-              <SelectItem key={marcador.nome} value={marcador.nome}>
-                <span className="flex items-center gap-2">
-                  <span
-                    className={cn("size-2 shrink-0 rounded-full", CLASSE_DE_COR[marcador.cor].ponto)}
-                    aria-hidden
-                  />
-                  {marcador.nome}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
       {/*
-        DROPDOWN, e não fila de abas — decisão de dono em 2026-09-04.
-
-        A fila cabia em cinco rótulos e já vinha brigando com a largura: numa
-        primeira versão as abas se sobrepunham ("FechadasAutomático"), e o
-        conserto foi deixá-las rolar na horizontal. Rolagem horizontal esconde
-        opção sem dizer que existe — quem não arrasta nunca descobre "Automático".
-
-        Num menu, todas as visões ficam na mesma lista, com o contador ao lado,
-        e o gatilho diz em qual você está. O custo é um clique a mais para
-        trocar de visão; o ganho é nenhuma visão invisível.
+        CHIPS, e o menu ▾ ao lado. As visões continuam sendo UM menu completo (decisão de dono de
+        2026-09-04, abaixo): a fileira de abas que rolava na horizontal escondia opção sem dizer que
+        existia. Aqui os atalhos mais usados ficam à vista e NÃO rolam — se não couberem, a fileira
+        quebra de linha. O gatilho do menu mantém o testid `visao-do-inbox` e diz, para quem lê a
+        tela por leitor, qual é a visão atual e a contagem dela.
       */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 w-full justify-between"
-            data-testid="visao-do-inbox"
-          >
-            <span className="flex items-center gap-1.5">
-              {t(INBOX_TABS.find((x) => x.value === value.tab)?.label ?? "Fila")}
-              {typeof countFor[value.tab] === "number" && countFor[value.tab]! > 0 && (
-                <span className="text-[10px] tabular-nums text-muted-foreground">
-                  {countFor[value.tab]}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {visoesEmChip.map((tab) => {
+          const meta = INBOX_TABS.find((x) => x.value === tab)!;
+          const count = countFor[tab];
+          return (
+            <ChipDoInbox
+              key={tab}
+              ativo={tab === value.tab}
+              onClick={() => onChange({ ...value, tab })}
+              data-testid={`chip-${tab}`}
+            >
+              {t(meta.label)}
+              {typeof count === "number" && count > 0 && (
+                <span className="text-[11px] tabular-nums opacity-80">{count}</span>
+              )}
+            </ChipDoInbox>
+          );
+        })}
+
+        <ChipDoInbox
+          ativo={value.onlyUnread}
+          onClick={() => onChange({ ...value, onlyUnread: !value.onlyUnread })}
+          data-testid="chip-nao-lidas"
+        >
+          {t("Não lidas")}
+        </ChipDoInbox>
+
+        {/*
+          DROPDOWN com TODAS as visões — decisão de dono em 2026-09-04.
+
+          A fila cabia em cinco rótulos e já vinha brigando com a largura: numa primeira versão as
+          abas se sobrepunham ("FechadasAutomático"), e o conserto foi deixá-las rolar na
+          horizontal. Rolagem horizontal esconde opção sem dizer que existe — quem não arrasta
+          nunca descobre "Automático". Num menu, todas as visões ficam na mesma lista, com o
+          contador ao lado. Os chips acima são atalhos; este menu é a lista que não esconde nada.
+        */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <ChipDoInbox
+              ativo={visaoAtualForaDosChips}
+              data-testid="visao-do-inbox"
+              aria-label={`${t("Todas as visões")} (${t(visaoAtual.label)})`}
+            >
+              {visaoAtualForaDosChips ? (
+                <>
+                  {t(visaoAtual.label)}
+                  {temContagemAtual && (
+                    <span className="text-[11px] tabular-nums opacity-80">{contagemAtual}</span>
+                  )}
+                </>
+              ) : (
+                <span className="sr-only">
+                  {t(visaoAtual.label)}
+                  {temContagemAtual ? ` ${contagemAtual}` : ""}
                 </span>
               )}
-            </span>
-            <CaretDown size={12} weight="bold" aria-hidden />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
-          {tabs.map((tab) => {
-            const meta = INBOX_TABS.find((x) => x.value === tab)!;
-            const count = countFor[tab];
-            return (
-              <DropdownMenuItem
-                key={tab}
-                onClick={() => onChange({ ...value, tab })}
-                className="justify-between gap-3"
+              <CaretDown size={12} weight="bold" aria-hidden />
+            </ChipDoInbox>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            {tabs.map((tab) => {
+              const meta = INBOX_TABS.find((x) => x.value === tab)!;
+              const count = countFor[tab];
+              return (
+                <DropdownMenuItem
+                  key={tab}
+                  onClick={() => onChange({ ...value, tab })}
+                  className="justify-between gap-3"
+                >
+                  <span className={tab === value.tab ? "font-medium" : undefined}>
+                    {t(meta.label)}
+                  </span>
+                  {typeof count === "number" && count > 0 && (
+                    <span className="text-[10px] tabular-nums text-muted-foreground">{count}</span>
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {temSeletores && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {showChannelSwitch && (
+            <Select
+              value={value.channel_session_id ?? "all"}
+              onValueChange={(v) =>
+                onChange({ ...value, channel_session_id: v === "all" ? undefined : v })
+              }
+            >
+              <SelectTrigger
+                className={SELETOR_EM_PILULA}
+                aria-label={t("Filtrar por número de WhatsApp")}
               >
-                <span className={tab === value.tab ? "font-medium" : undefined}>
-                  {t(meta.label)}
-                </span>
-                {typeof count === "number" && count > 0 && (
-                  <span className="text-[10px] tabular-nums text-muted-foreground">{count}</span>
+                <SelectValue placeholder={t("Todos os números")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("Todos os números")}</SelectItem>
+                {filtroForaDaLista && value.channel_session_id != null && (
+                  <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
                 )}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
+                {channels?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {channelLabel(c)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {(setores?.length ?? 0) > 0 && (
+            <Select
+              value={value.sector_id ?? "all"}
+              onValueChange={(v) => onChange({ ...value, sector_id: v === "all" ? undefined : v })}
+            >
+              <SelectTrigger className={SELETOR_EM_PILULA} aria-label={t("Filtrar por setor")}>
+                <SelectValue placeholder={t("Todos os setores")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("Todos os setores")}</SelectItem>
+                {setores?.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={cn("size-2 shrink-0 rounded-full", CLASSE_DE_COR[s.color]?.ponto)}
+                        aria-hidden
+                      />
+                      {s.name}
+                    </span>
+                  </SelectItem>
+                ))}
+                <SelectItem value="sem">{t("Sem setor")}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+
+          {(tagVocabulary?.length ?? 0) > 0 && (
+            <Select
+              value={value.tag ?? "all"}
+              onValueChange={(v) => onChange({ ...value, tag: v === "all" ? undefined : v })}
+            >
+              <SelectTrigger className={SELETOR_EM_PILULA} aria-label={t("Filtrar por tag")}>
+                <SelectValue placeholder={t("Todas as tags")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("Todas as tags")}</SelectItem>
+                {tagVocabulary?.map((marcador) => (
+                  <SelectItem key={marcador.nome} value={marcador.nome}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "size-2 shrink-0 rounded-full",
+                          CLASSE_DE_COR[marcador.cor].ponto,
+                        )}
+                        aria-hidden
+                      />
+                      {marcador.nome}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
 
       {value.tab === "grupos" && <ImportarGrupos />}
-
-      <div className="flex items-center justify-between">
-        <Label htmlFor="only-unread" className="text-xs text-muted-foreground">
-          {t("Apenas não lidos")}
-        </Label>
-        <Switch
-          id="only-unread"
-          checked={value.onlyUnread}
-          onCheckedChange={(v) => onChange({ ...value, onlyUnread: v })}
-        />
-      </div>
     </div>
   );
 }
