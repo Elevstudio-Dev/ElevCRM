@@ -8,6 +8,22 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.22.0] — 2026-10-28
+
+### Alterado
+
+- **O card do funil mostra o que importa e deixou de ter espaço vazio** O card do funil estava meio vazio: reservava altura para coisas que quase nunca existiam. Agora cada linha só aparece quando tem o que dizer, e o card passou a mostrar o que o vendedor procura:
+
+  - **O telefone do cliente**, embaixo do nome.
+  - **Quem falou por último**: "Cliente:" (em destaque, é a mensagem que espera resposta) ou "Você:", com o tipo da mensagem (um áudio aparece como "Áudio", não como `[audio]`) e a hora.
+  - **As tags, em chips coloridos**, com a cor do marcador da empresa. A tag principal do funil vem primeiro e as que sobram viram "+N".
+  - **O prazo do negócio** ("Fecha em 3 dias", "Fecha hoje", e em vermelho "Atrasado há 2 dias"), só para negócio aberto, e **de onde o lead veio** (Manual, Importado, Formulário ou integração, Agente de IA…).
+  - **O valor sempre aparece**: sem valor cadastrado é "R$ 0,00" em tom apagado, no lugar do traço. Todos os valores do card passam a mostrar os centavos ("R$ 1.200,00"), para não parecer dois formatos de dinheiro na mesma coluna.
+
+  A faixa do agente de IA some quando não há nada a dizer, e o título não reserva mais duas linhas: um lead sem contato, sem conversa e sem tags fica bem mais baixo que um completo.
+
+  Não há migração nem ação do operador. Os dados já existiam no lead e na conversa; a atualização só passa a mostrá-los.
+
 ## [1.21.0] — 2026-10-28
 
 ### Alterado
@@ -2937,7 +2953,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.21.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.22.0...HEAD
+[1.22.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.18.0...v1.19.0
