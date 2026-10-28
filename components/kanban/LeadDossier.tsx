@@ -4,7 +4,6 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useRef } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
 import type { Lead } from "@/lib/types/leads";
 import { ConversaNoDossie } from "./ConversaNoDossie";
@@ -16,8 +15,6 @@ import { resolveLeadOwner } from "@/lib/kanban/owner";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 
 interface Props {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
   lead: Lead;
   pipelineId: string;
   fieldDefs?: CustomFieldDef[];
@@ -50,10 +47,11 @@ function formatBRL(cents: number | null, currency: string | null): string {
  * entrar na timeline; fechar esconderia o registro justamente de quem o
  * produziu, e a funcionalidade que prova "sua ação fica registrada" provaria
  * isso para todo mundo menos para o autor.
+ *
+ * Só o CONTEÚDO: o recipiente (a aba "Dados do lead" do painel que o funil abre
+ * ao lado do quadro) é de quem o monta, e é ele quem cuida do título e do fechar.
  */
 export function LeadDossier({
-  open,
-  onOpenChange,
   lead,
   pipelineId,
   fieldDefs = [],
@@ -63,15 +61,13 @@ export function LeadDossier({
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
   const campos = useRef<HTMLDivElement | null>(null);
-  const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
+  const timeline = useLeadTimeline(lead.id, lead.contact_id);
   const owner = resolveLeadOwner(lead, ownerNames);
   const score = lead.score ?? null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md"
+      <div
+        className="flex min-h-full flex-col gap-0 p-4"
         // Observável pelo mesmo motivo do board: "a assinatura morreu" e "nada
         // aconteceu" têm a mesma aparência, que é silêncio.
         data-realtime-status={timeline.realtimeStatus.toLowerCase()}
@@ -80,10 +76,6 @@ export function LeadDossier({
         // negócio sem novidade é um estado normal.
         data-refetch-divergencias={timeline.seguranca.divergencias}
       >
-        <SheetHeader className="pb-3">
-          <SheetTitle className="text-base leading-6">{lead.title}</SheetTitle>
-        </SheetHeader>
-
         {/* ① cabeçalho vivo */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border pb-3 text-xs">
           <span className="font-medium tabular-nums text-text">
@@ -152,7 +144,6 @@ export function LeadDossier({
           </h3>
           <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={fieldDefs} />
         </div>
-      </SheetContent>
-    </Sheet>
+      </div>
   );
 }

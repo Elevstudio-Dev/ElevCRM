@@ -150,7 +150,7 @@ describe("os elos que somem sem barulho", () => {
     // Pedido explícito do dono: se não dá para enviar, que não deixe tentar.
     // Reusa o `blockedReason` que já existe — um segundo mecanismo de bloqueio
     // divergiria, e o segundo esqueceria de cobrir o áudio ou o anexo.
-    const fonte = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
+    const fonte = readFileSync("components/inbox/ConversaAberta.tsx", "utf8");
     expect(fonte).toMatch(/motivoDaJanela/);
     // Por prop PRÓPRIA, não por `blockedReason`: a primeira versão passava por
     // ali e levava a nota interna junto, que nunca chega ao cliente.
@@ -162,9 +162,22 @@ describe("os elos que somem sem barulho", () => {
   it("e o bloqueio VENCE sozinho com a aba aberta", () => {
     // Sem relógio, quem deixa o inbox aberto a tarde inteira seguiria com o
     // composer liberado numa conversa que já venceu.
-    const fonte = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
+    const fonte = readFileSync("components/inbox/ConversaAberta.tsx", "utf8");
     expect(fonte).toMatch(/setAgoraJanela/);
     expect(fonte).toMatch(/setInterval/);
+  });
+
+  it("o inbox E o funil abrem a conversa pelo MESMO componente — uma régua só", () => {
+    // A regra da janela (e a do contato bloqueado) vive em `ConversaAberta`. Se
+    // uma das telas voltasse a montar `Composer` por conta própria, ela
+    // esqueceria a janela de 24h e deixaria mandar o que a outra barra.
+    const inbox = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
+    expect(inbox, "o inbox não monta a conversa pelo componente comum").toMatch(/<ConversaAberta\b/);
+    expect(inbox, "o inbox voltou a montar o Composer sozinho").not.toMatch(/<Composer\b/);
+
+    const funil = readFileSync("components/kanban/PainelDoLead.tsx", "utf8");
+    expect(funil, "o funil não monta a conversa pelo componente comum").toMatch(/<ConversaAberta\b/);
+    expect(funil, "o funil monta o Composer por conta própria").not.toMatch(/<Composer\b/);
   });
 
   it("a nota interna NÃO é barrada pela janela", () => {
@@ -182,7 +195,7 @@ describe("os elos que somem sem barulho", () => {
   it("barrar OFERECE a saída — o seletor de modelo aprovado", () => {
     // Barrar sem oferecer deixa o operador sem caminho: ele lê "só modelo
     // aprovado sai daqui" e não tem como mandar um.
-    const fonte = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
+    const fonte = readFileSync("components/inbox/ConversaAberta.tsx", "utf8");
     // A GUARDA junto com a tag: `{false && (` deixava a tag na linha seguinte e
     // o caso passava verde com a saída removida da tela.
     expect(fonte).toMatch(/\{motivoDaJanela && \(\s*\n\s*<JanelaFechadaAviso/);

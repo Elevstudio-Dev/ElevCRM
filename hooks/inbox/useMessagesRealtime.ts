@@ -55,7 +55,13 @@ export function useMessagesRealtime(conversationId: string | null) {
   });
 
   const onChange = useCallback(() => {
-    if (conversationId) qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+    if (conversationId) {
+      qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+      // A conversa AVULSA também: quem abre uma conversa fora da lista (o painel do funil, o deep
+      // link) lê dela o `last_inbound_at`, que decide a janela de 24h do campo de envio. Sem isto,
+      // o cliente responde, a mensagem aparece no fio e o campo segue dizendo "janela fechada".
+      qc.invalidateQueries({ queryKey: ["conversation", conversationId] });
+    }
     qc.invalidateQueries({ queryKey: ["conversations"] });
   }, [qc, conversationId]);
 

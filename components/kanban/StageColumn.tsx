@@ -23,6 +23,8 @@ interface StageColumnProps {
   /** `settings.canonical_tags` do pipeline — a única tag que fica no card. */
   canonicalTags?: string[];
   selectedLeadIds?: Set<string>;
+  /** O lead cujo painel está aberto ao lado — o card dele se destaca. */
+  abertoId?: string | null;
   /** leadId → quantos eventos remotos já chegaram (muda = pulsa de novo). */
   pulses?: Map<string, number>;
   onSelect?: (leadId: string, additive: boolean) => void;
@@ -55,6 +57,7 @@ export function StageColumn({
   reactivations,
   canonicalTags,
   selectedLeadIds,
+  abertoId,
   pulses,
   onSelect,
   onOpen,
@@ -137,6 +140,7 @@ export function StageColumn({
                 index={idx}
                 pipelineId={pipelineId}
                 isSelected={selectedLeadIds?.has(lead.id)}
+                isOpen={abertoId === lead.id}
                 pulseCount={pulses?.get(lead.id) ?? 0}
                 onSelect={onSelect}
                 onOpen={onOpen}

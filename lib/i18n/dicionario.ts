@@ -227,6 +227,13 @@ export const DICIONARIO: Traducoes = {
   Salvar: { es: "Guardar" },
   vazio: { es: "vacío" },
   "Abrir conversa no Inbox": { es: "Abrir conversación en el Inbox" },
+  "Abrir no Inbox": { es: "Abrir en el Inbox" },
+  "Fechar painel do lead": { es: "Cerrar el panel del lead" },
+  "Dados do lead": { es: "Datos del lead" },
+  "Este lead ainda não tem uma conversa.": { es: "Este lead todavía no tiene una conversación." },
+  "Não consegui abrir a conversa. Feche o painel e tente de novo.": {
+    es: "No pude abrir la conversación. Cierra el panel e inténtalo de nuevo.",
+  },
 
   // ─── Contatos ───
   "Buscar contatos…": { es: "Buscar contactos…" },

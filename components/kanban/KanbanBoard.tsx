@@ -13,8 +13,6 @@ import { midpoint } from "@/lib/kanban/fractional-indexing";
 import type { Lead } from "@/lib/types/leads";
 import type { Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
-import { LeadDossier } from "./LeadDossier";
-import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 
 interface KanbanBoardProps {
   pipelineId: string;
@@ -33,8 +31,13 @@ interface KanbanBoardProps {
    */
   pulses?: Map<string, number>;
   onSelectionChange?: (ids: string[]) => void;
-  /** Lead a abrir já na montagem (deep link `?lead=` — ver o dossiê abaixo). */
-  leadInicial?: string | null;
+  /**
+   * O lead cujo painel está aberto. O painel mora na PÁGINA, e não aqui: ele ocupa a altura toda ao
+   * lado do título, dos filtros e do quadro, e só a página enxerga os três. O quadro só sabe qual card
+   * destacar e a quem avisar quando um é clicado.
+   */
+  leadAbertoId?: string | null;
+  onAbrirLead?: (leadId: string) => void;
 }
 
 function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> {
@@ -77,7 +80,8 @@ export function KanbanBoard({
   selectedIds,
   pulses: pulsesProp,
   onSelectionChange,
-  leadInicial,
+  leadAbertoId,
+  onAbrirLead,
 }: KanbanBoardProps) {
   const t = useT();
   const useExternal = stagesProp !== undefined && leadsProp !== undefined;
@@ -117,14 +121,6 @@ export function KanbanBoard({
     return Array.isArray(raw) ? raw.filter((t): t is string => typeof t === "string") : [];
   }, [pipelineProp, queryResult.data?.pipeline]);
 
-  // O dossiê é do BOARD e não da página: ele precisa do lead inteiro e do nome
-  // do estágio, que só existem aqui depois do agrupamento.
-  //
-  // `leadInicial` é o deep link: até aqui o dossiê SÓ abria por clique, então
-  // nenhuma outra tela do produto conseguia apontar para um lead específico —
-  // o histórico de captação tinha o id e nenhum lugar para levá-lo. Uma vez
-  // aberto, o estado local manda (fechar não reabre pela URL).
-  const [dossieId, setDossieId] = useState<string | null>(leadInicial ?? null);
   const [internalSelected, setInternalSelected] = useState<Set<string>>(new Set());
   const selectedLeadIds = useMemo(
     () => (selectedIds ? new Set(selectedIds) : internalSelected),
@@ -141,10 +137,6 @@ export function KanbanBoard({
   const isLoading = useExternal ? false : queryResult.isLoading;
   const isError = useExternal ? false : queryResult.isError;
   const error = useExternal ? null : queryResult.error;
-
-  const leadDoDossie = dossieId
-    ? (data?.leads.find((l) => l.id === dossieId) ?? null)
-    : null;
 
   const grouped = useMemo(() => {
     if (!data) return null;
@@ -308,24 +300,12 @@ export function KanbanBoard({
             pulses={pulsesProp ?? queryResult.pulses}
             canonicalTags={canonicalTags}
             selectedLeadIds={selectedLeadIds}
+            abertoId={leadAbertoId ?? null}
             onSelect={handleSelect}
-            onOpen={setDossieId}
+            onOpen={onAbrirLead}
           />
         ))}
       </div>
-      {leadDoDossie && (
-        <LeadDossier
-          open
-          onOpenChange={(v: boolean) => !v && setDossieId(null)}
-          lead={leadDoDossie}
-          pipelineId={pipelineId}
-          fieldDefs={camposDoFunil(data.pipeline.settings ?? null)}
-          stageName={
-            data.stages.find((s) => s.id === leadDoDossie.stage_id)?.name ?? "—"
-          }
-          ownerNames={ownerNames}
-        />
-      )}
     </DragDropContext>
   );
 }
