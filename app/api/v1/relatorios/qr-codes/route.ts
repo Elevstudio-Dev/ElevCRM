@@ -40,7 +40,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   });
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  const funil: FunilDoQr[] = (data ?? []).map((l) => ({
+  // Os contadores são `bigint` e chegam como número ou como texto — `Number()` em tudo.
+  const linhas = (data ?? []) as Array<{ qr_code_id: string } & Record<Exclude<keyof FunilDoQr, "qr_code_id">, number | string>>;
+  const funil: FunilDoQr[] = linhas.map((l) => ({
     qr_code_id: l.qr_code_id,
     leituras: Number(l.leituras),
     conversas: Number(l.conversas),

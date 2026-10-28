@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
+import { copyToClipboard } from "@/lib/clipboard";
 import { formatCentsBRL } from "@/lib/money";
 import { avisosDoQr, type AvisoDoQr } from "@/lib/qr-codes/avisos";
 import { mensagemComCodigo } from "@/lib/qr-codes/codigo";
@@ -69,13 +70,10 @@ export function CartaoDoQr({
     ? []
     : avisosDoQr({ leituras: f.leituras, conversas: f.conversas, temNumero: numero !== null });
 
+  // Pelo helper do repo: numa instalação servida em http://IP a API de área de transferência do navegador nem existe.
   const copiar = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      toast.success(t("Link copiado"));
-    } catch {
-      toast.error(t("Não foi possível copiar. Selecione o link e copie à mão."));
-    }
+    if (await copyToClipboard(link)) toast.success(t("Link copiado"));
+    else toast.error(t("Não foi possível copiar. Selecione o link e copie à mão."));
   };
   const baixar = (qual: "png" | "svg") => async () => {
     try {

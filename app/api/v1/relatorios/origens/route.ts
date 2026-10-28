@@ -16,6 +16,22 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+/** As colunas de `fn_relatorio_de_origens`; os contadores são `bigint` e chegam como número ou como texto. */
+interface LinhaBruta {
+  source: string;
+  detalhe: string | null;
+  leads: number | string;
+  abertos: number | string;
+  ganhos: number | string;
+  perdidos: number | string;
+  valor_ganho_cents: number | string;
+}
+interface LinhaPorDiaBruta {
+  dia: string;
+  source: string;
+  leads: number | string;
+}
+
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const authz = await requireRole("manager", { requestId, resource: "relatorios", allowPlatformAdmin: true });
@@ -48,7 +64,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   const erro = origens.error ?? porDia.error ?? qrs.error ?? fontes.error;
   if (erro) return fail("internal_error", erro.message, 500, { requestId });
 
-  const linhas: LinhaDeOrigem[] = (origens.data ?? []).map((l) => ({
+  // O PostgREST devolve `bigint` como número OU texto conforme o tamanho — `Number()` em tudo.
+  const linhas: LinhaDeOrigem[] = ((origens.data ?? []) as LinhaBruta[]).map((l) => ({
     source: l.source,
     detalhe: l.detalhe,
     leads: Number(l.leads),
@@ -62,7 +79,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     fonte: new Map(((fontes.data ?? []) as Array<{ id: string; name: string }>).map((r) => [r.id, r.name])),
   });
   const serie = serieDiaria(
-    (porDia.data ?? []).map((l) => ({ dia: l.dia, source: l.source, leads: Number(l.leads) })),
+    ((porDia.data ?? []) as LinhaPorDiaBruta[]).map((l) => ({ dia: l.dia, source: l.source, leads: Number(l.leads) })),
     de,
     ate,
     fuso,

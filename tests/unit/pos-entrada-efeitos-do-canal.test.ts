@@ -187,7 +187,7 @@ describe("o QR da mensagem", () => {
 
     await rodar();
 
-    const dados = garantirLeadDaConversa.mock.calls[0]?.[1] as unknown as {
+    const dados = (garantirLeadDaConversa.mock.calls[0] as unknown[] | undefined)?.[1] as {
       origem?: { source: string; sourceMetadata: Record<string, unknown>; tags: string[] };
     };
     expect(dados.origem?.source).toBe("qr_code");
@@ -214,7 +214,7 @@ describe("o QR da mensagem", () => {
 
   it("sem QR, o lead nasce sem `origem` (comportamento de sempre)", async () => {
     await rodar();
-    const dados = garantirLeadDaConversa.mock.calls[0]?.[1] as unknown as Record<string, unknown>;
+    const dados = (garantirLeadDaConversa.mock.calls[0] as unknown[] | undefined)?.[1] as Record<string, unknown>;
     expect("origem" in dados).toBe(false);
     expect(vincular).not.toHaveBeenCalled();
   });
@@ -224,7 +224,7 @@ describe("o QR da mensagem", () => {
 
     await rodar();
 
-    const dados = garantirLeadDaConversa.mock.calls[0]?.[1] as unknown as Record<string, unknown>;
+    const dados = (garantirLeadDaConversa.mock.calls[0] as unknown[] | undefined)?.[1] as Record<string, unknown>;
     expect("origem" in dados).toBe(false);
     expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
   });

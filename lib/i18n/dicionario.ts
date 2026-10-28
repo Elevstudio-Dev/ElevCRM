@@ -144,9 +144,6 @@ export const DICIONARIO: Traducoes = {
   "Funil do período": { es: "Embudo del período" },
   "Mensagem que o cliente envia": { es: "Mensaje que envía el cliente" },
   "Nenhum número ligado": { es: "Ningún número conectado" },
-  "Não foi possível copiar. Selecione o link e copie à mão.": {
-    es: "No fue posible copiar. Selecciona el enlace y cópialo a mano.",
-  },
   "Não foi possível gerar a imagem.": { es: "No fue posible generar la imagen." },
   "Este QR não tem número de WhatsApp ligado — quem ler vê uma página de aviso.": {
     es: "Este QR no tiene un número de WhatsApp conectado: quien lo lea verá una página de aviso.",
@@ -166,7 +163,6 @@ export const DICIONARIO: Traducoes = {
   },
   "Ir para Conexões": { es: "Ir a Conexiones" },
   "Cartaz da recepção": { es: "Cartel de la recepción" },
-  "Número de WhatsApp": { es: "Número de WhatsApp" },
   "(desconectado)": { es: "(desconectado)" },
   "O cliente vai enviar:": { es: "El cliente va a enviar:" },
   "Mudar a mensagem vale para as próximas leituras. O código não muda — ele está impresso.": {

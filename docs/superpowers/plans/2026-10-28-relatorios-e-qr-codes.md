@@ -2279,9 +2279,10 @@ Molde: `tests/e2e/funil-card-mais-util.spec.ts` (login, seed por service role, `
   8. **Papel**: logado como `agent`, `/app/relatorios` redireciona para `/app/inbox` e a barra NÃO tem a aba
      "Relatórios"; como `manager`, a barra tem 6 abas e nenhuma rolagem lateral em 1280 px (meça
      `document.documentElement.scrollWidth <= clientWidth`).
-  9. **Celular (390×844)**: as duas telas sem rolagem lateral; capturas `relatorio-celular.png`,
-     `qr-codes-celular.png`.
-  Capturas também de `relatorio-claro.png`, `qr-codes-escuro.png` (tema por `localStorage.setItem("elevcrm-theme", t)`).
+  9. **Celular (390×844)**: as duas telas sem rolagem lateral, com captura de cada uma.
+  Capturas também do relatório no tema claro e da tela de QR codes no escuro (tema por
+  `localStorage.setItem("elevcrm-theme", t)`). As imagens ficam em `test-results/` (artefato de build, fora do
+  versionamento): nenhum documento as cita.
 
 - [ ] **Step 3: Rodar local** (dev server do worktree na porta 3203 com WhatsApp desligado — ver os scripts
   `dev-wt.sh`/`e2e-wt.sh` do scratchpad da sessão anterior, ou subir `pnpm exec next dev -p 3203` com `.env.e2e`
