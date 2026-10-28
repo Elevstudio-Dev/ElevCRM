@@ -72,6 +72,14 @@ export interface Message {
   media_mime: string | null;
   media_size_bytes: number | null;
   media_storage_path: string | null;
+  /**
+   * O texto que o sistema tirou da mídia (a fala de um áudio, a descrição de
+   * uma imagem) e o estado dessa derivação: `ready` | `failed` | ausente. Vem
+   * da listagem da conversa; opcional porque o envio e as respostas otimistas
+   * não o trazem.
+   */
+  media_derived_text?: string | null;
+  media_derived_status?: string | null;
   sent_via: "user" | "ai" | "system";
   sent_by_user_id: string | null;
   sent_at: string;

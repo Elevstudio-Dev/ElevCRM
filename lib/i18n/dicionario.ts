@@ -2154,8 +2154,8 @@ export const DICIONARIO: Traducoes = {
   "Transforma o áudio que o cliente mandou em texto que o agente lê.": {
     es: "Transforma el audio que envió el cliente en texto que el agente lee.",
   },
-  "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Aceita apontar para outro serviço compatível — inclusive um rodando na sua própria máquina — mas exige uma chave desse serviço, separada da chave do modelo de conversa.": {
-    es: "Usa el estándar de transcripción de OpenAI, que es el formato que implementan los servicios del mercado. Acepta apuntar a otro servicio compatible — incluso uno corriendo en tu propia máquina — pero exige una clave de ese servicio, separada de la clave del modelo de conversación.",
+  "Usa o Whisper da OpenAI. Com chave da OpenAI cadastrada, vai direto para ela; sem, e com a OpenRouter, a mesma chave da OpenRouter serve. Com Anthropic ou Google, é preciso uma dessas duas chaves, separada da chave do modelo de conversa.": {
+    es: "Usa el Whisper de OpenAI. Con una clave de OpenAI registrada, va directo a ella; sin ella, y con OpenRouter, la misma clave de OpenRouter sirve. Con Anthropic o Google, hace falta una de esas dos claves, separada de la clave del modelo de conversación.",
   },
   "O cliente manda áudio e o agente responde como se não tivesse recebido nada.": {
     es: "El cliente manda audio y el agente responde como si no hubiera recibido nada.",
@@ -4207,6 +4207,11 @@ export const DICIONARIO: Traducoes = {
   "Reproduzir áudio": { es: "Reproducir audio" },
   "Progresso do áudio": { es: "Progreso del audio" },
   "Velocidade de reprodução": { es: "Velocidad de reproducción" },
+  "Ver texto": { es: "Ver texto" },
+  "Ocultar texto": { es: "Ocultar texto" },
+  "Transcrevendo…": { es: "Transcribiendo…" },
+  "Não foi possível transcrever este áudio.": { es: "No fue posible transcribir este audio." },
+  "Não identifiquei fala neste áudio.": { es: "No identifiqué voz en este audio." },
   "Ampliar imagem": { es: "Ampliar imagen" },
   "Imagem recebida": { es: "Imagen recibida" },
   Baixar: { es: "Descargar" },
