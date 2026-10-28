@@ -75,6 +75,17 @@ export type NascimentoDoLead =
   | { criado: true; leadId: string; pipelineId: string; stageId: string }
   | { criado: false; motivo: MotivoSemLead; detalhe?: string };
 
+/**
+ * De onde o NEGÓCIO veio, quando quem chama sabe melhor que o contato — hoje, o QR lido nesta mensagem
+ * (`lib/qr-codes/reconhecer.ts`). Precedência: esta origem > o anúncio estampado no contato > "whatsapp".
+ * O QR da mensagem vence o anúncio porque é sobre ESTA demanda; o anúncio é sobre a primeira vez da pessoa.
+ */
+export interface OrigemDoNascimento {
+  source: string;
+  sourceMetadata: Record<string, unknown>;
+  tags: string[];
+}
+
 export interface DadosDoNascimento {
   organizationId: string;
   contactId: string;
@@ -82,6 +93,8 @@ export interface DadosDoNascimento {
   conversationId: string;
   /** nome do contato, para o título do card. */
   nomeDoContato: string | null;
+  /** origem já conhecida por quem chama (o QR da mensagem); só vale para o lead NOVO. */
+  origem?: OrigemDoNascimento;
 }
 
 /**
@@ -203,6 +216,15 @@ export async function garantirLeadDaConversa(
   // contato pode ganhar conversas/leads futuros por outros canais sem que
   // isso reescreva a origem deste.
   const rotuloDeAnuncio = contato?.source ? ROTULO_DE_ANUNCIO[contato.source] : undefined;
+  const origemDoAnuncio: OrigemDoNascimento | null = rotuloDeAnuncio
+    ? {
+        source: contato!.source as string,
+        sourceMetadata: (contato!.source_metadata ?? {}) as Record<string, unknown>,
+        tags: [rotuloDeAnuncio],
+      }
+    : null;
+  const origem: OrigemDoNascimento = dados.origem ??
+    origemDoAnuncio ?? { source: "whatsapp", sourceMetadata: {}, tags: [] };
 
   const { data: lead, error } = await db
     .from("crm_leads")
@@ -212,12 +234,12 @@ export async function garantirLeadDaConversa(
       stage_id: destino.stageId,
       contact_id: contactId,
       title: titulo,
-      source: rotuloDeAnuncio ? contato!.source : "whatsapp",
-      source_metadata: rotuloDeAnuncio ? (contato!.source_metadata ?? {}) : {},
+      source: origem.source,
+      source_metadata: origem.sourceMetadata,
       // O ponto ao lado do título só acende se a organização cadastrar este
       // rótulo em `crm_pipelines.settings.canonical_tags` (Configurações do
       // funil) — a tag sempre entra; o destaque visual é opt-in do operador.
-      tags: rotuloDeAnuncio ? [rotuloDeAnuncio] : [],
+      tags: origem.tags,
     })
     .select("id")
     .single();
@@ -251,7 +273,15 @@ export async function garantirLeadDaConversa(
     // que de fato aconteceu — a mensagem chegou por webhook, o produto agiu.
     actor: { type: "webhook_source", id: "canal-inbound" },
     reason: "primeira mensagem recebida no WhatsApp",
-    payload: { conversation_id: conversationId },
+    // A origem entra no registro (quem lê a timeline vê POR ONDE o negócio nasceu); do QR, só o id — nome e
+    // código ficam em `source_metadata` do lead, e o anúncio carrega texto demais para a timeline.
+    payload: {
+      conversation_id: conversationId,
+      origem: origem.source,
+      ...(typeof origem.sourceMetadata.qr_code_id === "string"
+        ? { qr_code_id: origem.sourceMetadata.qr_code_id }
+        : {}),
+    },
   });
   if (!registro.ok) {
     // O lead existe e é o que importa; a linha da timeline falhou. Devolver erro
