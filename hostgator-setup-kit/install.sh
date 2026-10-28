@@ -1142,13 +1142,21 @@ esac
 # A chave da OpenAI é pedida À PARTE quando ela NÃO é o provedor de conversa,
 # porque dois pontos do sistema dependem dela mesmo assim: ouvir áudio (o
 # Whisper é da OpenAI) e indexar a base de conhecimento. Sem esta linha, quem
-# escolhe OpenRouter instala achando que está completo e descobre semanas depois
-# que o agente nunca ouviu um áudio — que é exatamente o defeito já visto em
-# produção, com a chave certa no .env e indo para o endpoint errado.
+# escolhe a Anthropic instala achando que está completo e descobre semanas
+# depois que o agente nunca ouviu um áudio — que é exatamente o defeito já visto
+# em produção, com a chave certa no .env e indo para o endpoint errado.
+#
+# Quem escolhe OpenRouter é a exceção do áudio: a OpenRouter repassa o mesmo
+# Whisper, e o worker de mídia a usa com a chave que já atende a conversa
+# (lib/messaging/media/rota-de-transcricao.ts). Para esse, o campo continua
+# existindo, mas só pela base de conhecimento — dizer "para ouvir áudios" ali
+# faria a pessoa buscar uma chave de que o áudio não precisa.
 if [ "$AI_PROVIDER" = "openai" ]; then
   CAMPO_OPENAI_EXTRA=""
+elif [ "$AI_PROVIDER" = "openrouter" ]; then
+  CAMPO_OPENAI_EXTRA="OPENAI_API_KEY|Chave da OpenAI — só para a base de conhecimento; os áudios já são ouvidos pela chave da OpenRouter (Enter pula: dá para cadastrar depois pela tela, em IA › Credenciais)||v_openai|secret|opcional"
 else
-  CAMPO_OPENAI_EXTRA="OPENAI_API_KEY|Chave da OpenAI — só para ouvir áudios e usar a base de conhecimento (Enter pula: dá para cadastrar depois pela tela, em IA › Credenciais)||v_openai|secret|opcional"
+  CAMPO_OPENAI_EXTRA="OPENAI_API_KEY|Chave da OpenAI — para ouvir áudios e usar a base de conhecimento (Enter pula: dá para cadastrar depois pela tela, em IA › Credenciais)||v_openai|secret|opcional"
 fi
 
 # ── A versão que esta instalação vai rodar ───────────────────────────────────
@@ -1585,6 +1593,7 @@ esac
   envq OPENROUTER_BASE_URL "${OPENROUTER_BASE_URL:-}"
   printf '# OpenAI: transcrição dos áudios do WhatsApp (Whisper) + embeddings do RAG.\n'
   printf '# Opcional — sem ela a IA responde sem a base e pede o áudio em texto.\n'
+  printf '# (Com OPENROUTER_API_KEY preenchida, o áudio é transcrito por ela.)\n'
   envq OPENAI_API_KEY "${OPENAI_API_KEY:-}"
   printf '# Web Push: aviso na bandeja do sistema com a aba do CRM fechada.\n'
   printf '# Opcional e VAZIO por padrão — sem o par, os avisos aparecem só com o\n'

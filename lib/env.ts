@@ -417,7 +417,8 @@ if (!env.OPENAI_API_KEY) {
     "[env] OPENAI_API_KEY ausente — ela é o ÚLTIMO degrau da escada de chave da OpenAI " +
       "(preparo de material do acervo e transcrição de áudio). Se alguma organização já " +
       "cadastrou a chave em IA › Credenciais, os dois seguem funcionando por ela; se não " +
-      "cadastrou nenhuma, ambos ficam parados até que alguém cadastre — pela tela ou aqui.",
+      "cadastrou nenhuma, ambos ficam parados até que alguém cadastre — pela tela ou aqui. " +
+      "A transcrição de áudio também aceita a chave da OpenRouter, quando a instalação usa uma.",
   );
 }
 if (!env.IMPERSONATE_COOKIE_SECRET || env.IMPERSONATE_COOKIE_SECRET.length < 32) {

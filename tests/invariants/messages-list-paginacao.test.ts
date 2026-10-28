@@ -176,6 +176,8 @@ const CONV = "aaaabbbb-4444-4000-8000-000000000001";
 const CONV_CURTA = "aaaabbbb-4444-4000-8000-0000000000ff";
 const USER = "aaaabbbb-5555-4000-8000-000000000001";
 const CURTA_TOTAL = 3;
+const ID_COM_DERIVADO = "aaaabbbb-7777-4000-8000-000000000001";
+const TEXTO_DERIVADO = "quero remarcar a consulta de terça";
 
 const TOTAL = 64;
 const LIMIT = 50;
@@ -257,6 +259,12 @@ beforeAll(() => {
        direction, status, sent_via, body, sent_at)
     values
       ${linhasCurta};
+
+    -- O texto que o worker de mídia tirou do áudio: a segunda da conversa curta
+    -- é a única que o tem. A tela da atendente lê isto da listagem.
+    update public.messages
+       set media_derived_text = '${TEXTO_DERIVADO}', media_derived_status = 'ready'
+     where id = '${ID_COM_DERIVADO}';
   `);
 });
 
@@ -390,5 +398,19 @@ describe("listMessagesHandler — paginação da thread", () => {
     // O `.reverse()` da correção não pode inverter a conversa curta: quem cabe
     // numa página só tem que sair na mesma ordem de sempre (antigo → novo).
     expect(r.messages.map((m) => m.body)).toEqual(["curta-1", "curta-2", "curta-3"]);
+  });
+
+  it("a listagem traz o texto derivado da mídia e o estado dele (a tela da atendente lê daqui)", async () => {
+    // Sem as duas colunas no SELECT da listagem, a tela nunca saberia que o
+    // áudio foi transcrito — e o worker teria feito o trabalho para ninguém ver.
+    const r = await listMessagesHandler(fakeAdminClient(), ctx, CONV_CURTA, { limit: LIMIT });
+    const com = r.messages.find((m) => m.id === ID_COM_DERIVADO)!;
+    expect(com.media_derived_text).toBe(TEXTO_DERIVADO);
+    expect(com.media_derived_status).toBe("ready");
+
+    // E quem não foi derivado volta com `null`, não com a coluna ausente.
+    const sem = r.messages.find((m) => m.body === "curta-1")!;
+    expect(sem.media_derived_text).toBeNull();
+    expect(sem.media_derived_status).toBeNull();
   });
 });

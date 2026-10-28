@@ -10,13 +10,20 @@ import type pg from "pg";
 import { extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
 import { resolveOrgLlmConfig, type LlmEdgeConfig } from "@/lib/agent-engine/edge/llm/credentials";
-import { createDefaultRegistry } from "@/lib/agent-engine/edge/llm/providers";
+import {
+  cabecalhosDeAtribuicaoOpenRouter,
+  createDefaultRegistry,
+} from "@/lib/agent-engine/edge/llm/providers";
 import { createPool } from "@/lib/agent-engine/db/pool";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
-import { TIPOS_DERIVAVEIS } from "@/lib/messaging/media/derivable";
+import { MARCADOR_NAO_LIDA, TIPOS_DERIVAVEIS } from "@/lib/messaging/media/derivable";
 import { deriveVideoText } from "@/lib/messaging/media/video-derive";
-import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
+import {
+  escolherRotaDeTranscricao,
+  type RotaDeTranscricao,
+} from "@/lib/messaging/media/rota-de-transcricao";
+import { transcritorDaRota } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -131,28 +138,32 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       }
     }
 
-    // A transcrição é SEMPRE do Whisper (api.openai.com), então precisa de uma
-    // chave OpenAI — não da chave do provedor de chat da org. O comentário
-    // antigo já dizia isso ("senão exige credencial openai dedicada"), mas o
-    // código passava `llm.apiKey` direto: numa org com Anthropic, a chave da
-    // Anthropic era enviada para a OpenAI e voltava 401 em toda tentativa
-    // (visto nesta VPS: media.derive_requested preso com transcription_401,
-    // e o cliente ouvindo "não consigo ouvir áudio" com a chave certa no .env).
-    let openaiKey: string | null = null;
-    if (llm.provider === "openai") {
-      openaiKey = llm.apiKey;
-    } else {
-      try {
-        const oa = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, {
-          provider: "openai",
-        });
-        openaiKey = oa.apiKey;
-      } catch {
-        openaiKey = null; // sem credencial e sem OPENAI_API_KEY: áudio fica sem transcrição
-      }
-    }
+    // A transcrição é do Whisper, e precisa da chave de QUEM O OFERECE — não da
+    // chave do provedor de chat da org. O código antigo passava `llm.apiKey`
+    // direto: numa org com Anthropic, a chave da Anthropic era enviada para a
+    // OpenAI e voltava 401 em toda tentativa (visto nesta VPS:
+    // media.derive_requested preso com transcription_401, e o cliente ouvindo
+    // "não consigo ouvir áudio" com a chave certa no .env).
+    //
+    // Quem oferece é a OpenAI (direto) ou a OpenRouter (mesma chave da conversa,
+    // para quem escolheu esse caminho no instalador) — a ordem e o porquê estão
+    // em `rota-de-transcricao.ts`.
+    const rota = await escolherRotaDeTranscricao({
+      provedorDaOrg: llm.provider,
+      chaveDoProvedorDaOrg: llm.apiKey,
+      buscarChave: async (provedor) => {
+        try {
+          const cfg = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, {
+            provider: provedor,
+          });
+          return cfg.apiKey;
+        } catch {
+          return null; // sem credencial da org e sem a variável do .env
+        }
+      },
+    });
 
-    const deps = buildDeriveDeps(llm, openaiKey, row.organization_id, admin);
+    const deps = buildDeriveDeps(llm, rota, row.organization_id, admin);
 
     const text = await deriveMediaText(msg.type, buffer, msg.media_mime ?? "application/octet-stream", deps);
     await admin.from("messages")
@@ -200,7 +211,7 @@ async function lerBindingDoPonto(
 
 function buildDeriveDeps(
   llm: { provider: string; apiKey: string; defaultModel: string | null },
-  openaiKey: string | null,
+  rota: RotaDeTranscricao | null,
   orgId: string,
   admin: ReturnType<typeof createAdminClient>,
 ): DeriveDeps {
@@ -282,18 +293,22 @@ function buildDeriveDeps(
     });
     return res.text;
   };
-  // Sem chave OpenAI não há como transcrever: devolver string vazia é honesto
-  // (o derivado fica vazio e o marcador "[áudio]" continua valendo) e evita o
-  // loop de 401 que retentava a cada drain.
-  const transcriber: DeriveDeps["transcriber"] = openaiKey
-    ? apiTranscriptionProvider({ apiKey: openaiKey })
+  // Sem chave de quem transcreve não há como transcrever: devolver o marcador
+  // (em vez de tentar com a chave errada) evita o loop de 401 que retentava a
+  // cada drain.
+  const transcriber: DeriveDeps["transcriber"] = rota
+    ? transcritorDaRota(rota, { headers: cabecalhosDeAtribuicaoOpenRouter() })
     : {
         transcribe: async () => {
           // Mesma razão da visão: devolver "" fazia o agente responder ao áudio
           // como se ele não existisse. O aviso é o que dá ao operador a chance
           // de cadastrar a chave — sem ele, o sintoma é indistinguível de "o
           // agente é ruim".
-          await avisarMidiaNaoLida(orgId, "áudio", "falta uma chave da OpenAI para transcrever");
+          await avisarMidiaNaoLida(
+            orgId,
+            "áudio",
+            "falta uma chave para transcrever — cadastre uma da OpenAI ou da OpenRouter",
+          );
           return MARCADOR_NAO_LIDA;
         },
       };
@@ -306,16 +321,9 @@ function buildDeriveDeps(
   };
 }
 
-/**
- * O texto que substitui a string vazia quando a mídia não pôde ser lida.
- *
- * Não é cosmético: o agente recebe este texto como derivado da mensagem, então
- * ele passa a SABER que chegou algo que não conseguiu interpretar, em vez de
- * concluir que a mensagem veio vazia. A diferença aparece na resposta ao
- * cliente — "não consegui abrir sua foto, pode me dizer o que é?" no lugar de
- * um silêncio que parece descaso.
- */
-export const MARCADOR_NAO_LIDA = "[o cliente enviou uma mídia que não consegui interpretar]";
+// O marcador mora em `derivable.ts` (a conversa também precisa reconhecê-lo) e
+// continua exportado daqui, que é de onde os chamadores sempre o importaram.
+export { MARCADOR_NAO_LIDA };
 
 /**
  * Abre UM aviso na Central por organização enquanto o problema durar.

@@ -395,7 +395,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     emissor: "lib/messaging/media/transcription.ts",
     fixo: {
       razao:
-        "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Aceita apontar para outro serviço compatível — inclusive um rodando na sua própria máquina — mas exige uma chave desse serviço, separada da chave do modelo de conversa.",
+        "Usa o Whisper da OpenAI. Com chave da OpenAI cadastrada, vai direto para ela; sem, e com a OpenRouter, a mesma chave da OpenRouter serve. Com Anthropic ou Google, é preciso uma dessas duas chaves, separada da chave do modelo de conversa.",
       // ⚠️ O QUE ELE USA DE VERDADE, e por que precisa estar escrito aqui.
       //
       // A tela mostrava `claude-sonnet-5` neste ponto, com "usando o padrão da
@@ -408,7 +408,9 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
       // quem opera que o áudio está sendo ouvido pelo modelo errado — e mandá-lo
       // caçar um problema que não existe, ou trocar um modelo que não é o que
       // faz o trabalho. `lib/messaging/media/transcription.ts` manda para
-      // `/v1/audio/transcriptions` com `whisper-1`.
+      // `/v1/audio/transcriptions` com `whisper-1`. Pela OpenRouter (quando não
+      // há chave OpenAI) é o MESMO Whisper — `openai/whisper-1` — por isso o
+      // modelo anunciado não muda com a rota (`rota-de-transcricao.ts`).
       usa: { provider: "openai", modelId: "whisper-1" },
     },
     sintomaDeFalha:
