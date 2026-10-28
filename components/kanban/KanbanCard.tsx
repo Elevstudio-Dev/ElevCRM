@@ -265,7 +265,11 @@ export function KanbanCard({
                     </button>
                   </h3>
                 </div>
-                <KanbanCardActions lead={lead} pipelineId={pipelineId} />
+                {/* O botão de ações tem 28px e a linha do título 20px: sem a margem negativa ele
+                    esticava a linha e deixava um vão entre o título e o telefone. */}
+                <div className="-my-1 shrink-0">
+                  <KanbanCardActions lead={lead} pipelineId={pipelineId} />
+                </div>
               </div>
 
               {/* O telefone do cliente: é por ele que o atendente reconhece quem é, e o nome do
