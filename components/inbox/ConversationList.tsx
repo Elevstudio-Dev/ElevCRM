@@ -5,6 +5,8 @@ import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
+import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { useLimiteDeResposta } from "@/hooks/inbox/useLimiteDeResposta";
@@ -59,6 +61,14 @@ export function ConversationList({
   // com o cabeçalho, que faz a mesma pergunta).
   const automaticoDaOrg = useAutomaticoAtivo();
   const limiteDeResposta = useLimiteDeResposta();
+  // O vocabulário de marcadores da empresa, lido UMA vez para a lista inteira: a linha pinta cada
+  // tag com a cor do marcador, e o hook por linha seriam 50 leituras da mesma coisa.
+  const { activeOrg } = useAuth();
+  const { data: vocabularioDeTags } = useConversationTagVocabulary(activeOrg?.orgId ?? null);
+  const coresDasTags = useMemo(
+    () => new Map((vocabularioDeTags ?? []).map((m) => [m.nome, m.cor] as const)),
+    [vocabularioDeTags],
+  );
 
   const items = useMemo(() => {
     const all: ConversationWithContact[] = q.data?.pages.flatMap((p) => p.data) ?? [];
@@ -136,6 +146,7 @@ export function ConversationList({
             mostrarAtendente={mostrarAtendente}
             automaticoDaOrg={automaticoDaOrg.data}
             limiteMinutos={limiteDeResposta}
+            coresDasTags={coresDasTags}
           />
         ))}
         {q.hasNextPage && (

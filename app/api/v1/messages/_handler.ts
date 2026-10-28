@@ -748,6 +748,10 @@ export async function sendMessageHandler(
     last_outbound_at: string;
     last_message_at: string;
     last_message_preview: string;
+    last_message_id: string;
+    last_message_direction: "outbound";
+    last_message_type: string;
+    last_message_status: string;
     unread_count_for_assignee: number;
     bot_silenced_until?: string;
   } = {
@@ -759,6 +763,14 @@ export async function sendMessageHandler(
       media_storage_path: input.media_storage_path,
       type: input.type,
     }),
+    // O espelho da última mensagem (migration 0219): a lista mostra "Você:", o
+    // ícone do tipo e os tiques a partir daqui. O status entra com o valor que a
+    // mensagem tem AGORA (já passou pelo envio ao provedor); daqui em diante quem
+    // o mantém é o trigger `trg_messages_espelham_status_na_conversa`, a cada ack.
+    last_message_id: message.id,
+    last_message_direction: "outbound",
+    last_message_type: message.type,
+    last_message_status: message.status,
     // Resposta humana/CRM zera pendências — espelha fn_mark_conversation_message
     // outbound, que o envio pelo CRM não chama (só atualiza colunas à mão).
     unread_count_for_assignee: 0,
