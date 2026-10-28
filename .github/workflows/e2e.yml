@@ -375,6 +375,14 @@ jobs:
       #      execução quando a issue #347 entregar entrega determinística (o
       #      caminho provável é desligar o `refetchOnWindowFocus` durante a
       #      asserção, para sobrar um caminho só).
+      #
+      # `inbox-lista-tique-ao-vivo` entrou aqui em 2026-10-28, no PR #14 (a lista do inbox no jeito do
+      # WhatsApp), pelo MESMO motivo de `inbox-tempo-real`, medido no próprio PR: passou local (22 s) e
+      # reprovou no runner — o canal em tempo real não entregou em 45 s, sem nenhuma linha de erro.
+      # O que NÃO depende de Realtime (o trigger da 0219 leva o ack da mensagem à conversa, e a rota o
+      # devolve) ficou no CI, em `inbox-lista-estilo-whatsapp`, relendo a tela a cada passo. Esta spec
+      # guarda só o último elo — o tique mudar SOZINHO, sem F5 — e volta para a lista de execução junto
+      # com `inbox-tempo-real`, quando a entrega for determinística.
       # ✅ `agenda-marcar-pela-tela` SAIU DAQUI — e o registro é o motivo.
       #
       # Ela nasceu `skip` pela DECISÃO 21.3: a frente 1 é API e não tem pixel
@@ -419,6 +427,7 @@ jobs:
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts
         inbox-tempo-real.spec.ts
+        inbox-lista-tique-ao-vivo.spec.ts
     steps:
       - uses: actions/checkout@v7
 
