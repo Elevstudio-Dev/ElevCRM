@@ -84,6 +84,8 @@ export const DICIONARIO: Traducoes = {
   Webhooks: { es: "Webhooks" },
   Desempenho: { es: "Rendimiento" },
   "Evolução da IA": { es: "Evolución de la IA" },
+  Relatórios: { es: "Informes" },
+  "QR codes": { es: "Códigos QR" },
   "Audit Log": { es: "Registro de auditoría" },
   Configurações: { es: "Configuración" },
   Buscar: { es: "Buscar" },

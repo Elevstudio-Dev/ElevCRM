@@ -76,17 +76,27 @@ describe("canSee", () => {
 });
 
 describe("abasPrincipais — a barra superior", () => {
-  it("são CINCO abas, na ordem decidida, e não a ordem dos grupos", () => {
+  it("quem atende vê CINCO abas, na ordem decidida, e não a ordem dos grupos", () => {
     // A ordem é decisão de produto ("Contatos antes de Funis, como no
     // WhatsApp"), declarada em `principal: N` — não derivada da taxonomia. Se
     // fosse derivada, Agenda (grupo Atendimento) viria antes de Contatos (CRM).
-    expect(abasPrincipais(true, null).map((a) => a.href)).toEqual([
-      "/app/inbox",
-      "/app/contacts",
-      "/app/kanban",
-      "/app/agenda",
-      "/app/ai",
-    ]);
+    const CINCO = ["/app/inbox", "/app/contacts", "/app/kanban", "/app/agenda", "/app/ai"];
+    expect(abasPrincipais(AGENT.platform, AGENT.role).map((a) => a.href)).toEqual(CINCO);
+    expect(abasPrincipais(VIEWER.platform, VIEWER.role).map((a) => a.href)).toEqual(CINCO);
+  });
+
+  it("gestor e administrador vêem a SEXTA aba, Relatórios, por último", () => {
+    // Decisão do dono em 2026-10-28: a sexta aba existe e é só para gestor+. Atendente não a vê.
+    const SEIS = ["/app/inbox", "/app/contacts", "/app/kanban", "/app/agenda", "/app/ai", "/app/relatorios"];
+    expect(abasPrincipais(true, null).map((a) => a.href)).toEqual(SEIS);
+    expect(abasPrincipais(MANAGER.platform, MANAGER.role).map((a) => a.href)).toEqual(SEIS);
+    expect(abasPrincipais(ADMIN.platform, ADMIN.role).map((a) => a.href)).toEqual(SEIS);
+  });
+
+  it("Relatórios é gestor+ no registro, e QR codes (sem aba) também", () => {
+    expect(dest("/app/relatorios").minRole).toBe("manager");
+    expect(dest("/app/relatorios/qr-codes").minRole).toBe("manager");
+    expect(dest("/app/relatorios/qr-codes").principal).toBeUndefined();
   });
 
   it("a aba de IA é o HUB, com o rótulo curto", () => {
@@ -97,9 +107,11 @@ describe("abasPrincipais — a barra superior", () => {
   });
 
   it("uma aba por linha da barra — nunca uma fila que precise rolar", () => {
-    // Cinco cabe em 1024px com rótulo e em 768px só com ícone. A sexta é a
-    // volta do menu lateral, deitado. Quem quiser a sexta tira uma.
-    expect(abasPrincipais(true, null).length).toBeLessThanOrEqual(5);
+    // Cinco para quem atende; a sexta (Relatórios) é decisão do dono em 2026-10-28 e só aparece para gestor+.
+    // Uma sétima é a volta do menu lateral, deitado.
+    expect(abasPrincipais(true, null).length).toBeLessThanOrEqual(6);
+    expect(abasPrincipais(AGENT.platform, AGENT.role).length).toBeLessThanOrEqual(5);
+    expect(abasPrincipais(VIEWER.platform, VIEWER.role).length).toBeLessThanOrEqual(5);
   });
 
   it("não inclui o que é só do inventário", () => {
