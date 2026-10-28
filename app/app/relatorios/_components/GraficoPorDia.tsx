@@ -66,7 +66,14 @@ export function GraficoPorDia({ serie }: { serie: DiaDaSerie[] }) {
               color: "var(--color-text)",
             }}
           />
-          <Legend formatter={(nome) => t(ROTULO_DO_GRUPO[nome as GrupoDeOrigem] ?? String(nome))} />
+          {/* O texto da legenda NÃO herda a cor da barra: o lavanda sobre branco não tem contraste para ler. */}
+          <Legend
+            formatter={(nome) => (
+              <span style={{ color: "var(--color-text-muted)" }}>
+                {t(ROTULO_DO_GRUPO[nome as GrupoDeOrigem] ?? String(nome))}
+              </span>
+            )}
+          />
           {presentes.map((g) => (
             <Bar key={g} dataKey={g} stackId="a" fill={COR_DO_GRUPO[g]} />
           ))}

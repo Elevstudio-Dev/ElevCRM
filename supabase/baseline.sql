@@ -18828,6 +18828,9 @@ grant execute on function public.fn_relatorio_de_origens_por_dia(uuid, timestamp
 revoke execute on function public.fn_relatorio_de_qr_codes(uuid, timestamptz, timestamptz) from public, anon;
 grant execute on function public.fn_relatorio_de_qr_codes(uuid, timestamptz, timestamptz) to authenticated, service_role;
 
+-- Tabelas e funções novas: o PostgREST só as enxerga depois de recarregar o esquema.
+notify pgrst, 'reload schema';
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

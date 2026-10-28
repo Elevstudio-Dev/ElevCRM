@@ -38,7 +38,8 @@ function Etapa({ id, rotulo, valor, percentual }: { id: string; rotulo: string; 
     <div className="flex min-w-[64px] flex-col" data-testid={`funil-${id}`}>
       <span className="text-xs text-text-muted">{rotulo}</span>
       <span className="text-lg font-semibold tabular-nums text-text">{valor.toLocaleString("pt-BR")}</span>
-      <span className="text-xs tabular-nums text-text-muted">{percentual ?? " "}</span>
+      {/* Espaço fixo (não-quebrável) quando não há taxa: a linha vazia colapsaria e a 1ª etapa ficaria mais baixa. */}
+      <span className="text-xs tabular-nums text-text-muted">{percentual ?? " "}</span>
     </div>
   );
 }
@@ -97,7 +98,7 @@ export function CartaoDoQr({
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <header className="flex flex-wrap items-center gap-2">
           <h3 className="truncate text-base font-semibold">{qr.nome}</h3>
-          <Badge variant="neutral" className="font-mono">
+          <Badge variant="neutral" className="font-mono" data-testid="codigo-do-qr">
             {qr.codigo}
           </Badge>
           {arquivado && <Badge variant="neutral">{t("Arquivado")}</Badge>}
@@ -105,9 +106,13 @@ export function CartaoDoQr({
 
         <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
           <dt className="text-text-muted">{t("Link")}</dt>
-          <dd className="min-w-0 break-all font-mono text-xs text-text">{link}</dd>
+          <dd data-testid="link-do-qr" className="min-w-0 break-all font-mono text-xs text-text">
+            {link}
+          </dd>
           <dt className="text-text-muted">{t("Mensagem que o cliente envia")}</dt>
-          <dd className="min-w-0 break-words text-text">{mensagemComCodigo(qr.mensagem, qr.codigo)}</dd>
+          <dd data-testid="mensagem-do-qr" className="min-w-0 break-words text-text">
+            {mensagemComCodigo(qr.mensagem, qr.codigo)}
+          </dd>
           <dt className="text-text-muted">{t("Número")}</dt>
           <dd className="text-text">
             {numero ? `${numero.nome ?? "WhatsApp"} · ${numero.telefone}` : t("Nenhum número ligado")}

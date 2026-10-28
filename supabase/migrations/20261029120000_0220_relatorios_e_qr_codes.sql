@@ -227,3 +227,6 @@ revoke execute on function public.fn_relatorio_de_origens_por_dia(uuid, timestam
 grant execute on function public.fn_relatorio_de_origens_por_dia(uuid, timestamptz, timestamptz, text) to authenticated, service_role;
 revoke execute on function public.fn_relatorio_de_qr_codes(uuid, timestamptz, timestamptz) from public, anon;
 grant execute on function public.fn_relatorio_de_qr_codes(uuid, timestamptz, timestamptz) to authenticated, service_role;
+
+-- Tabelas e funções novas: o PostgREST só as enxerga depois de recarregar o esquema.
+notify pgrst, 'reload schema';
