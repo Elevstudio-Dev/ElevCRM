@@ -24,7 +24,10 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
+import { PainelDoLead } from "@/components/kanban/PainelDoLead";
 import { Button } from "@/components/ui/button";
+import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import { Plus } from "@/lib/ui/icons";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
@@ -52,11 +55,28 @@ export function PipelinePageClient({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
 
+  // O lead aberto no painel ao lado. `?lead=` é o deep link: até aqui o dossiê SÓ abria por clique,
+  // então nenhuma outra tela do produto conseguia apontar para um lead específico — o histórico de
+  // captação tinha o id e nenhum lugar para levá-lo. Uma vez aberto, o estado local manda (fechar não
+  // reabre pela URL).
+  const [leadAbertoId, setLeadAbertoId] = useState<string | null>(() => searchParams.get("lead"));
+  const { data: members } = useAssignableMembers(true);
+  const ownerNames = useMemo(
+    () => new Map((members ?? []).map((m) => [m.user_id, m.full_name])),
+    [members],
+  );
+
   const filteredLeads = data ? applyFilters(data.leads, filters) : [];
+  // Do conjunto SEM filtro: filtrar o quadro não pode fechar a conversa que se está tendo.
+  const leadAberto = data && leadAbertoId ? (data.leads.find((l) => l.id === leadAbertoId) ?? null) : null;
 
   return (
+    // O painel do lead divide esta linha com a página: do `lg` para cima toma a metade direita, em toda
+    // a altura, e título + filtros + quadro encolhem para a esquerda. Sem lead aberto a coluna da página
+    // ocupa tudo, como sempre foi.
+    <div className="flex h-full min-h-0">
     <div
-      className="flex h-full flex-col gap-4"
+      className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
@@ -114,7 +134,8 @@ export function PipelinePageClient({
           pipeline={data.pipeline}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
-          leadInicial={searchParams.get("lead")}
+          leadAbertoId={leadAberto?.id ?? null}
+          onAbrirLead={setLeadAbertoId}
         />
       )}
       <BulkActionBar
@@ -123,6 +144,18 @@ export function PipelinePageClient({
         pipelineId={pipelineId}
         onClear={() => setSelectedIds([])}
       />
+    </div>
+    {data && leadAberto && (
+      <PainelDoLead
+        key={leadAberto.id}
+        lead={leadAberto}
+        pipelineId={pipelineId}
+        fieldDefs={camposDoFunil(data.pipeline.settings ?? null)}
+        stageName={data.stages.find((s) => s.id === leadAberto.stage_id)?.name ?? "—"}
+        ownerNames={ownerNames}
+        onClose={() => setLeadAbertoId(null)}
+      />
+    )}
     </div>
   );
 }
