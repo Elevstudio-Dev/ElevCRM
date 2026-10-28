@@ -438,6 +438,12 @@ export const AUDIT_ACTIONS = [
   "sector.members_changed",
   "conversation.sector_changed",
   "sectors.menu_config_changed",
+  // QR codes rastreáveis (migration 0220): quem criou, mudou, tirou de circulação ou devolveu um QR impresso.
+  // A LEITURA não entra aqui: é pública, sem ator, e de alto volume — ela é contada em `qr_code_leituras`.
+  "qr_code.created",
+  "qr_code.updated",
+  "qr_code.archived",
+  "qr_code.restored",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
