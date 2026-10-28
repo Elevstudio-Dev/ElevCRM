@@ -2,7 +2,10 @@
 import Link from "next/link";
 import type { MouseEvent } from "react";
 
+import { ICONE_DA_MIDIA } from "@/components/inbox/CitacaoResumo";
+import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
+import { horaDaLinha, previaDaLinha } from "@/lib/inbox/linha-da-conversa";
 import { ChatCircle } from "@/lib/ui/icons";
 import type { Lead } from "@/lib/types/leads";
 import { cn } from "@/lib/utils";
@@ -32,9 +35,27 @@ import { cn } from "@/lib/utils";
  */
 export function ConversaSlot({ conversa }: { conversa: Lead["conversa"] }) {
   const t = useT();
+  const localeDaData = useLocaleDeData();
   if (!conversa) return null;
 
-  const preview = conversa.preview?.trim();
+  // O que o card responde sobre a conversa: QUEM falou por último (a bola está com o cliente ou com
+  // a gente?), o que foi dito (áudio aparece como "Áudio", não como `[audio]`) e quando. As regras
+  // moram em `lib/inbox/linha-da-conversa`, as mesmas da lista do Inbox — o card e a lista não
+  // podem contar histórias diferentes sobre a mesma conversa.
+  const previa = previaDaLinha({
+    type: conversa.type,
+    preview: conversa.preview,
+    direction: conversa.direction,
+  });
+  const IconeDaMidia = previa.icone ? ICONE_DA_MIDIA[previa.icone] : null;
+  const quemFalou =
+    conversa.direction === "outbound"
+      ? t("Você:")
+      : conversa.direction === "inbound"
+        ? t("Cliente:")
+        : null;
+  const texto = previa.trecho ?? (previa.rotulo && previa.rotulo !== "Sem mensagens" ? t(previa.rotulo) : null);
+  const hora = horaDaLinha(conversa.last_message_at, new Date(), localeDaData, t("Ontem"));
   const temNaoLidas = conversa.unread > 0;
 
   return (
@@ -52,14 +73,36 @@ export function ConversaSlot({ conversa }: { conversa: Lead["conversa"] }) {
       title={t("Abrir esta conversa no Inbox")}
     >
       <ChatCircle size={12} weight="regular" className="shrink-0" aria-hidden />
+      {quemFalou && texto ? (
+        // Do CLIENTE em tom forte: é a mensagem que espera resposta. A nossa fica no tom da linha.
+        <span
+          data-testid="quem-falou"
+          data-direcao={conversa.direction}
+          className={cn(
+            "shrink-0",
+            conversa.direction === "inbound" && "font-medium text-text",
+          )}
+        >
+          {quemFalou}
+        </span>
+      ) : null}
+      {IconeDaMidia ? <IconeDaMidia size={12} weight="fill" className="shrink-0" aria-hidden /> : null}
       <span className="truncate">
-        {preview || <span className="italic">{t("conversa sem mensagens")}</span>}
+        {texto || <span className="italic">{t("conversa sem mensagens")}</span>}
       </span>
+      {hora ? (
+        <time
+          dateTime={conversa.last_message_at ?? undefined}
+          className="ml-auto shrink-0 tabular-nums"
+        >
+          {hora}
+        </time>
+      ) : null}
       {temNaoLidas && (
         // O número, não um ponto: "3 sem ler" e "12 sem ler" pedem urgências
         // diferentes, e um ponto colapsa as duas.
         <span
-          className="ml-auto shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground tabular-nums"
+          className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground tabular-nums"
           aria-label={`${conversa.unread} ${t("sem ler")}`}
         >
           {conversa.unread}

@@ -7,6 +7,7 @@ import type { Lead } from "@/lib/types/leads";
 import type { Stage } from "@/lib/kanban/types";
 import { buildCardInput } from "@/lib/kanban/card-state";
 import { corDaEtapa } from "@/lib/kanban/cor-da-etapa";
+import type { CorDeMarcador } from "@/lib/schemas/settings";
 import { CheckCircle, X } from "@/lib/ui/icons";
 import { KanbanCard } from "./KanbanCard";
 
@@ -22,6 +23,8 @@ interface StageColumnProps {
   reactivations?: Map<string, { proposalId: string; expiresAt: string }>;
   /** `settings.canonical_tags` do pipeline — a única tag que fica no card. */
   canonicalTags?: string[];
+  /** A cor de cada marcador da empresa, pelo nome — lida UMA vez no quadro e repartida pelos cards. */
+  coresDasTags?: ReadonlyMap<string, CorDeMarcador>;
   selectedLeadIds?: Set<string>;
   /** O lead cujo painel está aberto ao lado — o card dele se destaca. */
   abertoId?: string | null;
@@ -56,6 +59,7 @@ export function StageColumn({
   coolingIds,
   reactivations,
   canonicalTags,
+  coresDasTags,
   selectedLeadIds,
   abertoId,
   pulses,
@@ -155,6 +159,7 @@ export function StageColumn({
                 isSelected={selectedLeadIds?.has(lead.id)}
                 isOpen={abertoId === lead.id}
                 pulseCount={pulses?.get(lead.id) ?? 0}
+                coresDasTags={coresDasTags}
                 onSelect={onSelect}
                 onOpen={onOpen}
               />
