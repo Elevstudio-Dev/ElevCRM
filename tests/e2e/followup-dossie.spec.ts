@@ -276,8 +276,9 @@ test.describe("dossiê do follow-up — ler a história e intervir", () => {
     const card = page.getByRole("group", { name: `Lead: ${cenario.contactName}` });
     await expect(card).toBeVisible({ timeout: 30_000 });
     await card.getByRole("button", { name: cenario.contactName }).click();
-    // O dossiê do negócio é um Sheet — `role=dialog` no Radix.
-    const dossieDoNegocio = page.getByRole("dialog");
+    // O dossiê do negócio mora na aba "Dados do lead" do painel que abre ao lado do quadro.
+    const dossieDoNegocio = page.getByTestId("painel-do-lead");
+    await dossieDoNegocio.getByRole("tab", { name: "Dados do lead" }).click();
     await expect(dossieDoNegocio).toContainText("Follow-up pausado");
     await expect(dossieDoNegocio).toContainText("Follow-up retomado");
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-timeline-do-negocio.png"), fullPage: true });
