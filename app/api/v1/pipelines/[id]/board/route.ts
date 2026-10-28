@@ -258,7 +258,9 @@ async function withConversas(
 
   const { data, error } = await supabase
     .from("conversations")
-    .select("id, contact_id, last_message_preview, last_message_at, unread_count_for_assignee")
+    .select(
+      "id, contact_id, last_message_preview, last_message_at, unread_count_for_assignee, last_message_direction, last_message_type",
+    )
     .eq("organization_id", organizationId)
     .in("contact_id", contactIds)
     .order("last_message_at", { ascending: false, nullsFirst: false });
@@ -271,6 +273,8 @@ async function withConversas(
     last_message_preview: string | null;
     last_message_at: string | null;
     unread_count_for_assignee: number | null;
+    last_message_direction: string | null;
+    last_message_type: string | null;
   }>) {
     // Primeira vista vence: a consulta já veio ordenada por atividade.
     if (porContato.has(row.contact_id)) continue;
@@ -279,6 +283,9 @@ async function withConversas(
       preview: row.last_message_preview,
       last_message_at: row.last_message_at,
       unread: row.unread_count_for_assignee ?? 0,
+      // Quem falou por último e o tipo: o mesmo espelho que a lista do Inbox lê (migration 0219).
+      direction: row.last_message_direction,
+      type: row.last_message_type,
     });
   }
 

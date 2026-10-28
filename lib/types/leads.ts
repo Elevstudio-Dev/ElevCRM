@@ -87,6 +87,13 @@ export interface Lead {
     preview: string | null;
     last_message_at: string | null;
     unread: number;
+    /**
+     * Quem falou por último: `inbound` (o cliente) ou `outbound` (nós). Opcional: resposta de antes
+     * da 0219, ou conversa sem backfill, não traz — e então o card não afirma quem foi.
+     */
+    direction?: string | null;
+    /** O tipo da última mensagem (text, audio, image…): o card mostra "Áudio" e não o literal `[audio]`. */
+    type?: string | null;
   } | null;
   /**
    * Derivado (não é coluna): QUEM é o cliente deste negócio — o rosto que abre o card.

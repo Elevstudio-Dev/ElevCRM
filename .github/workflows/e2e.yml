@@ -172,6 +172,7 @@ jobs:
         funil-rolagem.spec.ts
         funil-conversa-ao-lado.spec.ts
         funil-kanban-visual.spec.ts
+        funil-card-mais-util.spec.ts
         inbox-responder-melhor.spec.ts
         inbox-encaminhar.spec.ts
         inbox-lista-estilo-whatsapp.spec.ts

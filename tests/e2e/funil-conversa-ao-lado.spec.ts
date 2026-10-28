@@ -183,6 +183,13 @@ async function abrirOFunil(page: Page): Promise<void> {
 const painel = (page: Page) => page.getByTestId("painel-do-lead");
 const cardDe = (page: Page, titulo: string) => page.locator("[data-rfd-draggable-id]").filter({ hasText: titulo });
 
+/**
+ * Abre o lead pelo gesto de verdade: o clique no TÍTULO. O centro do card deixou de servir de alvo — com
+ * telefone, tags, última mensagem e origem, o meio de um card com conversa cai na linha da mensagem, que é
+ * um atalho para o Inbox (e leva para fora do funil, de propósito).
+ */
+const abrirCard = (page: Page, titulo: string) => cardDe(page, titulo).locator("h3 button").click();
+
 async function geometria(page: Page) {
   return page.evaluate(() => {
     const de = document.documentElement;
@@ -209,7 +216,7 @@ test("clicar no lead abre a conversa na METADE DIREITA, e o quadro encolhe para 
   const antes = await geometria(page);
   expect(antes.painel, "sem lead aberto não há painel").toBeNull();
 
-  await cardDe(page, LEAD_COM_CONVERSA).click();
+  await abrirCard(page, LEAD_COM_CONVERSA);
   await expect(painel(page)).toBeVisible();
   // A conversa DESTE lead: a mensagem do cliente no fio e o campo de envio de verdade.
   await expect(painel(page).getByText(PERGUNTA)).toBeVisible({ timeout: 30_000 });
@@ -234,12 +241,12 @@ test("clicar no lead abre a conversa na METADE DIREITA, e o quadro encolhe para 
 test("o card aberto se destaca, e clicar em OUTRO lead troca o painel", async ({ page }) => {
   await abrirOFunil(page);
 
-  await cardDe(page, LEAD_COM_CONVERSA).click();
+  await abrirCard(page, LEAD_COM_CONVERSA);
   await expect(painel(page).getByRole("heading", { name: LEAD_COM_CONVERSA })).toBeVisible();
   await expect(cardDe(page, LEAD_COM_CONVERSA)).toHaveClass(/border-primary/);
   await expect(cardDe(page, LEAD_SEM_CONVERSA)).not.toHaveClass(/border-primary/);
 
-  await cardDe(page, LEAD_SEM_CONVERSA).click();
+  await abrirCard(page, LEAD_SEM_CONVERSA);
   await expect(painel(page).getByRole("heading", { name: LEAD_SEM_CONVERSA })).toBeVisible();
   // Lead sem conversa: abre nos dados, e a aba da conversa não é clicável.
   await expect(painel(page).getByRole("tab", { name: "Dados do lead" })).toHaveAttribute("aria-selected", "true");
@@ -251,7 +258,7 @@ test("o card aberto se destaca, e clicar em OUTRO lead troca o painel", async ({
 
 test("trocar de aba NÃO apaga o rascunho (a conversa fica montada, só escondida)", async ({ page }) => {
   await abrirOFunil(page);
-  await cardDe(page, LEAD_COM_CONVERSA).click();
+  await abrirCard(page, LEAD_COM_CONVERSA);
 
   const campo = painel(page).getByPlaceholder(/escreva uma mensagem/i);
   await expect(campo).toBeVisible({ timeout: 30_000 });
@@ -271,7 +278,7 @@ test("fechar devolve o quadro inteiro", async ({ page }) => {
   await abrirOFunil(page);
   const inteiro = (await geometria(page)).quadro.width;
 
-  await cardDe(page, LEAD_COM_CONVERSA).click();
+  await abrirCard(page, LEAD_COM_CONVERSA);
   await expect(painel(page)).toBeVisible();
   expect((await geometria(page)).quadro.width, "o quadro encolheu").toBeLessThan(inteiro * 0.6);
 
@@ -282,7 +289,7 @@ test("fechar devolve o quadro inteiro", async ({ page }) => {
 
 test("o quadro continua ARRASTÁVEL com o painel aberto, e o movimento persiste", async ({ page }) => {
   await abrirOFunil(page);
-  await cardDe(page, LEAD_COM_CONVERSA).click();
+  await abrirCard(page, LEAD_COM_CONVERSA);
   await expect(painel(page)).toBeVisible();
 
   const card = cardDe(page, LEAD_SEM_CONVERSA);
@@ -318,7 +325,7 @@ test.describe("no celular", () => {
 
   test("o painel cobre a tela, e o botão de fechar está à mão", async ({ page }) => {
     await abrirOFunil(page);
-    await cardDe(page, LEAD_COM_CONVERSA).click();
+    await abrirCard(page, LEAD_COM_CONVERSA);
     await expect(painel(page)).toBeVisible();
 
     const g = await geometria(page);

@@ -4,6 +4,8 @@ import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { useT } from "@/hooks/i18n/useT";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 import { useBoard } from "@/hooks/kanban/useBoard";
 import { useMoveCard } from "@/hooks/kanban/useMoveCard";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
@@ -91,6 +93,14 @@ export function KanbanBoard({
   const ownerNames = useMemo(
     () => new Map((members ?? []).map((m) => [m.user_id, m.full_name])),
     [members],
+  );
+  // A cor de cada marcador da empresa, lida UMA vez para o quadro inteiro: o card pinta a tag com a
+  // cor do marcador (como a lista do Inbox), e uma leitura por card seriam dezenas da mesma pergunta.
+  const { activeOrg } = useAuth();
+  const { data: vocabularioDeTags } = useConversationTagVocabulary(activeOrg?.orgId ?? null);
+  const coresDasTags = useMemo(
+    () => new Map((vocabularioDeTags ?? []).map((m) => [m.nome, m.cor] as const)),
+    [vocabularioDeTags],
   );
   // Esfriando vem do MESMO radar que alimenta /app/radar — o board não
   // reclassifica nada (contrato §3.3). `em_voo` fica de fora: a IA já prometeu
@@ -299,6 +309,7 @@ export function KanbanBoard({
             reactivations={reactivations}
             pulses={pulsesProp ?? queryResult.pulses}
             canonicalTags={canonicalTags}
+            coresDasTags={coresDasTags}
             selectedLeadIds={selectedLeadIds}
             abertoId={leadAbertoId ?? null}
             onSelect={handleSelect}

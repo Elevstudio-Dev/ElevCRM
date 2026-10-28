@@ -167,6 +167,16 @@ export const DICIONARIO: Traducoes = {
   "Não lidas": { es: "No leídas" },
   "Todas as visões": { es: "Todas las vistas" },
 
+  // ─── Funil: o card com telefone, última mensagem, prazo e origem ───
+  "Cliente:": { es: "Cliente:" },
+  "Fecha hoje": { es: "Cierra hoy" },
+  "Fecha amanhã": { es: "Cierra mañana" },
+  "Fecha em": { es: "Cierra en" },
+  "Atrasado há": { es: "Atrasado hace" },
+  Importado: { es: "Importado" },
+  Retomada: { es: "Reactivación" },
+  "Formulário ou integração": { es: "Formulario o integración" },
+
   // ─── Inbox: cabeçalho e ações da conversa ───
   Assumir: { es: "Asumir" },
   Liberar: { es: "Liberar" },
