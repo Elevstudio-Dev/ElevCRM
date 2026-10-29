@@ -8,6 +8,24 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.23.0] — 2026-10-29
+
+### Adicionado
+
+- **Relatórios de origem dos leads e QR codes que medem cartaz e panfleto** Uma aba nova, **Relatórios**, só para gestor e administrador, mostra de onde os leads vêm no período escolhido
+  (7, 30, 90 dias ou datas): QR codes, anúncios, formulários, WhatsApp direto, criados à mão, importados. Para cada
+  origem: quantos leads, quantos ganhos e perdidos, a conversão e o valor ganho, e um gráfico de leads por dia.
+
+  Em **Relatórios › QR codes** dá para criar um QR para cartaz, panfleto, cartão ou vitrine, escolher o número de
+  WhatsApp e a mensagem que o cliente vai mandar, e baixar a imagem (PNG ou SVG). Quem lê o QR abre o WhatsApp com a
+  mensagem pronta e um código curto no fim (ex.: `#R7K2QH`). O sistema conta as leituras, as conversas que chegaram
+  com o código, os leads e as vendas — e o lead novo já aparece no funil com a origem "QR: <nome>".
+
+  Limites: se o cliente apagar o código antes de enviar, aquela conversa não é atribuída ao QR. A leitura conta
+  aparelhos, não pessoas, e não guarda IP nem dado de quem leu.
+
+  A atualização aplica sozinha a migração 0220 (tabelas dos QR codes e funções do relatório). Nada a fazer.
+
 ## [1.22.0] — 2026-10-28
 
 ### Alterado
@@ -2953,7 +2971,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.22.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.19.0...v1.20.0
