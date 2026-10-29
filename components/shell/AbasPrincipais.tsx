@@ -24,6 +24,9 @@ export function AbasPrincipais({ className }: { className?: string }) {
   const pathname = usePathname();
   const { user, activeOrg } = useAuth();
   const abas = abasPrincipais(user.is_platform_admin, activeOrg?.role ?? null);
+  // Com a sexta aba (Relatórios, gestor+) os rótulos só cabem de `xl`: a 1024px, ao lado do seletor de
+  // organização, seis rótulos passavam por cima dele (47px medidos). Cinco abas seguem com rótulo de `lg`.
+  const rotuloDeLg = abas.length <= 5;
 
   return (
     <nav aria-label={t("Navegação principal")} className={cn("flex items-center gap-1", className)}>
@@ -44,7 +47,7 @@ export function AbasPrincipais({ className }: { className?: string }) {
             )}
           >
             <Icon size={18} weight={ativa ? "fill" : "regular"} aria-hidden />
-            <span className="hidden lg:inline">{t(aba.label)}</span>
+            <span className={rotuloDeLg ? "hidden lg:inline" : "hidden xl:inline"}>{t(aba.label)}</span>
             {aba.healthDot && <ConnectionHealthDot className="absolute right-1 top-1" />}
           </Link>
         );
