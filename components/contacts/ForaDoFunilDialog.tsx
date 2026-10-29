@@ -90,6 +90,7 @@ export function ForaDoFunilDialog({
   const t = useT();
   const { activeOrg, user } = useAuth();
   const ids = contatos.map((c) => c.id);
+  const um = contatos.length === 1;
   const previa = usePreviaDoMarcador(ids, marcar, open);
   const tipos = useTiposForaDoFunil({ enabled: open && marcar });
   const marcarMut = useMarcarForaDoFunil();
@@ -149,19 +150,32 @@ export function ForaDoFunilDialog({
 
         <ul className="list-disc space-y-1 pl-5 text-sm text-text-muted">
           {marcar ? (
-            <>
-              <li>{t("A IA para de atender e de enviar mensagens para esta pessoa.")}</li>
-              <li>{t("Nenhum negócio novo é criado a partir das mensagens dela.")}</li>
-              <li>
-                {t(
-                  "Os negócios que ela já tinha saem do funil, do relatório e do Desempenho. O histórico fica guardado e volta se você desmarcar.",
-                )}
-              </li>
-              <li>{t("A conversa continua no Inbox para a equipe responder.")}</li>
-            </>
+            um ? (
+              <>
+                <li>{t("A IA para de atender e de enviar mensagens para esta pessoa.")}</li>
+                <li>{t("Nenhum negócio novo é criado a partir das mensagens dela.")}</li>
+                <li>
+                  {t(
+                    "Os negócios que ela já tinha saem do funil, do relatório e do Desempenho. O histórico fica guardado e volta se você desmarcar.",
+                  )}
+                </li>
+                <li>{t("A conversa continua no Inbox para a equipe responder.")}</li>
+              </>
+            ) : (
+              <>
+                <li>{t("A IA para de atender e de enviar mensagens para estas pessoas.")}</li>
+                <li>{t("Nenhum negócio novo é criado a partir das mensagens delas.")}</li>
+                <li>
+                  {t(
+                    "Os negócios que elas já tinham saem do funil, do relatório e do Desempenho. O histórico fica guardado e volta se você desmarcar.",
+                  )}
+                </li>
+                <li>{t("As conversas continuam no Inbox para a equipe responder.")}</li>
+              </>
+            )
           ) : (
             <>
-              <li>{t("A IA volta a poder atender esta pessoa.")}</li>
+              <li>{um ? t("A IA volta a poder atender esta pessoa.") : t("A IA volta a poder atender estas pessoas.")}</li>
               <li>{t("Os negócios que estavam escondidos voltam ao funil e ao relatório.")}</li>
             </>
           )}

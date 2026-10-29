@@ -205,6 +205,19 @@ export const DICIONARIO: Traducoes = {
     es: "La conversación sigue en el Inbox para que el equipo responda.",
   },
   "A IA volta a poder atender esta pessoa.": { es: "La IA vuelve a poder atender a esta persona." },
+  "A IA volta a poder atender estas pessoas.": { es: "La IA vuelve a poder atender a estas personas." },
+  "A IA para de atender e de enviar mensagens para estas pessoas.": {
+    es: "La IA deja de atender y de enviar mensajes a estas personas.",
+  },
+  "Nenhum negócio novo é criado a partir das mensagens delas.": {
+    es: "No se crea ningún negocio nuevo a partir de sus mensajes.",
+  },
+  "Os negócios que elas já tinham saem do funil, do relatório e do Desempenho. O histórico fica guardado e volta se você desmarcar.": {
+    es: "Los negocios que ya tenían salen del embudo, del informe y del Rendimiento. El historial queda guardado y vuelve si desmarcas.",
+  },
+  "As conversas continuam no Inbox para a equipe responder.": {
+    es: "Las conversaciones siguen en el Inbox para que el equipo responda.",
+  },
   "Os negócios que estavam escondidos voltam ao funil e ao relatório.": {
     es: "Los negocios que estaban ocultos vuelven al embudo y al informe.",
   },
@@ -354,8 +367,8 @@ export const DICIONARIO: Traducoes = {
     es: "Automático pausado para este cliente",
   },
   "Automático volta em instantes": { es: "El automático vuelve en instantes" },
-  "Automático desligado — contato fora do funil": {
-    es: "Automático desactivado — contacto fuera del embudo",
+  "Automático desligado — fora do funil": {
+    es: "Automático desactivado — fuera del embudo",
   },
   "Pausar o automático": { es: "Pausar el automático" },
   "Ver contato": { es: "Ver contacto" },

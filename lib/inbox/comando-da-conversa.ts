@@ -316,7 +316,7 @@ export const ROTULO_DO_MOTIVO: Record<MotivoDoSilencio, string> = {
   pausado: "Automático pausado",
   resposta_humana_recente: "Automático volta em instantes",
   contato_descadastrado: "Cliente pediu para não receber mensagens",
-  fora_do_funil: "Automático desligado — contato fora do funil",
+  fora_do_funil: "Automático desligado — fora do funil",
 };
 
 /**
