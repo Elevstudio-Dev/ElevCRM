@@ -1769,3 +1769,50 @@ gestor+ (RLS), não só a rota.
 - as telas logadas numa VPS (só o servidor de desenvolvimento local);
 - cliente que apaga o `#código` antes de enviar: a conversa entra como `whatsapp` — é limite declarado, não defeito;
 - Google Ads: continua sem atribuição automática (precisaria de landing page com `gclid`).
+
+---
+
+## J22 — Quem escreve e não é cliente sai do radar da IA e do relatório `[P1]` (2026-10-29)
+
+**Por que existe:** o dono apontou que equipe dos clientes, prestadores de serviço e gente "que vamos procurar" também
+escreve no WhatsApp — e o sistema tratava todos como lead: a IA respondia, o funil e o relatório contavam. Os marcadores
+que já existiam não serviam: `is_blocked` é opt-out de LGPD (bloqueia até o envio humano) e `force_human` é a IA pedindo
+humano (a própria IA o liga e desliga). E `crm_leads.status` só admite `open | won | lost`: marcar o negócio como
+"perdido" o manteria no funil e derrubaria a conversão do relatório.
+
+**A jornada, ponta a ponta** (`tests/e2e/contato-fora-do-funil.spec.ts`, 8 casos em série, banco local):
+
+1. a pessoa escreve pelo webhook do canal (caminho de produção) e vira lead, como sempre; a IA ainda poderia atender;
+2. o gestor a marca pela ficha: o diálogo diz o que muda e, ANTES de confirmar, "Saem do funil e do relatório: 1 negócio
+   aberto"; cria o tipo na hora; o selo "Fora do funil · <tipo>" aparece; a auditoria guarda o autor e o contato;
+3. o negócio some do quadro, o relatório (pela API que a tela lê) perde exatamente 1 lead, a consulta REAL de
+   elegibilidade do motor devolve `fora_do_funil` e criar negócio para ela é recusado com 409
+   `contato_fora_do_funil`;
+4. ela escreve de novo (inclusive com o negócio antigo fechado, que faria nascer outro): a conversa chega, o cabeçalho
+   mostra o selo e o motivo do silêncio, e NENHUM negócio nasce;
+5. a lista de contatos filtra por "fora do funil" e por "Clientes" (quem está fora some desta), e marca vários de uma
+   vez ("2 contatos", "Nenhum negócio será afetado.");
+6. desmarcar pela conversa devolve TUDO: é o MESMO negócio (mesmo id), de volta ao quadro e ao relatório com o número
+   de antes, e a IA volta a ser elegível;
+7. o atendente marca, mas não cria tipo (403) e não entra na tela de tipos (`/403`); o gestor vê o tipo;
+8. diálogo e tela de tipos cabem em 390 px sem rolagem lateral.
+
+**O que protege o resto (testes de banco e de código):** o espelho `crm_leads.fora_do_funil` é mantido SÓ por dois
+gatilhos (marcar acende, desmarcar apaga, negócio novo já nasce certo) e as funções `fn_relatorio_*` e
+`fn_attendant_metrics` o ignoram; `decidirElegibilidade` dá o motivo `fora_do_funil` ANTES de qualquer outro (nem a
+allowlist o devolve à IA) e o `before-send` veta com código próprio; o banco e o TypeScript concordam sobre o comando da
+conversa (invariante espelho); e `tests/unit/leads-fora-do-funil-guarda.test.ts` obriga TODA leitura de `crm_leads`
+a decidir se filtra o espelho ou não filtra (com o motivo escrito) — onze leituras que listam ou agregam filtram, as
+outras ~40 (por id, LGPD, dependência de exclusão do funil…) estão classificadas.
+
+**NÃO provado (declarado):**
+
+- que a IA fica calada com um WhatsApp REAL: a prova é a consulta de elegibilidade que o motor usa, e o e2e não tem
+  worker de IA nem número real;
+- as telas logadas numa VPS (só o servidor de desenvolvimento local);
+- o que acontece com os contatos que já existem: ninguém está marcado até a equipe classificar (não há detecção
+  automática);
+- mensagem em massa enviada FORA do atendente automático não é barrada por esta marca; lembrete de consulta continua
+  saindo (é aviso do sistema);
+- o índice de atrito (`fn_atrito_metrics`) mede conversas e demandas, não negócios, e NÃO foi alterado: **não medi**
+  se a conversa de quem está fora entra nele.

@@ -82,8 +82,9 @@ Importação de planilha pula a linha e a conta no relatório da importação.
 
 ### 3.6 Sistema vivo
 Entrada: marcar (tela/lote). Saída: selo, motivo na conversa, contagens. Registro: auditoria
-`contact.fora_do_funil_marcado/desmarcado`, `tipo_fora_do_funil.criado/renomeado/arquivado`, e atividade no negócio
-quando ele sai/volta. Laço de retorno: o diálogo mostra quantos negócios saem; a lista filtra quem está fora.
+`contact.fora_do_funil_marcado/desmarcado` (autor, quantos, tipo e o que saiu do funil) e
+`tipo_fora_do_funil.criado/renomeado/arquivado/reativado`. (A linha na timeline do NEGÓCIO foi cortada: exigiria um
+tipo novo no vocabulário de atividades e na constraint do banco, para repetir o que a auditoria já guarda.) Laço de retorno: o diálogo mostra quantos negócios saem; a lista filtra quem está fora.
 
 ## 4. Limites declarados
 - Não há detecção automática: alguém marca. Os contatos de hoje ficam como estão até a equipe classificar.
