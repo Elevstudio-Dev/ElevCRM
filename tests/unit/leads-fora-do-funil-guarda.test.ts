@@ -86,6 +86,7 @@ const NAO_FILTRAM: Record<string, string> = {
   "app/api/v1/contacts/[id]/timeline/route.ts": "a linha do tempo do contato: o histórico guardado, inclusive o do que saiu do funil",
   "app/api/v1/webhooks/in/[token]/route.ts": "idempotência por external_id: precisa ver o negócio existente, escondido ou não, para não duplicá-lo",
   "lib/leads/nascimento-do-lead.ts": "escreve o negócio novo; a recusa para quem está fora é a própria regra deste arquivo",
+  "lib/contatos/fora-do-funil.ts": "a prévia e o marcador contam justamente os negócios que o espelho esconde ou devolve",
   "app/api/v1/metrics/attendants/route.ts": "lê pela função fn_attendant_metrics, que ignora o espelho (provado em tests/invariants/contato-fora-do-funil.test.ts)",
 };
 
