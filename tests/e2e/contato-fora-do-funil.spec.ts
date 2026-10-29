@@ -273,6 +273,8 @@ test("5 · a lista filtra por 'fora do funil' e marca vários de uma vez", async
   // Em massa: seleciona os dois do lote e marca.
   await page.getByPlaceholder(/Buscar por nome/).fill(LOTE);
   await expect(page.getByRole("link", { name: `${LOTE} B`, exact: true })).toBeVisible({ timeout: 30_000 });
+  // A busca tem atraso: com a lista ainda cheia da consulta anterior, "selecionar todos" pegaria mais que os dois.
+  await expect(page.locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
   await page.getByLabel("Selecionar todos desta página").check();
   await expect(page.getByTestId("barra-de-selecao-de-contatos")).toContainText("2 selecionados");
   await page.getByTestId("marcar-selecionados-fora-do-funil").click();
