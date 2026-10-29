@@ -21,6 +21,9 @@
  * Os três rodam em sequência e a sequência carrega significado:
  *
  *   1. opt-out  — grava `is_blocked` ANTES do lead;
+ *   1b. QR      — a mensagem traz `#CÓDIGO` de um QR desta organização? A conversa entra na conta do QR e o
+ *                 lead que nascer no passo 2 leva a origem dele. Depois do opt-out (quem pediu para sair não
+ *                 vira lead, com ou sem QR) e ANTES do lead (senão ele nasceria "whatsapp").
  *   2. lead     — `garantirLeadDaConversa` RELÊ o contato e recusa criar card
  *                 para bloqueado. Inverter 1 e 2 faz quem acabou de pedir para
  *                 sair virar oportunidade nova no funil;
@@ -46,6 +49,12 @@
 import { audit } from "@/lib/audit";
 import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
 import { logger } from "@/lib/logger";
+import {
+  origemDoQr,
+  reconhecerQrCodeNaEntrada,
+  vincularLeadAoQr,
+  type QrReconhecido,
+} from "@/lib/qr-codes/reconhecer";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ehPedidoDeOptOut } from "@/lib/opt-out/deteccao";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
@@ -122,7 +131,8 @@ export async function aplicarEfeitosPosEntrada(
   entrada: EntradaDeMensagem,
 ): Promise<void> {
   await aplicarOptOut(admin, entrada);
-  await abrirDemanda(admin, entrada);
+  const qr = await reconhecerQr(admin, entrada);
+  await abrirDemanda(admin, entrada, qr);
   const menu = await aplicarMenuDeSetores(admin, {
     organizationId: entrada.organizationId,
     conversationId: entrada.conversationId,
@@ -261,19 +271,44 @@ async function aplicarOptOut(admin: Admin, entrada: EntradaDeMensagem): Promise<
   }
 }
 
+/** 1b · A mensagem veio de um QR? Nunca lança: sem QR reconhecido, o lead nasce como sempre nasceu. */
+async function reconhecerQr(admin: Admin, entrada: EntradaDeMensagem): Promise<QrReconhecido | null> {
+  try {
+    return await reconhecerQrCodeNaEntrada(admin, {
+      organizationId: entrada.organizationId,
+      conversationId: entrada.conversationId,
+      contactId: entrada.contactId,
+      messageId: entrada.messageId,
+      texto: entrada.texto,
+    });
+  } catch (err) {
+    logger.warn("pos-entrada: QR não reconhecido (o lead segue sem origem de QR)", {
+      organization_id: entrada.organizationId,
+      conversation_id: entrada.conversationId,
+      detail: err instanceof Error ? err.message.slice(0, 160) : "desconhecido",
+    });
+    return null;
+  }
+}
+
 /**
  * 2 · A conversa vira demanda no funil.
  *
  * `garantirLeadDaConversa` é idempotente por contato e já recusa contato
  * bloqueado — por isso o passo 1 vem antes.
  */
-async function abrirDemanda(admin: Admin, entrada: EntradaDeMensagem): Promise<void> {
+async function abrirDemanda(
+  admin: Admin,
+  entrada: EntradaDeMensagem,
+  qr: QrReconhecido | null,
+): Promise<void> {
   try {
     const nascimento = await garantirLeadDaConversa(admin, {
       organizationId: entrada.organizationId,
       contactId: entrada.contactId,
       conversationId: entrada.conversationId,
       nomeDoContato: entrada.nomeDoContato,
+      ...(qr ? { origem: origemDoQr(qr) } : {}),
     });
 
     // Os DOIS desfechos viram log. Sem a linha do "não criou", o silêncio de
@@ -283,8 +318,18 @@ async function abrirDemanda(admin: Admin, entrada: EntradaDeMensagem): Promise<v
       organization_id: entrada.organizationId,
       conversation_id: entrada.conversationId,
       origem: entrada.origem,
+      qr_code_id: qr?.id ?? null,
       ...(nascimento.criado ? { lead_id: nascimento.leadId } : { motivo: nascimento.motivo }),
     });
+
+    if (qr && nascimento.criado) {
+      await vincularLeadAoQr(admin, {
+        organizationId: entrada.organizationId,
+        conversationId: entrada.conversationId,
+        qrCodeId: qr.id,
+        leadId: nascimento.leadId,
+      });
+    }
   } catch (err) {
     logger.error("pos-entrada: nascimento do lead falhou (a mensagem entra assim mesmo)", {
       organization_id: entrada.organizationId,

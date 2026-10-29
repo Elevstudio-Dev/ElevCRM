@@ -21,8 +21,10 @@ import {
   ChatCircle,
   Globe,
   Lightning,
+  Megaphone,
   PencilSimple,
   Phone,
+  QrCode,
   Robot,
   UploadSimple,
 } from "@/lib/ui/icons";
@@ -88,6 +90,8 @@ const ICONE_DA_ORIGEM: Record<IconeDaOrigem, typeof Globe> = {
   automatica: Lightning,
   importada: UploadSimple,
   agente: Robot,
+  qr: QrCode,
+  anuncio: Megaphone,
   outra: Globe,
 };
 
@@ -141,7 +145,7 @@ export function KanbanCard({
   const tagsOcultas = tagsOrdenadas.length - tagsVisiveis.length;
   // Prazo só conta para negócio ABERTO: em etapa de ganho ou perda a data prevista já não decide nada.
   const prazo = lead.status === "open" ? prazoDoCard(lead.expected_close_date, new Date(), t) : null;
-  const origem = origemDoLead(lead.source, t);
+  const origem = origemDoLead(lead.source, t, lead.source_metadata);
   const IconeDaOrigemDoLead = origem ? ICONE_DA_ORIGEM[origem.icone] : null;
   const state = resolveCardState(card, t);
   const age = stageAgeLabel(card.hoursInStage, t);

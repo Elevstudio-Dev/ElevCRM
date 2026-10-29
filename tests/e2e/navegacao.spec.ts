@@ -84,11 +84,12 @@ async function expectSemOverflowHorizontal(page: Page, contexto: string): Promis
 test.describe.configure({ timeout: 120_000 });
 
 test.describe("navegação pela barra superior", () => {
-  test("as cinco abas, na ordem, e nenhuma a mais", async ({ page }) => {
+  test("as seis abas do administrador, na ordem, e nenhuma a mais", async ({ page }) => {
     await loginAdmin(page);
 
+    // Cinco de uso diário + Relatórios, que é só de gestor+ (quem atende vê as cinco primeiras).
     const links = abas(page).getByRole("link");
-    await expect(links).toHaveText(["Inbox", "Contatos", "Funis", "Agenda", "IA"]);
+    await expect(links).toHaveText(["Inbox", "Contatos", "Funis", "Agenda", "IA", "Relatórios"]);
 
     // E NÃO existe menu lateral: o conteúdo começa na borda esquerda da tela.
     // (Não dá para afirmar "nenhum <aside>": o inbox tem o painel de CRM, que

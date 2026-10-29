@@ -27,6 +27,7 @@ import {
   Plugs,
   PlugsConnected,
   PuzzlePiece,
+  QrCode,
   Receipt,
   Robot,
   ScalesSimple,
@@ -503,6 +504,25 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     description: "Funil e performance por atendente nos últimos 30 dias.",
     icon: ChartBar,
     group: "analise",
+  },
+  {
+    // A SEXTA ABA, e só para gestor+ (decisão do dono, 2026-10-28): de onde os leads vêm até a venda. Quem atende
+    // continua com cinco abas — para o atendente esta tela não existe (a rota redireciona).
+    href: "/app/relatorios",
+    label: "Relatórios",
+    description: "De onde vêm os leads — QR codes, anúncios, formulários — e quantos viram venda.",
+    icon: ChartLineUp,
+    group: "analise",
+    minRole: "manager",
+    principal: 6,
+  },
+  {
+    href: "/app/relatorios/qr-codes",
+    label: "QR codes",
+    description: "Crie QR codes para cartaz e panfleto e veja quantos leram, conversaram e compraram.",
+    icon: QrCode,
+    group: "analise",
+    minRole: "manager",
   },
   {
     // Observabilidade, não configuração: por isso não fica junto dos agentes.

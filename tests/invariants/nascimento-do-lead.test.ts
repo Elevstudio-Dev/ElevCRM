@@ -406,3 +406,107 @@ describe("a etapa de entrada nunca é uma etapa de fechamento", () => {
     expect(rows[0]!.is_lost).toBe(false);
   });
 });
+
+describe("a ORIGEM do lead novo (QR > anúncio > whatsapp)", () => {
+  async function contatoDeAnuncio(nome: string): Promise<string> {
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into contacts (organization_id, display_name, source, source_metadata)
+       values ($1, $2, 'meta_ads', '{"ad_title":"Clareamento"}'::jsonb) returning id`,
+      [ORG_VIVA, nome],
+    );
+    return rows[0]!.id;
+  }
+
+  async function lerLead(id: string) {
+    const { rows } = await pool.query<{ source: string; source_metadata: Record<string, unknown>; tags: string[] }>(
+      "select source, source_metadata, tags from crm_leads where id = $1",
+      [id],
+    );
+    return rows[0]!;
+  }
+
+  it("a origem passada por quem chama (o QR) vence o anúncio estampado no contato", async () => {
+    // O QR é sobre ESTA demanda; o anúncio é sobre a primeira vez da pessoa.
+    const contato = await contatoDeAnuncio("Origem QR");
+    const r = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: "Origem QR",
+      origem: {
+        source: "qr_code",
+        sourceMetadata: { qr_code_id: "qr-x", qr_code_nome: "Cartaz da recepção", qr_code_codigo: "R7K2QH" },
+        tags: ["QR code"],
+      },
+    });
+    expect(r.criado).toBe(true);
+    if (!r.criado) return;
+
+    const lead = await lerLead(r.leadId);
+    expect(lead.source).toBe("qr_code");
+    expect(lead.source_metadata).toMatchObject({ qr_code_nome: "Cartaz da recepção", qr_code_codigo: "R7K2QH" });
+    expect(lead.tags).toEqual(["QR code"]);
+
+    // E a timeline diz POR ONDE nasceu.
+    const { rows } = await pool.query<{ payload: Record<string, unknown> }>(
+      "select payload from crm_lead_activities where lead_id = $1 and type = 'lead_created'",
+      [r.leadId],
+    );
+    expect(rows[0]!.payload).toMatchObject({ origem: "qr_code", qr_code_id: "qr-x" });
+  });
+
+  it("sem origem passada, o anúncio do contato continua valendo (comportamento de antes)", async () => {
+    const contato = await contatoDeAnuncio("Origem Anuncio");
+    const r = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: "Origem Anuncio",
+    });
+    expect(r.criado).toBe(true);
+    if (!r.criado) return;
+
+    const lead = await lerLead(r.leadId);
+    expect(lead.source).toBe("meta_ads");
+    expect(lead.source_metadata).toMatchObject({ ad_title: "Clareamento" });
+    expect(lead.tags).toEqual(["Meta_ads"]);
+  });
+
+  it("sem origem e sem anúncio, nasce 'whatsapp' (comportamento de antes)", async () => {
+    const contato = await criarContato(ORG_VIVA, "Origem Zap");
+    const r = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: "Origem Zap",
+    });
+    expect(r.criado).toBe(true);
+    if (!r.criado) return;
+
+    const lead = await lerLead(r.leadId);
+    expect(lead.source).toBe("whatsapp");
+    expect(lead.tags).toEqual([]);
+  });
+
+  it("contato com negócio aberto: a origem passada NÃO reescreve o negócio (primeiro toque)", async () => {
+    const contato = await criarContato(ORG_VIVA, "Origem Aberto");
+    const primeiro = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: "Origem Aberto",
+    });
+    expect(primeiro.criado).toBe(true);
+    if (!primeiro.criado) return;
+
+    const segundo = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: "Origem Aberto",
+      origem: { source: "qr_code", sourceMetadata: { qr_code_id: "qr-y" }, tags: ["QR code"] },
+    });
+    expect(segundo).toEqual({ criado: false, motivo: "ja_existe" });
+    expect((await lerLead(primeiro.leadId)).source).toBe("whatsapp");
+  });
+});

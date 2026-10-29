@@ -5868,6 +5868,175 @@ export type Database = {
           },
         ]
       }
+      qr_code_conversas: {
+        Row: {
+          contact_id: string | null
+          conversation_id: string
+          criada_em: string
+          id: string
+          lead_id: string | null
+          message_id: string | null
+          organization_id: string
+          qr_code_id: string
+        }
+        Insert: {
+          contact_id?: string | null
+          conversation_id: string
+          criada_em?: string
+          id?: string
+          lead_id?: string | null
+          message_id?: string | null
+          organization_id: string
+          qr_code_id: string
+        }
+        Update: {
+          contact_id?: string | null
+          conversation_id?: string
+          criada_em?: string
+          id?: string
+          lead_id?: string | null
+          message_id?: string | null
+          organization_id?: string
+          qr_code_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qr_code_conversas_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_code_conversas_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_code_conversas_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_code_conversas_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_code_conversas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_code_conversas_qr_code_id_fkey"
+            columns: ["qr_code_id"]
+            isOneToOne: false
+            referencedRelation: "qr_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qr_code_leituras: {
+        Row: {
+          dispositivo: string
+          id: string
+          lida_em: string
+          organization_id: string
+          qr_code_id: string
+        }
+        Insert: {
+          dispositivo?: string
+          id?: string
+          lida_em?: string
+          organization_id: string
+          qr_code_id: string
+        }
+        Update: {
+          dispositivo?: string
+          id?: string
+          lida_em?: string
+          organization_id?: string
+          qr_code_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qr_code_leituras_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_code_leituras_qr_code_id_fkey"
+            columns: ["qr_code_id"]
+            isOneToOne: false
+            referencedRelation: "qr_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qr_codes: {
+        Row: {
+          arquivado_em: string | null
+          channel_session_id: string | null
+          codigo: string
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          mensagem: string
+          nome: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          arquivado_em?: string | null
+          channel_session_id?: string | null
+          codigo: string
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          mensagem: string
+          nome: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          arquivado_em?: string | null
+          channel_session_id?: string | null
+          codigo?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          mensagem?: string
+          nome?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qr_codes_channel_session_id_fkey"
+            columns: ["channel_session_id"]
+            isOneToOne: false
+            referencedRelation: "channel_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_codes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reentry_knob_pointers: {
         Row: {
           organization_id: string
@@ -7018,6 +7187,37 @@ export type Database = {
           p_pointer: string
         }
         Returns: string
+      }
+      fn_relatorio_de_origens: {
+        Args: { p_ate: string; p_de: string; p_org: string }
+        Returns: {
+          abertos: number
+          detalhe: string | null
+          ganhos: number
+          leads: number
+          perdidos: number
+          source: string
+          valor_ganho_cents: number
+        }[]
+      }
+      fn_relatorio_de_origens_por_dia: {
+        Args: { p_ate: string; p_de: string; p_fuso?: string; p_org: string }
+        Returns: {
+          dia: string
+          leads: number
+          source: string
+        }[]
+      }
+      fn_relatorio_de_qr_codes: {
+        Args: { p_ate: string; p_de: string; p_org: string }
+        Returns: {
+          conversas: number
+          ganhos: number
+          leads: number
+          leituras: number
+          qr_code_id: string
+          valor_ganho_cents: number
+        }[]
       }
       fn_role_at_least: {
         Args: { p_min: string; p_org: string }

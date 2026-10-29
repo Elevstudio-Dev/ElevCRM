@@ -1728,3 +1728,44 @@ dia, ou uma delas fala de instante?"*.
 conserto): `lib/kanban/filters.ts` e `lib/automation/throttle.ts` derivam "hoje"
 de `toISOString().slice(0, 10)`, que é o dia UTC. Se algum deles compara com dia
 local, é a mesma classe.
+
+---
+
+## J21 — Medir de onde o lead veio, com QR code `[P1]` (2026-10-29)
+
+**Por que existe:** o dono perguntou se o sistema sabia de onde o lead veio. Sabia gravar (anúncio do Meta no
+contato, `utm_*` do formulário), mas nenhuma tela lia, e cartaz/panfleto/cartão não deixavam rastro nenhum: quem
+chegava por um QR genérico virava `whatsapp`, igual a quem já tinha o número salvo.
+
+**A jornada, ponta a ponta** (`tests/e2e/relatorios-e-qr-codes.spec.ts`, 8 casos em série, banco local):
+
+1. o gestor cria um QR em **Relatórios › QR codes** (nome, número, mensagem) e o cartão mostra o QR desenhado, o
+   link `/q/<código>` e a mensagem final com `#código`;
+2. ler o QR (`GET /q/<código>`) responde 302 para `wa.me/<número>?text=<mensagem> #código` e conta **uma** leitura —
+   a pré-visualização de link do app de mensagens (robô) segue para o mesmo destino e **não** conta; código que não
+   existe devolve 404;
+3. a mensagem com `#código` chega pelo webhook do canal (caminho de produção) e vira lead novo com
+   `source = qr_code`, `source_metadata` com o nome do QR e a tag "QR code"; mandar o código de novo não infla a
+   conversa (única por QR + conversa);
+4. a tela de QR mostra Leituras 1 → Conversas 1 → Leads 1 → Vendas 0, e o relatório mostra o grupo "QR codes" que
+   expande no nome do QR, com o gráfico de leads por dia;
+5. o card do funil diz "QR: <nome>";
+6. arquivar o QR faz o endereço impresso responder 410 "não está mais ativo" (sem contar leitura), a conversa já
+   atribuída continua no histórico, e reativar devolve o 302;
+7. quem atende (`agent`) não vê a aba Relatórios, é redirecionado das duas telas e recebe 403 nas duas APIs; o gestor
+   vê seis abas e a barra não ganha rolagem lateral em 1280, 1024 e 768 px;
+8. as duas telas cabem em 390 px, sem rolagem lateral da janela.
+
+**O que a regra protege (e por quê):** o código é a identidade do QR (a frase é do gestor e pode mudar), por isso o
+código nunca muda depois de impresso; a leitura não guarda IP nem user-agent; arquivar não apaga o histórico; o
+relatório agrega no banco porque o PostgREST corta em 1.000 linhas; e as três tabelas e as três funções só servem
+gestor+ (RLS), não só a rota.
+
+**NÃO provado (declarado):**
+
+- ler com a câmera de um celular de verdade e abrir o WhatsApp de verdade — o e2e usa `fetch` com user-agent de
+  iPhone e o webhook simulado; nenhum número real existe no teste;
+- imprimir o QR e lê-lo de longe, em cartaz pequeno (margem 2 e correção M são escolhas de projeto, não medidas);
+- as telas logadas numa VPS (só o servidor de desenvolvimento local);
+- cliente que apaga o `#código` antes de enviar: a conversa entra como `whatsapp` — é limite declarado, não defeito;
+- Google Ads: continua sem atribuição automática (precisaria de landing page com `gclid`).

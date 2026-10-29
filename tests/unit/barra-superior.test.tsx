@@ -57,11 +57,21 @@ afterEach(() => {
 });
 
 describe("as abas da barra superior", () => {
-  it("são as cinco, na ordem decidida", () => {
-    comoPapel("admin");
+  it("são as cinco de quem atende, na ordem decidida", () => {
+    comoPapel("agent");
     render(<AbasPrincipais />);
     const nomes = screen.getAllByRole("link").map((el) => el.getAttribute("title"));
     expect(nomes).toEqual(["Inbox", "Contatos", "Funis", "Agenda", "IA"]);
+  });
+
+  it("gestor e administrador ganham a sexta, Relatórios, por último", () => {
+    for (const papel of ["manager", "admin"] as const) {
+      comoPapel(papel);
+      const { unmount } = render(<AbasPrincipais />);
+      const nomes = screen.getAllByRole("link").map((el) => el.getAttribute("title"));
+      expect(nomes, papel).toEqual(["Inbox", "Contatos", "Funis", "Agenda", "IA", "Relatórios"]);
+      unmount();
+    }
   });
 
   it("estão dentro de uma <nav> chamada Navegação principal", () => {

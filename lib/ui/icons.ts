@@ -141,4 +141,8 @@ export {
   GoogleLogo,
   MapPin,
   ArrowsOutSimple,
+  // relatórios e QR codes: voltar ao relatório, reativar um QR arquivado, origem "anúncio" no card do funil
+  ArrowLeft,
+  ArrowCounterClockwise,
+  Megaphone,
 } from "@phosphor-icons/react/dist/ssr";

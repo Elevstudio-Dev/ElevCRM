@@ -38,6 +38,16 @@ vi.mock("@/lib/leads/nascimento-do-lead", () => ({
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+const reconhecer = vi.fn(async () => null as unknown);
+const vincular = vi.fn(async () => {});
+vi.mock("@/lib/qr-codes/reconhecer", async (orig) => ({
+  ...(await orig<typeof import("@/lib/qr-codes/reconhecer")>()),
+  reconhecerQrCodeNaEntrada: (...a: unknown[]) => {
+    sequencia.push("qr");
+    return reconhecer(...(a as []));
+  },
+  vincularLeadAoQr: (...a: unknown[]) => vincular(...(a as [])),
+}));
 vi.mock("@/lib/dev/kick-local-pipeline", () => ({
   acelerarPipelineDeEventos: vi.fn(async () => {}),
   kickLocalPipeline: vi.fn(async () => {}),
@@ -110,6 +120,9 @@ beforeEach(() => {
   audit.mockClear();
   garantirLeadDaConversa.mockClear();
   garantirLeadDaConversa.mockResolvedValue({ criado: true, leadId: "lead-1" } as never);
+  reconhecer.mockReset();
+  reconhecer.mockResolvedValue(null);
+  vincular.mockReset();
   vi.mocked(acelerarPipelineDeEventos).mockClear();
 });
 
@@ -144,6 +157,75 @@ describe("a ordem dos três efeitos", () => {
     await rodar();
 
     expect(leadJaTinhaNascido, "o despacho saiu antes do lead").toBe(true);
+    expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
+  });
+});
+
+describe("o QR da mensagem", () => {
+  const QR = { id: "qr-1", nome: "Cartaz", codigo: "R7K2QH" };
+
+  it("a ordem é opt-out → QR → lead", async () => {
+    // O QR vem DEPOIS do opt-out (quem pediu para sair não vira lead, com ou sem QR) e ANTES do lead (senão
+    // ele nasceria "whatsapp"). Trocar qualquer lado muda a origem do negócio sem derrubar nada.
+    let leadViu: string[] = [];
+    garantirLeadDaConversa.mockImplementation(async () => {
+      leadViu = [...sequencia];
+      return { criado: true, leadId: "lead-1" } as never;
+    });
+
+    await rodar({ texto: "PARAR" });
+
+    const optOut = leadViu.indexOf("update:contacts");
+    const qr = leadViu.indexOf("qr");
+    expect(optOut, "o opt-out não aconteceu antes do lead").toBeGreaterThanOrEqual(0);
+    expect(qr, "o QR não foi reconhecido antes do lead").toBeGreaterThanOrEqual(0);
+    expect(qr, "o QR foi reconhecido antes do opt-out").toBeGreaterThan(optOut);
+  });
+
+  it("com QR reconhecido, o lead nasce com a origem dele e é vinculado à conversa do QR", async () => {
+    reconhecer.mockResolvedValue(QR);
+
+    await rodar();
+
+    const dados = (garantirLeadDaConversa.mock.calls[0] as unknown[] | undefined)?.[1] as {
+      origem?: { source: string; sourceMetadata: Record<string, unknown>; tags: string[] };
+    };
+    expect(dados.origem?.source).toBe("qr_code");
+    expect(dados.origem?.sourceMetadata).toMatchObject({ qr_code_id: "qr-1", qr_code_nome: "Cartaz" });
+    expect(vincular).toHaveBeenCalledWith(
+      admin,
+      expect.objectContaining({
+        organizationId: "org-1",
+        conversationId: "conversa-1",
+        qrCodeId: "qr-1",
+        leadId: "lead-1",
+      }),
+    );
+  });
+
+  it("lead que já existia não é vinculado (a origem do negócio aberto não muda)", async () => {
+    reconhecer.mockResolvedValue(QR);
+    garantirLeadDaConversa.mockResolvedValue({ criado: false, motivo: "ja_existe" } as never);
+
+    await rodar();
+
+    expect(vincular).not.toHaveBeenCalled();
+  });
+
+  it("sem QR, o lead nasce sem `origem` (comportamento de sempre)", async () => {
+    await rodar();
+    const dados = (garantirLeadDaConversa.mock.calls[0] as unknown[] | undefined)?.[1] as Record<string, unknown>;
+    expect("origem" in dados).toBe(false);
+    expect(vincular).not.toHaveBeenCalled();
+  });
+
+  it("se o reconhecimento lançar, o lead nasce mesmo assim, sem origem de QR", async () => {
+    reconhecer.mockRejectedValue(new Error("banco fora"));
+
+    await rodar();
+
+    const dados = (garantirLeadDaConversa.mock.calls[0] as unknown[] | undefined)?.[1] as Record<string, unknown>;
+    expect("origem" in dados).toBe(false);
     expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
   });
 });
