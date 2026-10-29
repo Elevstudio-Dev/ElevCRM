@@ -29,6 +29,8 @@ import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conversa";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
+import { ForaDoFunilDialog } from "@/components/contacts/ForaDoFunilDialog";
+import { SeloForaDoFunil } from "@/components/contacts/SeloForaDoFunil";
 import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
 import { TransferirParaSetorDialog } from "@/components/setores/TransferirParaSetorDialog";
 import { useSetores } from "@/hooks/setores/useSetores";
@@ -81,6 +83,7 @@ export function ConversationHeader({ conversation }: Props) {
   const automaticoDaOrg = useAutomaticoAtivo();
   const [reassignOpen, setReassignOpen] = useState(false);
   const [setorOpen, setSetorOpen] = useState(false);
+  const [foraOpen, setForaOpen] = useState(false);
   // O item "Transferir para setor…" só existe quando a organização tem setor.
   const { data: setoresDaOrg } = useSetores();
   const temSetores = (setoresDaOrg?.length ?? 0) > 0;
@@ -110,6 +113,7 @@ export function ConversationHeader({ conversation }: Props) {
     bot_silenced_until: conversation.bot_silenced_until ?? null,
     force_human: c?.force_human ?? null,
     is_blocked: conversation.contacts?.is_blocked ?? null,
+    fora_do_funil_em: c?.fora_do_funil_em ?? null,
     automaticoDaOrg: automaticoDaOrg.data,
   });
 
@@ -216,6 +220,7 @@ export function ConversationHeader({ conversation }: Props) {
             classNameIniciais="text-[10px]"
           />
           <h2 className="truncate text-sm font-semibold">{displayName}</h2>
+          <SeloForaDoFunil foraDoFunilEm={c?.fora_do_funil_em} tipoId={c?.fora_do_funil_tipo_id} className="h-4 px-1.5 text-[10px]" />
           {/* O telefone ja era calculado e nunca era renderizado. Some no
               celular, onde o nome sozinho ja ocupa a linha. */}
           {phone ? (
@@ -356,7 +361,7 @@ export function ConversationHeader({ conversation }: Props) {
           O MENU SÓ APARECE SE TIVER O QUE OFERECER. Um gatilho que abre vazio é
           pior que gatilho nenhum: promete e não entrega.
         */}
-        {(podeDevolver || podePausar || estaViva) && (
+        {(podeDevolver || podePausar || estaViva || !!c?.id) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" data-testid="opcoes-da-conversa">
@@ -408,6 +413,13 @@ export function ConversationHeader({ conversation }: Props) {
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
               )}
+              {c?.id && !c.is_anonymized && (
+                // A pessoa não é cliente (equipe, prestador, parceiro): a IA se cala, nenhum negócio nasce e os que
+                // existem saem do funil e do relatório. Fica no menu — é ocasional —, mas com testid: é contrato.
+                <DropdownMenuItem data-testid="fora-do-funil-na-conversa" onClick={() => setForaOpen(true)}>
+                  {c.fora_do_funil_em ? t("Voltar ao funil") : t("Marcar como fora do funil")}
+                </DropdownMenuItem>
+              )}
               {estaViva && (
                 <DropdownMenuItem
                   disabled={close.isPending}
@@ -446,6 +458,14 @@ export function ConversationHeader({ conversation }: Props) {
           </Button>
         )}
       </div>
+      {foraOpen && c?.id && (
+        <ForaDoFunilDialog
+          contatos={[{ id: c.id, nome: displayName, tipoId: c.fora_do_funil_tipo_id ?? null }]}
+          marcar={!c.fora_do_funil_em}
+          open
+          onOpenChange={(aberto) => !aberto && setForaOpen(false)}
+        />
+      )}
       <ReassignDialog
         conversationId={conversation.id}
         open={reassignOpen}
