@@ -106,7 +106,8 @@ export async function registrarTrocaDeComando(entrada: Entrada): Promise<void> {
         .from("crm_leads")
         .select("id, organization_id, pipeline_id, status, last_activity_at, created_at")
         .eq("organization_id", organizationId)
-        .eq("contact_id", contactId),
+        .eq("contact_id", contactId)
+        .eq("fora_do_funil", false),
       leitor
         .from("crm_pipelines")
         .select("id")

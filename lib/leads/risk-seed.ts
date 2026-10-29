@@ -108,7 +108,8 @@ async function coletaEClassifica(
     .from("crm_leads")
     .select("id, stage_id, contact_id, last_activity_at, created_at")
     .eq("organization_id", organizationId)
-    .eq("status", "open");
+    .eq("status", "open")
+    .eq("fora_do_funil", false);
   if (leadErr) throw new Error(`seed de risco: ${leadErr.message}`);
   const leads = (leadRows ?? []) as LeadRow[];
 

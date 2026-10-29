@@ -107,6 +107,7 @@ export async function carregaRadarDeRisco(
     )
     .eq("organization_id", organizationId)
     .eq("status", "open")
+    .eq("fora_do_funil", false)
     .order("last_activity_at", { ascending: true, nullsFirst: true })
     .limit(SCAN_CAP);
   if (leadsErr) throw new Error(`radar_query_failed: ${leadsErr.message}`);

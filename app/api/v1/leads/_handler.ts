@@ -148,6 +148,8 @@ export async function listLeadsHandler(
     .from("crm_leads")
     .select(LEAD_COLS)
     .eq("organization_id", ctx.organization_id)
+    // Equipe, prestador e parceiro (contato "fora do funil") não são negócios para quem lista ou busca.
+    .eq("fora_do_funil", false)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit + 1);

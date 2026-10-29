@@ -230,7 +230,8 @@ export async function resolveAlvoDoRetorno(
     .from("crm_leads")
     .select("id, organization_id, pipeline_id, status, last_activity_at, created_at")
     .eq("organization_id", orgId)
-    .eq("contact_id", ref.contactId);
+    .eq("contact_id", ref.contactId)
+    .eq("fora_do_funil", false);
 
   const { data: padrao } = await admin
     .from("crm_pipelines")
