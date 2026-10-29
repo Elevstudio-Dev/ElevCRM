@@ -32,7 +32,7 @@ import {
 interface ConversaEmbed {
   bot_silenced_until: string | null;
   assignee_kind: string | null;
-  contacts: { force_human: boolean | null; ai_authorized_at: string | null } | null;
+  contacts: { force_human: boolean | null; ai_authorized_at: string | null; fora_do_funil_em: string | null } | null;
   channel_sessions: { metadata: Record<string, unknown> | null } | null;
 }
 
@@ -47,7 +47,7 @@ export async function decidirElegibilidadeDaConversaViaSupabase(
   const { data, error } = await admin
     .from("conversations")
     .select(
-      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at), channel_sessions:channel_session_id(metadata)",
+      "bot_silenced_until, assignee_kind, contacts:contact_id(force_human, ai_authorized_at, fora_do_funil_em), channel_sessions:channel_session_id(metadata)",
     )
     .eq("organization_id", input.organizationId)
     .eq("id", input.conversationId)
@@ -62,6 +62,7 @@ export async function decidirElegibilidadeDaConversaViaSupabase(
   return decidirElegibilidade(
     montarEstadoDeElegibilidade({
       aiGate: row.channel_sessions?.metadata?.["ai_gate"] ?? null,
+      foraDoFunilEm: row.contacts?.fora_do_funil_em ?? null,
       forceHuman: row.contacts?.force_human ?? false,
       assigneeKind: row.assignee_kind,
       botSilencedUntil: row.bot_silenced_until,

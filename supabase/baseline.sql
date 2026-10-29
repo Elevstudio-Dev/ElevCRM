@@ -19054,6 +19054,28 @@ as $$
   );
 $$;
 
+-- Abas do Inbox: quem está fora do funil é "parada dura" para o automático, como o opt-out.
+create or replace function public.comando_da_conversa(c public.conversations)
+returns text
+language sql
+stable
+set search_path = public
+as $comando$
+  select public.fn_comando_da_conversa(
+    c.status,
+    c.assigned_to_user_id,
+    c.bot_silenced_until,
+    -- `coalesce` porque `contact_id` é anulável no schema: contato ausente não pode
+    -- virar `null` e derrubar a linha inteira para fora de todo filtro — o efeito
+    -- seria uma conversa invisível em TODAS as abas.
+    coalesce((select ct.force_human from public.contacts ct where ct.id = c.contact_id), false),
+    -- `is_blocked` OU fora do funil: nos dois o automatico NAO atende, e devolver nao resolve (o motivo certo de
+    -- cada um e dito pela tela; aqui so a PARADA importa para as abas).
+    coalesce((select (ct.is_blocked or ct.fora_do_funil_em is not null) from public.contacts ct where ct.id = c.contact_id), false),
+    now()
+  );
+$comando$;
+
 -- Relatórios de origem e do QR (0220): quem está fora do funil não conta.
 create or replace function public.fn_relatorio_de_origens(p_org uuid, p_de timestamptz, p_ate timestamptz)
 returns table (

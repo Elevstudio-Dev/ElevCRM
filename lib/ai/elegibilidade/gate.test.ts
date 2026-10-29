@@ -13,6 +13,7 @@ const DIA = 24 * 60 * 60 * 1000;
 
 const base: EstadoDeElegibilidade = {
   modo: "open",
+  foraDoFunil: false,
   forceHuman: false,
   botSilencedUntil: null,
   assigneeKind: "ai",
@@ -29,6 +30,39 @@ describe("lerModoDoGate", () => {
     expect(lerModoDoGate(null)).toBe("open");
     expect(lerModoDoGate("ALLOWLIST")).toBe("open");
     expect(lerModoDoGate(42)).toBe("open");
+  });
+});
+
+describe("decidirElegibilidade — contato FORA DO FUNIL (equipe, prestador, parceiro)", () => {
+  it("bloqueia com o gate aberto, e o motivo diz o que é — não 'force_human'", () => {
+    const d = decidirElegibilidade({ ...base, modo: "open", foraDoFunil: true });
+    expect(d).toEqual({ permite: false, motivo: "fora_do_funil", bloqueioPorAllowlist: false });
+  });
+
+  it("bloqueia mesmo com a allowlist autorizando o contato", () => {
+    const d = decidirElegibilidade({
+      ...base,
+      modo: "allowlist",
+      foraDoFunil: true,
+      aiAuthorizedAt: new Date(AGORA.getTime() - DIA),
+    });
+    expect(d.permite).toBe(false);
+    expect(d.motivo).toBe("fora_do_funil");
+  });
+
+  it("vence os outros motivos (force_human, silêncio, dono humano): é o que a pessoa É, não o estado da conversa", () => {
+    const d = decidirElegibilidade({
+      ...base,
+      foraDoFunil: true,
+      forceHuman: true,
+      assigneeKind: "user",
+      botSilencedUntil: new Date(AGORA.getTime() + DIA),
+    });
+    expect(d.motivo).toBe("fora_do_funil");
+  });
+
+  it("e NÃO é bloqueio da allowlist (autorizar o contato não o resolve)", () => {
+    expect(decidirElegibilidade({ ...base, foraDoFunil: true }).bloqueioPorAllowlist).toBe(false);
   });
 });
 

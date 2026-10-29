@@ -263,15 +263,49 @@ describe("o espelho entre a tela e o motor", () => {
     expect(Object.keys(ROTULO_DO_COMANDO).sort()).toEqual(
       ["aguardando", "automatico", "encerrada", "humano", "ninguem"],
     );
-    // Cinco desde 2026-08-30: `contato_descadastrado` entrou junto com
+    // Seis desde 2026-10-29 (`fora_do_funil`); cinco desde 2026-08-30: `contato_descadastrado` entrou junto com
     // `is_blocked` nos fatos. O número fica escrito porque motivo novo tem de
     // ganhar rótulo no mesmo commit — um motivo sem rótulo imprime a chave crua.
-    expect(Object.keys(ROTULO_DO_MOTIVO)).toHaveLength(5);
+    expect(Object.keys(ROTULO_DO_MOTIVO)).toHaveLength(6);
     // "IA" no rótulo colidiria com o léxico que o produto já fixou em quatro
     // arquivos e que `handoff-por-orcamento.test.ts` usa como sabotagem-controle.
     for (const rotulo of Object.values(ROTULO_DO_MOTIVO)) {
       expect(rotulo).not.toMatch(/\bIA\b/);
     }
+  });
+});
+
+describe("contato FORA DO FUNIL (equipe, prestador, parceiro)", () => {
+  const FORA = "2026-10-29T12:00:00.000Z";
+
+  it("o automático não atende, e o motivo diz POR QUÊ — não 'cliente travado'", () => {
+    const r = comandoDaConversa(fatos({ fora_do_funil_em: FORA }), AGORA);
+    expect(r.automaticoAtivo).toBe(false);
+    expect(r.motivo).toBe("fora_do_funil");
+    expect(r.comando).toEqual({ quem: "aguardando" });
+  });
+
+  it("NÃO acende o botão de devolver ao automático: devolver não tira ninguém do 'fora do funil'", () => {
+    // O `decidirElegibilidade` recusaria na mesma. Botão que aparece e não pode funcionar é controle decorativo.
+    expect(comandoDaConversa(fatos({ fora_do_funil_em: FORA }), AGORA).travaVigente).toBe(false);
+  });
+
+  it("vence a trava do contato (force_human), mas perde para o opt-out (o legal vem primeiro)", () => {
+    expect(comandoDaConversa(fatos({ fora_do_funil_em: FORA, force_human: true }), AGORA).motivo).toBe("fora_do_funil");
+    expect(comandoDaConversa(fatos({ fora_do_funil_em: FORA, is_blocked: true }), AGORA).motivo).toBe(
+      "contato_descadastrado",
+    );
+  });
+
+  it("com atendente no comando, o comando continua sendo dele (a conversa é da equipe, o selo é só o motivo)", () => {
+    const r = comandoDaConversa(fatos({ fora_do_funil_em: FORA, assigned_to_user_id: ATENDENTE }), AGORA);
+    expect(r.comando).toMatchObject({ quem: "humano", userId: ATENDENTE });
+    expect(r.automaticoAtivo).toBe(false);
+  });
+
+  it("sem o marcador (nulo ou ausente), nada muda", () => {
+    expect(comandoDaConversa(fatos({ fora_do_funil_em: null }), AGORA).automaticoAtivo).toBe(true);
+    expect(comandoDaConversa(fatos(), AGORA).motivo).toBeNull();
   });
 });
 
