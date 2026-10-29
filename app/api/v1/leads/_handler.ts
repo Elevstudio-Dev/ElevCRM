@@ -229,6 +229,31 @@ export async function createLeadHandler(
     external_id?: string;
   },
 ): Promise<Record<string, unknown>> {
+  // Quem está FORA DO FUNIL (equipe, prestador, parceiro) não vira negócio. A recusa mora AQUI porque esta é a porta
+  // única — o POST da API, a importação de planilha, a ferramenta MCP do agente, a ação "criar ou mover negócio"
+  // da automação e o webhook de formulário passam todos por esta função —, e o chamador que a esquecesse deixaria
+  // a equipe do cliente virar lead. O filtro por organização é obrigatório (esta função roda com `service role`).
+  if (input.contact_id) {
+    const { data: contato, error: contatoErr } = await supabase
+      .from("contacts")
+      .select("fora_do_funil_em")
+      .eq("organization_id", ctx.organization_id)
+      .eq("id", input.contact_id)
+      .maybeSingle();
+    if (contatoErr) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, contatoErr.message);
+    }
+    if (contato?.fora_do_funil_em) {
+      throw new ApiError(
+        409,
+        "contato_fora_do_funil",
+        undefined,
+        ctx.requestId,
+        "Este contato está marcado como fora do funil (equipe, prestador ou parceiro). Tire a marca dele para criar um negócio.",
+      );
+    }
+  }
+
   // Validate stage belongs to pipeline within active org.
   const { data: stage, error: stageErr } = await supabase
     .from("crm_stages")

@@ -510,3 +510,50 @@ describe("a ORIGEM do lead novo (QR > anúncio > whatsapp)", () => {
     expect((await lerLead(primeiro.leadId)).source).toBe("whatsapp");
   });
 });
+
+describe("quem está FORA DO FUNIL não vira negócio", () => {
+  it("equipe, prestador ou parceiro escreve: a conversa existe, mas nenhum negócio nasce", async () => {
+    const contato = await criarContato(ORG_VIVA, "Contador da Clínica");
+    await pool.query("update contacts set fora_do_funil_em = now() where id = $1", [contato]);
+
+    const r = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: "Contador da Clínica",
+    });
+
+    expect(r).toEqual({ criado: false, motivo: "contato_fora_do_funil" });
+    const { rows } = await pool.query("select id from crm_leads where contact_id = $1", [contato]);
+    expect(rows, "nenhum negócio pode ter nascido").toHaveLength(0);
+  });
+
+  it("desmarcar devolve o comportamento normal: o negócio nasce", async () => {
+    const contato = await criarContato(ORG_VIVA, "Era da equipe, virou cliente");
+    await pool.query("update contacts set fora_do_funil_em = now() where id = $1", [contato]);
+    await pool.query("update contacts set fora_do_funil_em = null where id = $1", [contato]);
+
+    const r = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: "Era da equipe, virou cliente",
+    });
+    expect(r.criado).toBe(true);
+  });
+
+  it("o opt-out continua mandando no motivo quando a pessoa tem os dois", async () => {
+    const contato = await criarContato(ORG_VIVA, "Pediu para sair e é parceiro");
+    await pool.query(
+      "update contacts set fora_do_funil_em = now(), is_blocked = true where id = $1",
+      [contato],
+    );
+    const r = await garantirLeadDaConversa(db, {
+      organizationId: ORG_VIVA,
+      contactId: contato,
+      conversationId: CONVERSA,
+      nomeDoContato: null,
+    });
+    expect(r).toEqual({ criado: false, motivo: "contato_bloqueado" });
+  });
+});
