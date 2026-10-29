@@ -10,7 +10,7 @@ let tipoExiste = true;
 let alterados: string[] = [A];
 const aplicar = vi.fn();
 const previa = vi.fn();
-const audit = vi.fn(async () => {});
+const audit = vi.fn(async (_entrada: unknown) => {});
 const filtrosDoTipo: Array<[string, unknown]> = [];
 
 vi.mock("@/lib/auth/require-role", () => ({
@@ -19,7 +19,7 @@ vi.mock("@/lib/auth/require-role", () => ({
       ? { ok: true, user: { id: "u-1" }, org: { orgId: "org-1" }, min }
       : { ok: false, response: new Response(null, { status: 403 }) },
 }));
-vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...(a as [])) }));
+vi.mock("@/lib/audit", () => ({ audit: (entrada: unknown) => audit(entrada) }));
 vi.mock("@/lib/contatos/fora-do-funil", () => ({
   aplicarMarcador: (...a: unknown[]) => aplicar(...a),
   previaDoMarcador: (...a: unknown[]) => previa(...a),

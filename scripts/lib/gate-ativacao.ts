@@ -104,6 +104,8 @@ function estado(
 ) {
   return montarEstadoDeElegibilidade({
     aiGate: modo,
+    // Sem a coluna na linha (consulta antiga), `undefined` conta como "do funil": o gate nao inventa um marcador.
+    foraDoFunilEm: r.fora_do_funil_em,
     forceHuman: r.force_human,
     assigneeKind: (r.assignee_kind as string | null) ?? null,
     botSilencedUntil: r.bot_silenced_until as string | null,
@@ -158,7 +160,7 @@ export async function checkQueryElegibilidade(ctx: CtxAtivacao): Promise<Resulta
   const linhas: string[] = [];
   try {
     const { rows } = await ctx.pool.query(
-      `select cs.metadata->>'ai_gate' as ai_gate, ct.force_human, cv.assignee_kind,
+      `select cs.metadata->>'ai_gate' as ai_gate, ct.force_human, ct.fora_do_funil_em, cv.assignee_kind,
               cv.bot_silenced_until, ct.ai_authorized_at
          from conversations cv
          join contacts ct on ct.id = cv.contact_id and ct.organization_id = cv.organization_id
@@ -175,7 +177,7 @@ export async function checkQueryElegibilidade(ctx: CtxAtivacao): Promise<Resulta
     };
   }
   const { rows: real } = await ctx.pool.query(
-    `select cv.id, cs.metadata->>'ai_gate' as ai_gate, ct.force_human, cv.assignee_kind,
+    `select cv.id, cs.metadata->>'ai_gate' as ai_gate, ct.force_human, ct.fora_do_funil_em, cv.assignee_kind,
             cv.bot_silenced_until, ct.ai_authorized_at
        from conversations cv
        join contacts ct on ct.id = cv.contact_id and ct.organization_id = cv.organization_id
@@ -280,7 +282,7 @@ export async function checkImpactoConversas(ctx: CtxAtivacao): Promise<Resultado
   const CAP = 50000;
   const { rows } = await ctx.pool.query(
     `select cv.id as conversation_id, cv.status, cv.last_inbound_at, cv.bot_silenced_until, cv.assignee_kind,
-            coalesce(ct.name, ct.display_name) as name, ct.phone_number, ct.force_human, ct.ai_authorized_at
+            coalesce(ct.name, ct.display_name) as name, ct.phone_number, ct.force_human, ct.fora_do_funil_em, ct.ai_authorized_at
        from conversations cv
        join contacts ct on ct.id = cv.contact_id and ct.organization_id = cv.organization_id
       where cv.organization_id = $1 and cv.channel_session_id = $2 and cv.is_group = false
@@ -453,7 +455,7 @@ export async function checkDenyByDefault(ctx: CtxAtivacao): Promise<Resultado> {
   linhas.push("toda autorização existente veio de uma origem elegível (respondi:/campanha:/automacao:/retomada_manual)");
 
   const { rows: antigos } = await ctx.pool.query(
-    `select ct.id, ct.created_at, ct.ai_authorized_at, ct.force_human,
+    `select ct.id, ct.created_at, ct.ai_authorized_at, ct.force_human, ct.fora_do_funil_em,
             cv.assignee_kind, cv.bot_silenced_until
        from contacts ct
        join conversations cv on cv.contact_id = ct.id and cv.organization_id = ct.organization_id
@@ -477,11 +479,11 @@ export async function checkDenyByDefault(ctx: CtxAtivacao): Promise<Resultado> {
   }
 
   const simNova = decidirElegibilidade(
-    montarEstadoDeElegibilidade({ aiGate: "allowlist", forceHuman: false, assigneeKind: "ai", botSilencedUntil: null, aiAuthorizedAt: null, agora, ttlMs: ctx.ttlMs }),
+    montarEstadoDeElegibilidade({ aiGate: "allowlist", foraDoFunilEm: null, forceHuman: false, assigneeKind: "ai", botSilencedUntil: null, aiAuthorizedAt: null, agora, ttlMs: ctx.ttlMs }),
   );
   const simExpirada = decidirElegibilidade(
     montarEstadoDeElegibilidade({
-      aiGate: "allowlist", forceHuman: false, assigneeKind: "ai", botSilencedUntil: null,
+      aiGate: "allowlist", foraDoFunilEm: null, forceHuman: false, assigneeKind: "ai", botSilencedUntil: null,
       aiAuthorizedAt: new Date(agora.getTime() - ctx.ttlMs - 86_400_000), agora, ttlMs: ctx.ttlMs,
     }),
   );

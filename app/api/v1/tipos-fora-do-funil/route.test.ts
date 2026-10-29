@@ -13,7 +13,7 @@ const inserts: Array<Record<string, unknown>> = [];
 const updates: Array<Record<string, unknown>> = [];
 const filtros: Array<[string, unknown]> = [];
 const isNulls: string[] = [];
-const audit = vi.fn(async () => {});
+const audit = vi.fn(async (_entrada: unknown) => {});
 
 vi.mock("@/lib/auth/require-role", () => ({
   requireRole: async (min: string) => {
@@ -23,7 +23,7 @@ vi.mock("@/lib/auth/require-role", () => ({
       : { ok: true, user: { id: "u-1" }, org: { orgId: "org-1" } };
   },
 }));
-vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => audit(...(a as [])) }));
+vi.mock("@/lib/audit", () => ({ audit: (entrada: unknown) => audit(entrada) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from() {

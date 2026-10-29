@@ -21,9 +21,14 @@ export function SeloForaDoFunil({
   tipoId?: string | null;
   className?: string;
 }) {
-  const t = useT();
-  const tipos = useTiposForaDoFunil({ arquivados: true, enabled: !!foraDoFunilEm && !!tipoId });
+  // Separado em dois para que a linha de quem NÃO está marcado (a imensa maioria) nem toque no react-query.
   if (!foraDoFunilEm) return null;
+  return <SeloMarcado tipoId={tipoId} className={className} />;
+}
+
+function SeloMarcado({ tipoId, className }: { tipoId?: string | null; className?: string }) {
+  const t = useT();
+  const tipos = useTiposForaDoFunil({ arquivados: true, enabled: !!tipoId });
   const tipo = tipoId ? tipos.data?.find((x) => x.id === tipoId)?.nome : undefined;
   return (
     <Badge variant="neutral" data-testid="selo-fora-do-funil" className={cn("shrink-0", className)}>
