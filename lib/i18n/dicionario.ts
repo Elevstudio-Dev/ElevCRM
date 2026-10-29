@@ -169,6 +169,86 @@ export const DICIONARIO: Traducoes = {
     es: "Cambiar el mensaje vale para las próximas lecturas. El código no cambia: está impreso.",
   },
   "O código é criado ao salvar.": { es: "El código se crea al guardar." },
+
+  // ─── Contato "Fora do funil" (equipe, prestador, parceiro) ───
+  "Fora do funil": { es: "Fuera del embudo" },
+  Clientes: { es: "Clientes" },
+  "Selecionar todos desta página": { es: "Seleccionar todos de esta página" },
+  Selecionar: { es: "Seleccionar" },
+  "Marcar como fora do funil": { es: "Marcar como fuera del embudo" },
+  "Voltar ao funil": { es: "Volver al embudo" },
+  "Nenhum negócio será afetado.": { es: "Ningún negocio será afectado." },
+  "Não há negócio escondido para devolver.": { es: "No hay negocios ocultos para devolver." },
+  "negócio aberto": { es: "negocio abierto" },
+  "negócios abertos": { es: "negocios abiertos" },
+  "venda ganha": { es: "venta ganada" },
+  "vendas ganhas": { es: "ventas ganadas" },
+  "negócio perdido": { es: "negocio perdido" },
+  "negócios perdidos": { es: "negocios perdidos" },
+  "mais de": { es: "más de" },
+  "Saem do funil e do relatório:": { es: "Salen del embudo y del informe:" },
+  "Voltam ao funil e ao relatório:": { es: "Vuelven al embudo y al informe:" },
+  "Contato marcado como fora do funil.": { es: "Contacto marcado como fuera del embudo." },
+  "Contatos marcados como fora do funil.": { es: "Contactos marcados como fuera del embudo." },
+  "Contato voltou ao funil.": { es: "El contacto volvió al embudo." },
+  "Contatos voltaram ao funil.": { es: "Los contactos volvieron al embudo." },
+  "A IA para de atender e de enviar mensagens para esta pessoa.": {
+    es: "La IA deja de atender y de enviar mensajes a esta persona.",
+  },
+  "Nenhum negócio novo é criado a partir das mensagens dela.": {
+    es: "No se crea ningún negocio nuevo a partir de sus mensajes.",
+  },
+  "Os negócios que ela já tinha saem do funil, do relatório e do Desempenho. O histórico fica guardado e volta se você desmarcar.": {
+    es: "Los negocios que ya tenía salen del embudo, del informe y del Rendimiento. El historial queda guardado y vuelve si desmarcas.",
+  },
+  "A conversa continua no Inbox para a equipe responder.": {
+    es: "La conversación sigue en el Inbox para que el equipo responda.",
+  },
+  "A IA volta a poder atender esta pessoa.": { es: "La IA vuelve a poder atender a esta persona." },
+  "A IA volta a poder atender estas pessoas.": { es: "La IA vuelve a poder atender a estas personas." },
+  "A IA para de atender e de enviar mensagens para estas pessoas.": {
+    es: "La IA deja de atender y de enviar mensajes a estas personas.",
+  },
+  "Nenhum negócio novo é criado a partir das mensagens delas.": {
+    es: "No se crea ningún negocio nuevo a partir de sus mensajes.",
+  },
+  "Os negócios que elas já tinham saem do funil, do relatório e do Desempenho. O histórico fica guardado e volta se você desmarcar.": {
+    es: "Los negocios que ya tenían salen del embudo, del informe y del Rendimiento. El historial queda guardado y vuelve si desmarcas.",
+  },
+  "As conversas continuam no Inbox para a equipe responder.": {
+    es: "Las conversaciones siguen en el Inbox para que el equipo responda.",
+  },
+  "Os negócios que estavam escondidos voltam ao funil e ao relatório.": {
+    es: "Los negocios que estaban ocultos vuelven al embudo y al informe.",
+  },
+  "Conferindo o que muda…": { es: "Comprobando qué cambia…" },
+  "Não foi possível conferir o que muda. Você ainda pode confirmar.": {
+    es: "No fue posible comprobar qué cambia. Aun así puedes confirmar.",
+  },
+  "Atenção: a venda ganha também sai do relatório. Confirme só se esta pessoa não é cliente.": {
+    es: "Atención: la venta ganada también sale del informe. Confirma solo si esta persona no es cliente.",
+  },
+  "Tipo (opcional)": { es: "Tipo (opcional)" },
+  "Sem tipo": { es: "Sin tipo" },
+  "Novo tipo": { es: "Nuevo tipo" },
+  "Ex.: Equipe, Contador": { es: "Ej.: Equipo, Contador" },
+  "Contatos fora do funil": { es: "Contactos fuera del embudo" },
+  "Equipe, prestadores e parceiros escrevem no WhatsApp mas não são clientes. Marque o contato como fora do funil: a IA se cala, nenhum negócio nasce e eles saem do funil e do relatório. Aqui você cadastra os tipos para achar essas pessoas depois.": {
+    es: "El equipo, los proveedores y los socios escriben por WhatsApp pero no son clientes. Marca el contacto como fuera del embudo: la IA se calla, no nace ningún negocio y salen del embudo y del informe. Aquí registras los tipos para encontrar a estas personas después.",
+  },
+  "Nome do tipo": { es: "Nombre del tipo" },
+  "Ex.: Equipe, Contador, Dentista parceiro": { es: "Ej.: Equipo, Contador, Dentista socio" },
+  "Tipos em uso": { es: "Tipos en uso" },
+  "Nenhum tipo ainda. Sem tipo, o contato continua podendo ser marcado como fora do funil.": {
+    es: "Ningún tipo todavía. Sin tipo, el contacto igual puede marcarse como fuera del embudo.",
+  },
+  "Não foi possível carregar os tipos.": { es: "No fue posible cargar los tipos." },
+  "Para marcar uma pessoa, abra a ficha dela ou a conversa e use": {
+    es: "Para marcar a una persona, abre su ficha o la conversación y usa",
+  },
+  "Para ver quem já está marcado, filtre a lista de": {
+    es: "Para ver quién ya está marcado, filtra la lista de",
+  },
   "Audit Log": { es: "Registro de auditoría" },
   Configurações: { es: "Configuración" },
   Buscar: { es: "Buscar" },
@@ -287,6 +367,9 @@ export const DICIONARIO: Traducoes = {
     es: "Automático pausado para este cliente",
   },
   "Automático volta em instantes": { es: "El automático vuelve en instantes" },
+  "Automático desligado — fora do funil": {
+    es: "Automático desactivado — fuera del embudo",
+  },
   "Pausar o automático": { es: "Pausar el automático" },
   "Ver contato": { es: "Ver contacto" },
 

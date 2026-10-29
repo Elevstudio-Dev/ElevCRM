@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Contato fora do funil — quem escreve e não é cliente",
+    "subtitle": "um marcador no contato, um espelho nos negócios feito pelo banco, e cada porta (IA, lead, relatório, quadro) consultando o mesmo fato",
+    "output": "contato-fora-do-funil.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que a equipe faz e vê" },
+    { "id": "api", "label": "API (atendente+; tipos gestor+)" },
+    { "id": "regra", "label": "Regra pura" },
+    { "id": "banco", "label": "Banco (RLS, gatilhos, espelho)" },
+    { "id": "ia", "label": "Radar da IA" },
+    { "id": "funil", "label": "Funil e relatórios" },
+    { "id": "volta", "label": "O laço de retorno" }
+  ],
+  "mainPath": ["dialogo", "apimarcar", "marcador", "espelho", "elegibilidade", "relatorio"],
+  "nodes": [
+    { "id": "dialogo", "lane": "humano", "col": 1, "type": "frontend", "label": "Diálogo \"Marcar como fora do funil\"", "sublabel": "ficha, cabeçalho da conversa e lista em massa; mostra ANTES o que sai e avisa se há venda ganha" },
+    { "id": "selo", "lane": "humano", "col": 2, "type": "frontend", "label": "Selo \"Fora do funil\" (+ tipo)", "sublabel": "lista de contatos, conversa e Inbox; a conversa continua para a equipe responder" },
+    { "id": "tiposcfg", "lane": "humano", "col": 3, "type": "frontend", "label": "Configurações › Contatos fora do funil", "sublabel": "o dono cadastra, renomeia e arquiva os tipos" },
+
+    { "id": "apimarcar", "lane": "api", "col": 1, "type": "api", "label": "POST /contacts/fora-do-funil (+ /previa)", "sublabel": "até 200 por vez; só a organização da sessão; audita com autor" },
+    { "id": "apitipos", "lane": "api", "col": 2, "type": "api", "label": "/tipos-fora-do-funil (GET, POST, PATCH)", "sublabel": "ler: atendente; criar/editar: gestor" },
+
+    { "id": "regraMarcador", "lane": "regra", "col": 1, "type": "service", "label": "lib/contatos/fora-do-funil.ts", "sublabel": "previaDoMarcador e aplicarMarcador: só quem muda de estado, valor ganho só em reais" },
+    { "id": "porta", "lane": "regra", "col": 2, "type": "service", "label": "createLeadHandler (porta única)", "sublabel": "POST, planilha, MCP, automação e formulário: 409 contato_fora_do_funil" },
+
+    { "id": "marcador", "lane": "banco", "col": 1, "type": "database", "label": "contacts.fora_do_funil_em / _tipo_id / _por", "sublabel": "nulo = é do funil; tipo sem marcador o banco recusa" },
+    { "id": "tipos", "lane": "banco", "col": 2, "type": "database", "label": "tipos_fora_do_funil", "sublabel": "RLS: membro lê, gestor escreve; nome único por organização; arquivar em vez de apagar" },
+    { "id": "espelho", "lane": "banco", "col": 3, "type": "database", "label": "crm_leads.fora_do_funil (espelho)", "sublabel": "dois gatilhos: marcar o contato acende os negócios; negócio novo já nasce certo; ninguém escreve à mão" },
+    { "id": "comandoDb", "lane": "banco", "col": 4, "type": "database", "label": "comando_da_conversa(c)", "sublabel": "fora do funil = parada dura nas abas do Inbox, como o opt-out; espelha o TypeScript" },
+
+    { "id": "elegibilidade", "lane": "ia", "col": 1, "type": "service", "label": "decidirElegibilidade → fora_do_funil", "sublabel": "vence TUDO, inclusive a allowlist: drain, turno, follow-up de texto fixo, runtime legado e handoff" },
+    { "id": "veto", "lane": "ia", "col": 2, "type": "service", "label": "before-send: contato_fora_do_funil", "sublabel": "veto final com código próprio — nunca diz que a pessoa \"optou por sair\"" },
+    { "id": "nascimento", "lane": "ia", "col": 3, "type": "service", "label": "garantirLeadDaConversa", "sublabel": "a conversa chega, o lead NÃO nasce (motivo contato_fora_do_funil, depois do opt-out)" },
+
+    { "id": "quadro", "lane": "funil", "col": 1, "type": "frontend", "label": "Quadro, listas, radar, alertas", "sublabel": "11 leituras filtram o espelho; a guarda classifica as outras ~40 com o motivo escrito" },
+    { "id": "relatorio", "lane": "funil", "col": 2, "type": "database", "label": "fn_relatorio_* e fn_attendant_metrics", "sublabel": "ignoram o espelho: marcar muda o número que o gestor lê, desmarcar devolve" },
+
+    { "id": "audit", "lane": "volta", "col": 1, "type": "service", "label": "audit contact.fora_do_funil_marcado/desmarcado", "sublabel": "autor, quantos contatos, tipo e o que saiu do funil" },
+    { "id": "guarda", "lane": "volta", "col": 2, "type": "service", "label": "leads-fora-do-funil-guarda.test.ts", "sublabel": "arquivo novo que lê crm_leads sem decidir (filtra ou não filtra, com motivo) reprova" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "dialogo", "to": "apimarcar", "label": "prévia e confirmação" },
+    { "id": "e2", "from": "tiposcfg", "to": "apitipos", "label": "criar, renomear, arquivar" },
+    { "id": "e3", "from": "dialogo", "to": "apitipos", "label": "tipos para escolher (gestor cria na hora)" },
+    { "id": "e4", "from": "apimarcar", "to": "regraMarcador", "label": "marcar ou desmarcar" },
+    { "id": "e5", "from": "regraMarcador", "to": "marcador", "label": "update só de quem muda" },
+    { "id": "e6", "from": "apitipos", "to": "tipos", "label": "insert/update pela sessão (RLS)" },
+    { "id": "e7", "from": "tipos", "to": "marcador", "label": "tipo escolhido (on delete set null)" },
+    { "id": "e8", "from": "marcador", "to": "espelho", "label": "gatilho do contato" },
+    { "id": "e9", "from": "marcador", "to": "comandoDb", "label": "parada dura nas abas" },
+    { "id": "e10", "from": "marcador", "to": "elegibilidade", "label": "lido pelas duas consultas (pg e Supabase)" },
+    { "id": "e11", "from": "marcador", "to": "veto", "label": "lido sob o lock do envio" },
+    { "id": "e12", "from": "marcador", "to": "nascimento", "label": "recusa antes de qualquer funil" },
+    { "id": "e13", "from": "marcador", "to": "porta", "label": "409 antes de tocar em crm_leads" },
+    { "id": "e14", "from": "espelho", "to": "quadro", "label": "filtro nas leituras que listam" },
+    { "id": "e15", "from": "espelho", "to": "relatorio", "label": "not fora_do_funil" },
+    { "id": "e16", "from": "marcador", "to": "selo", "label": "payload da conversa e do contato" },
+    { "id": "e17", "from": "comandoDb", "to": "selo", "label": "motivo do silêncio, em palavras do dono" },
+    { "id": "e18", "from": "apimarcar", "to": "audit", "label": "toda mudança tem autor" },
+    { "id": "e19", "from": "quadro", "to": "guarda", "label": "a classificação é conferida a cada commit" },
+    { "id": "e20", "from": "apimarcar", "to": "dialogo", "label": "a prévia volta ao diálogo: o que sai ANTES de confirmar" }
+  ]
+}

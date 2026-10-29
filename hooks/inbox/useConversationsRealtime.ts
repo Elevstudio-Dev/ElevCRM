@@ -27,6 +27,8 @@ export interface ContactSummary {
    * atendimento aparece. Opcional: conversas em cache de antes do campo existir.
    */
   force_human?: boolean | null;
+  fora_do_funil_em?: string | null;
+  fora_do_funil_tipo_id?: string | null;
 }
 
 /**

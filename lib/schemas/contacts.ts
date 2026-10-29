@@ -68,6 +68,10 @@ export const contactListQuerySchema = z.object({
   search: z.string().optional(),
   tag: z.string().optional(),
   source: z.string().optional(),
+  /** `sim` = só quem está fora do funil (equipe, prestador, parceiro); `nao` = só os clientes. Ausente = todos. */
+  fora_do_funil: z.enum(["sim", "nao"]).optional(),
+  /** Só quem está fora do funil COM este tipo. */
+  tipo_id: z.string().uuid().optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   order_by: z.enum(CONTACT_ORDER_BY).default("last_activity_at"),

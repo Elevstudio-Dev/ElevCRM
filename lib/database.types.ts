@@ -2577,6 +2577,9 @@ export type Database = {
           display_name: string | null
           email: string | null
           email_normalized: string | null
+          fora_do_funil_em: string | null
+          fora_do_funil_por: string | null
+          fora_do_funil_tipo_id: string | null
           force_human: boolean
           id: string
           is_anonymized: boolean
@@ -2613,6 +2616,9 @@ export type Database = {
           display_name?: string | null
           email?: string | null
           email_normalized?: string | null
+          fora_do_funil_em?: string | null
+          fora_do_funil_por?: string | null
+          fora_do_funil_tipo_id?: string | null
           force_human?: boolean
           id?: string
           is_anonymized?: boolean
@@ -2649,6 +2655,9 @@ export type Database = {
           display_name?: string | null
           email?: string | null
           email_normalized?: string | null
+          fora_do_funil_em?: string | null
+          fora_do_funil_por?: string | null
+          fora_do_funil_tipo_id?: string | null
           force_human?: boolean
           id?: string
           is_anonymized?: boolean
@@ -3236,6 +3245,7 @@ export type Database = {
           description: string | null
           expected_close_date: string | null
           external_id: string | null
+          fora_do_funil: boolean
           id: string
           last_activity_at: string | null
           lost_reason: string | null
@@ -3267,6 +3277,7 @@ export type Database = {
           description?: string | null
           expected_close_date?: string | null
           external_id?: string | null
+          fora_do_funil?: boolean
           id?: string
           last_activity_at?: string | null
           lost_reason?: string | null
@@ -3298,6 +3309,7 @@ export type Database = {
           description?: string | null
           expected_close_date?: string | null
           external_id?: string | null
+          fora_do_funil?: boolean
           id?: string
           last_activity_at?: string | null
           lost_reason?: string | null
@@ -6553,6 +6565,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tenant_integrations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tipos_fora_do_funil: {
+        Row: {
+          arquivado_em: string | null
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          nome: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          arquivado_em?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          nome: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          arquivado_em?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          nome?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tipos_fora_do_funil_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

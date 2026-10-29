@@ -36,6 +36,9 @@ export function useCrmAlerts(): void {
     (payload: unknown) => {
       const { novo, antigo } = sides(payload);
       if (!novo) return;
+      // Negócio de quem está FORA DO FUNIL: o espelho é mudado em massa quando se marca o contato, e isso não
+      // pode virar uma chuva de "lead atribuído a você". Quem saiu do funil é silêncio.
+      if (novo.fora_do_funil === true) return;
       const title = str(novo.title) || "Lead";
       const pipelineId = str(novo.pipeline_id);
       const href = pipelineId ? `/app/pipelines/${pipelineId}` : "/app/kanban";

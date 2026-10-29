@@ -324,6 +324,16 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     group: "crm",
     minRole: "manager",
   },
+  {
+    // Equipe, prestador, parceiro: quem escreve no WhatsApp e NÃO é cliente. Marcar a pessoa tira a IA, o funil e o
+    // relatório de cima dela; aqui o gestor cadastra os TIPOS (Equipe, Contador…) para achá-la depois.
+    href: "/app/settings/tenant/fora-do-funil",
+    label: "Contatos fora do funil",
+    description: "Os tipos de quem não é cliente — equipe, prestadores, parceiros — que a IA e o relatório ignoram.",
+    icon: UsersThree,
+    group: "crm",
+    minRole: "manager",
+  },
 
   // ---- Agente de IA — montar, ensinar, acompanhar ----
   {

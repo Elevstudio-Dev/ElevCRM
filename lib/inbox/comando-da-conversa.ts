@@ -81,6 +81,15 @@ export interface FatosDoComando {
    * controle decorativo, que é pior que ausência de botão.
    */
   is_blocked?: boolean | null;
+  /**
+   * `contacts.fora_do_funil_em`: equipe, prestador ou parceiro — não é cliente. O automático não atende
+   * (`decidirElegibilidade` → `fora_do_funil`), então a tela não pode dizer "Automático atendendo".
+   *
+   * Como o opt-out, NÃO liga `travaVigente`: devolver ao automático não tira ninguém do "fora do funil" (só
+   * desmarcar o contato tira), e um botão que não pode funcionar é pior que botão nenhum. E no banco,
+   * `comando_da_conversa(c)` o trata como parada dura, junto com `is_blocked` (migration 0221).
+   */
+  fora_do_funil_em?: string | null;
 }
 
 export type Comando =
@@ -114,7 +123,12 @@ export type MotivoDoSilencio =
    * `contacts.is_blocked` — o cliente pediu para sair. Ação: NENHUMA no
    * automático; quem decide reabrir é o cliente, não a equipe.
    */
-  | "contato_descadastrado";
+  | "contato_descadastrado"
+  /**
+   * `contacts.fora_do_funil_em` — a pessoa não é cliente. Ação: NENHUMA na conversa; para a IA voltar é preciso
+   * desmarcar o contato (na ficha ou no cabeçalho).
+   */
+  | "fora_do_funil";
 
 export interface ComandoDaConversa {
   comando: Comando;
@@ -206,7 +220,11 @@ export function silencioVigente(
 export function comandoDaConversa(fatos: FatosDoComando, agora: Date = new Date()): ComandoDaConversa {
   const silencio = silencioVigente(fatos.bot_silenced_until, agora);
   const travado = fatos.force_human === true;
-  const bloqueado = fatos.is_blocked === true;
+  const optOut = fatos.is_blocked === true;
+  const foraDoFunil = fatos.fora_do_funil_em !== null && fatos.fora_do_funil_em !== undefined;
+  // Para o comando e para o automático, as duas coisas são PARADA DURA (o banco as soma num só argumento). Quem as
+  // distingue é o motivo, que decide o que a tela diz.
+  const bloqueado = optOut || foraDoFunil;
   const encerrada = STATUS_ENCERRADOS.has(fatos.status);
 
   const comando: Comando = fatos.assigned_to_user_id
@@ -242,12 +260,16 @@ export function comandoDaConversa(fatos: FatosDoComando, agora: Date = new Date(
     ? null
     : encerrada
       ? null // Encerrada não é silêncio: é ausência de assunto. O estado já diz.
-      : bloqueado
+      : optOut
         ? // ANTES de `travado`, de propósito: quando as duas valem, é o opt-out que
           // decide a AÇÃO — não há nenhuma. Nomear a trava menor faria a tela
           // sugerir um "devolver" que o `stopGate` recusaria na sequência.
           "contato_descadastrado"
-        : travado
+        : foraDoFunil
+          ? // Depois do opt-out (a obrigação legal) e antes da trava: é o que a pessoa É, e nenhuma
+            // devolução à IA muda isso.
+            "fora_do_funil"
+          : travado
           ? "contato_travado"
           : // Ordem importa: a trava do CONTATO é mais forte e mais ampla que a da
             // conversa, então ela nomeia o motivo mesmo havendo silêncio local —
@@ -294,6 +316,7 @@ export const ROTULO_DO_MOTIVO: Record<MotivoDoSilencio, string> = {
   pausado: "Automático pausado",
   resposta_humana_recente: "Automático volta em instantes",
   contato_descadastrado: "Cliente pediu para não receber mensagens",
+  fora_do_funil: "Automático desligado — fora do funil",
 };
 
 /**

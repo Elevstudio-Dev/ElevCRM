@@ -14,6 +14,9 @@ export interface ContactListFilters {
   search?: string;
   tag?: string;
   source?: string;
+  /** `sim` = só quem está fora do funil; `nao` = só os clientes; ausente = todos. */
+  fora_do_funil?: "sim" | "nao";
+  tipo_id?: string;
   order_by?: ContactOrderBy;
   order_dir?: "asc" | "desc";
   limit?: number;
@@ -28,6 +31,8 @@ export function useContactList(filters: ContactListFilters) {
       if (filters.search) qs.set("search", filters.search);
       if (filters.tag) qs.set("tag", filters.tag);
       if (filters.source) qs.set("source", filters.source);
+      if (filters.fora_do_funil) qs.set("fora_do_funil", filters.fora_do_funil);
+      if (filters.tipo_id) qs.set("tipo_id", filters.tipo_id);
       if (filters.order_by) qs.set("order_by", filters.order_by);
       if (filters.order_dir) qs.set("order_dir", filters.order_dir);
       if (filters.limit) qs.set("limit", String(filters.limit));

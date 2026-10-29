@@ -17,6 +17,7 @@ import {
 interface LinhaDeElegibilidade {
   ai_gate: string | null;
   force_human: boolean | null;
+  fora_do_funil_em: Date | string | null;
   assignee_kind: string | null;
   bot_silenced_until: Date | string | null;
   ai_authorized_at: Date | string | null;
@@ -34,6 +35,7 @@ export async function decidirElegibilidadeDaConversa(
     `select
        cs.metadata->>'ai_gate'      as ai_gate,
        ct.force_human               as force_human,
+       ct.fora_do_funil_em          as fora_do_funil_em,
        cv.assignee_kind             as assignee_kind,
        cv.bot_silenced_until        as bot_silenced_until,
        ct.ai_authorized_at          as ai_authorized_at
@@ -51,6 +53,7 @@ export async function decidirElegibilidadeDaConversa(
   return decidirElegibilidade(
     montarEstadoDeElegibilidade({
       aiGate: r.ai_gate,
+      foraDoFunilEm: r.fora_do_funil_em,
       forceHuman: r.force_human,
       assigneeKind: r.assignee_kind,
       botSilencedUntil: r.bot_silenced_until,

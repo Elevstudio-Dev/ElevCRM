@@ -33,7 +33,7 @@ type SB = SupabaseClient;
 // `/api/v1/contacts/<id>/avatar`, que autentica); o que a tela precisa saber é
 // apenas SE existe arquivo, para não pedir a rota de quem não tem foto.
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at, avatar_storage_path";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, fora_do_funil_em, fora_do_funil_tipo_id, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at, avatar_storage_path";
 
 interface CursorPayload {
   sort: string | null;
@@ -148,6 +148,9 @@ export async function listContactsHandler(
   }
   if (q.tag) query = query.contains("tags", [q.tag]);
   if (q.source) query = query.eq("source", q.source);
+  if (q.fora_do_funil === "sim") query = query.not("fora_do_funil_em", "is", null);
+  if (q.fora_do_funil === "nao") query = query.is("fora_do_funil_em", null);
+  if (q.tipo_id) query = query.eq("fora_do_funil_tipo_id", q.tipo_id);
 
   if (q.cursor) {
     const c = decodeCursor(q.cursor);
