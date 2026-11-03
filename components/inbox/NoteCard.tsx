@@ -38,7 +38,8 @@ export function NoteCard({ note, onDelete }: Props) {
             </button>
           )}
         </div>
-        <p className="mt-1 whitespace-pre-wrap break-words leading-snug">{note.body}</p>
+        {/* `anywhere` e não `break-words`: ver `MessageBubble` — só ele encolhe o mínimo do conteúdo. */}
+        <p className="mt-1 whitespace-pre-wrap leading-snug [overflow-wrap:anywhere]">{note.body}</p>
         <div className="mt-1 text-right text-[10px] opacity-70">{time}</div>
       </div>
     </div>

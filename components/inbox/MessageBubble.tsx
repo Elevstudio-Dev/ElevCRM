@@ -3,8 +3,9 @@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, Check, Checks, Robot, ShareFat, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, Check, Checks, Clock, Robot, ShareFat, WarningOctagon } from "@/lib/ui/icons";
 import { useDeslizarParaResponder } from "@/hooks/inbox/useDeslizarParaResponder";
+import { ficouNaFila, motivoDaFila, type MotivoDaFila } from "@/lib/inbox/fila-do-envio";
 import { foiEncaminhada, podeEncaminhar } from "@/lib/messaging/encaminhar";
 import { CitacaoResumo } from "@/components/inbox/CitacaoResumo";
 import { cn } from "@/lib/utils";
@@ -102,7 +103,37 @@ function CitacaoNaBolha({
   );
 }
 
+/**
+ * O selo de "NÃO SAIU" — a mensagem nossa que o envio deixou na fila.
+ *
+ * Existe porque a bolha, nesse estado, não mostrava nada (nem tique, nem aviso) e o atendente concluía
+ * "enviei e não foi" sem ter por onde saber o motivo. O texto da dica vem do motivo que o envio gravou;
+ * sem motivo conhecido, diz só o que é certo.
+ */
+function SeloDeFila({ motivo, t }: { motivo: MotivoDaFila; t: (texto: string) => string }) {
+  const dica =
+    motivo === "numero_desconectado"
+      ? t("O número de WhatsApp está desconectado. A mensagem não foi enviada — se ele voltou, envie de novo.")
+      : motivo === "canal_nao_configurado"
+        ? t("O WhatsApp não está configurado neste servidor. A mensagem não foi enviada.")
+        : t("A mensagem ficou na fila e ainda não saiu. Se ela não sair logo, envie de novo.");
+  return (
+    <span
+      data-testid="selo-de-fila"
+      title={dica}
+      className="inline-flex items-center gap-0.5 font-semibold text-[var(--chat-out-fg)]"
+    >
+      <Clock size={10} weight="fill" aria-hidden /> {t("Não saiu")}
+    </span>
+  );
+}
+
 function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
+  if (status === "queued") {
+    // Em voo (a bolha otimista, antes de o servidor responder): o relógio de sempre. O caso que NÃO saiu
+    // é o `SeloDeFila`, que a bolha escolhe antes de chegar aqui.
+    return <Clock size={12} weight="bold" className="text-current/70" aria-label={t("Na fila para enviar")} />;
+  }
   if (status === "read") {
     return <Checks size={12} weight="bold" className="text-blue-400" aria-label={t("Lida")} />;
   }
@@ -159,6 +190,8 @@ export function MessageBubble({
   ) : null;
   const time = format(new Date(message.sent_at), "HH:mm", { locale: localeDaData });
   const isFailed = message.status === "failed";
+  // Nossa, na fila e já fora do servidor: não saiu. A otimista (ainda em voo) segue com o relógio.
+  const naFila = ficouNaFila(message);
   const hasMedia = Boolean(message.media_url || message.media_storage_path);
   const isContact = message.type === "contact";
   // Figurinha sem caption: sem moldura de bolha (padrão WhatsApp).
@@ -300,7 +333,10 @@ export function MessageBubble({
         className={cn(
           // 65% e não 75%: linha longa demais cansa, e a largura curta é o que
           // faz o bloco de mensagens ter ritmo em vez de virar parede de texto.
-          "max-w-[65%] text-sm",
+          //
+          // `min-w-0`: a bolha é item de uma linha flex, cujo mínimo é `auto` (o conteúdo). Um link sem
+          // espaço fazia a bolha recusar o `max-w` e crescer até caber inteiro.
+          "min-w-0 max-w-[65%] text-sm",
           isBareSticker
             ? "px-0 py-0"
             : cn(
@@ -401,7 +437,11 @@ export function MessageBubble({
             )}
 
             {message.body && !isContact && (
-              <p className="whitespace-pre-wrap break-words leading-snug">{message.body}</p>
+              // `overflow-wrap:anywhere` e NÃO `break-words` (`break-word`): os dois quebram a palavra
+              // que não cabe, mas só `anywhere` reduz o tamanho MÍNIMO do conteúdo — e é o mínimo que
+              // manda numa caixa flex/grade. Com `break-word` o link longo quebrava na tela mas a
+              // bolha seguia achando que precisava da largura dele inteira.
+              <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere]">{message.body}</p>
             )}
           </>
         )}
@@ -430,7 +470,8 @@ export function MessageBubble({
           {showCitationButton && (
             <CitationButton citations={citations} messageId={message.id} />
           )}
-          {isOutbound && !isFailed && <AckIndicator status={message.status} t={t} />}
+          {isOutbound && !isFailed && !naFila && <AckIndicator status={message.status} t={t} />}
+          {naFila && <SeloDeFila motivo={motivoDaFila(message.metadata)} t={t} />}
           {isFailed && (
             // Provider local: o painel do inbox não tem TooltipProvider ancestral e
             // este Tooltip só monta em mensagem failed — sem o provider, abrir uma
