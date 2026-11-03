@@ -8,6 +8,101 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.24.0] — 2026-11-03
+
+### Adicionado
+
+- **Contato "Fora do funil" — equipe, prestadores e parceiros saem do radar da IA e do relatório** Agora dá para marcar um contato como **fora do funil**: equipe da clínica, prestador de serviço, parceiro — gente que
+  escreve no WhatsApp mas não é cliente. Marcando (na ficha do contato, no menu "Opções" da conversa, ou em lote na lista
+  de Contatos):
+
+  - a **IA para de atender** essa pessoa e de enviar mensagem para ela;
+  - **nenhum negócio novo** nasce das mensagens dela (nem à mão, nem por formulário, nem por importação);
+  - os negócios que ela já tinha **saem do funil, do relatório e do Desempenho** — nada é apagado, e voltam inteiros se
+    você desmarcar;
+  - a **conversa continua no Inbox** para a equipe responder, com o selo "Fora do funil".
+
+  Antes de confirmar, a tela mostra quantos negócios saem (e avisa se há venda ganha entre eles). O dono cadastra os
+  **tipos** (Equipe, Contador, Dentista parceiro…) em Configurações › Contatos fora do funil, e a lista de Contatos
+  filtra por "fora do funil" e por tipo. Qualquer atendente marca e desmarca; toda mudança fica na auditoria com o autor.
+
+  Limites: não há detecção automática — alguém precisa marcar (os contatos de hoje ficam como estão até a equipe
+  classificar). O lembrete de consulta continua saindo (é aviso do sistema, não conversa da IA), e mensagem em massa
+  enviada fora do atendente automático não é barrada por esta marca. Marcar muda em massa os negócios do contato; ao
+  desmarcar, quem é dono desses negócios pode receber um aviso de "lead atribuído a você" por cada um que volta.
+
+  A atualização aplica sozinha a migração 0221. Nada a fazer.
+
+- **Marcar alguém com @ — no chat da equipe, na nota interna e nos grupos de WhatsApp** Ao digitar **@** num campo de escrever, abre a lista de pessoas que dá para marcar — como no WhatsApp. Dá para filtrar
+  digitando o começo do nome, escolher com as setas e **Enter** (ou **Tab**), ou tocar numa linha; **Esc** fecha. O nome
+  escolhido fica em destaque no texto, e a pessoa marcada é avisada.
+
+  - **Chat da equipe**: a lista traz quem está naquele canal (o Geral, ou o setor). A pessoa marcada vê "fulano marcou
+    você" no aviso, e o **@todos** avisa o canal inteiro. Na conversa direta (só duas pessoas) não há a quem marcar.
+  - **Nota interna da conversa**: a lista traz só os colegas que **enxergam aquela conversa** — respeitando o setor e o modo
+    de visibilidade da organização. Quem não abre a conversa não aparece e não recebe o aviso (antes, citar um nome na nota
+    avisava qualquer pessoa da organização que tivesse aquele nome, mesmo sem acesso à conversa). O **@todos** avisa quem
+    enxerga a conversa.
+  - **Grupos de WhatsApp**: ao responder num grupo, a lista traz os **participantes do grupo** (pelo nome que a pessoa usa no
+    WhatsApp; quem nunca escreveu no grupo aparece pelo telefone) e o **@todos**. O CRM envia a marcação junto com a
+    mensagem, e o WhatsApp avisa o participante no aparelho dele. Na bolha, o CRM continua mostrando o nome.
+
+  Duas pessoas com o mesmo nome não se confundem: a marcação guarda **quem** foi escolhido, não só o texto. Se você apagar
+  o nome do texto antes de enviar, a marcação some junto.
+
+  Limites: a marcação em grupo foi feita conforme a documentação do WhatsApp conectado, mas
+  **ainda não foi conferida num grupo e num celular de verdade**. Na primeira vez, marque alguém de teste e confirme que o
+  aparelho dele recebe o aviso (vale o mesmo para o @todos e para quem esconde o número). Ela depende de o WhatsApp
+  conectado responder a lista de participantes — se ele não responder, o **@** simplesmente não abre (a conversa segue
+  normal). Participantes que escondem o número aparecem como "Participante 123456" até escreverem no grupo. Quando outra
+  pessoa marca alguém no grupo, o CRM mostra o nome se já o conhece (pelo que a pessoa escreveu no grupo); se não, a
+  mensagem continua aparecendo com o número no lugar do nome. O **@todos** de uma nota interna não gera o aviso instantâneo
+  na tela (só o do navegador/celular), porque a nota chega ao navegador de toda a organização.
+
+  A atualização aplica sozinha a migração 0222. Nada a fazer.
+
+### Corrigido
+
+- **Os grupos de WhatsApp agora aparecem com o nome do grupo, sem precisar apertar "Importar grupos"** Todo grupo que chegava por mensagem aparecia na lista como "Sem nome", e o nome só entrava se alguém lembrasse de
+  apertar "Importar grupos do WhatsApp" — nada na tela avisava disso. Quem ligou os grupos e viu vários "Sem nome"
+  concluía que a função não funcionava.
+
+  Agora, na primeira mensagem de um grupo que ainda está sem nome, o CRM pergunta o nome ao WhatsApp e o grava sozinho.
+  Se o WhatsApp não responder o nome naquela hora, o CRM tenta de novo mais tarde (no máximo a cada dez minutos por
+  grupo, para não sobrecarregar a conexão). Um apelido que alguém tenha dado ao grupo no CRM continua valendo e nunca é
+  trocado.
+
+  Os grupos que já estão na lista sem nome ganham o nome na próxima mensagem que chegar neles — ou na hora, apertando
+  **Importar grupos do WhatsApp** uma vez (o botão continua lá para trazer grupos parados e os que mudaram de nome).
+
+- **Um link grande numa conversa não empurra mais o painel do contato para fora da tela — e a mensagem que não saiu agora avisa** Colar uma URL muito comprida (o link de um convite, por exemplo, que tem centenas de caracteres e nenhum espaço)
+  numa conversa fazia a coluna do meio do Inbox crescer até caber o link inteiro. O painel do contato, à direita,
+  ia parar muito além da borda da janela, e a tela ficava cortada, sem barra de rolagem. Agora o link quebra em linhas
+  dentro da bolha, como no WhatsApp, e a tela fica do tamanho certo — no computador, no tablet e no celular. O mesmo
+  vale para as notas internas.
+
+  Junto veio um aviso que faltava: quando o envio deixa uma mensagem sua na fila (por exemplo, porque o número de
+  WhatsApp está desconectado), a bolha mostrava só um relógio na lista e nada na conversa, e quem atende entendia
+  "não enviou" sem saber por quê. Agora a bolha diz **"Não saiu"** e, ao passar o mouse, explica o motivo. Essas
+  mensagens não são reenviadas sozinhas: se o número voltou, é só enviar de novo.
+
+- **Mensagem que o WhatsApp recusa (como em grupos) agora aparece como falha na hora, com o motivo certo — e o tique azul não volta para trás** Algumas mensagens enviadas pelo atendente a um **grupo** de WhatsApp ficavam com o relógio girando por 5 minutos e depois
+  apareciam como "Falhou" com o texto "Envio não confirmado em 5 min". Na verdade o WhatsApp tinha respondido na hora com um
+  erro; o CRM é que não sabia ler essa resposta e deixava a mensagem "enviando" até o relógio de segurança marcar a falha,
+  escondendo quem tinha recusado o envio.
+
+  Agora, quando o WhatsApp devolve esse erro, a mensagem vira **"Falhou"** na hora. Ao passar o mouse, a bolha explica: o
+  WhatsApp não confirmou o envio e vale conferir no celular se o cliente recebeu. A Central de avisos recebe o alerta de
+  "Uma resposta não chegou ao cliente" (um por conversa, para um grupo não encher a lista). Nada é reenviado sozinho: se o
+  cliente não recebeu, é só enviar de novo.
+
+  Junto veio uma proteção: o aviso de entrega e de leitura nunca mais faz uma mensagem andar para trás. Se um aviso antigo
+  chegasse atrasado, uma mensagem já lida podia voltar a aparecer como "enviada" e o tique azul sumia. Agora o estado só
+  avança (enviada, entregue, lida), e uma mensagem já entregue ou lida nunca vira falha por causa de um aviso tardio.
+
+  Ainda não sabemos por que o WhatsApp recusa mensagens de grupo com mais frequência do que as de conversa individual; esta
+  correção só garante que o CRM conte a verdade quando isso acontece.
+
 ## [1.23.0] — 2026-10-29
 
 ### Adicionado
@@ -2971,7 +3066,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.23.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.0...HEAD
+[1.24.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.22.0...v1.23.0
 [1.22.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.20.0...v1.21.0
