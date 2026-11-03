@@ -10,6 +10,7 @@
  */
 import { logger } from "@/lib/logger";
 import { classificarFalhaDeAlcance, explicarFalhaDeAlcance } from "@/lib/net/alcance";
+import { normalizarParticipantes, type ParticipanteCru } from "./participantes";
 
 /**
  * AS CONVERSAS QUE O CRM NÃO ATENDE, E POR ISSO NÃO PRECISA RECEBER.
@@ -423,6 +424,7 @@ export class WahaClient {
     chatId: string,
     text: string,
     replyTo?: string | null,
+    mentions?: ReadonlyArray<string> | null,
   ): Promise<unknown> {
     const res = await this.fetchComTeto(`${this.baseUrl}/api/sendText`, {
       method: "POST",
@@ -432,7 +434,18 @@ export class WahaClient {
       },
       // Só entra quando existe: mandar `reply_to: null` é pedir para citar
       // "nada", e a API não tem por que ser gentil com isso.
-      body: JSON.stringify({ session, chatId, text, ...(replyTo ? { reply_to: replyTo } : {}) }),
+      //
+      // `mentions` é a marcação num grupo. Pela documentação do WAHA, o texto TEM de trazer o
+      // número (`@5511999990001`) E o mesmo número entra aqui como `5511999990001@c.us` — um sem o
+      // outro não marca ninguém. `["all"]` marca o grupo inteiro. Quem monta o texto é
+      // `prepararMencoesDeGrupo`; este método só repassa.
+      body: JSON.stringify({
+        session,
+        chatId,
+        text,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(mentions && mentions.length > 0 ? { mentions } : {}),
+      }),
     });
     if (!res.ok) throw new Error(`waha_${res.status}`);
     return res.json();
@@ -567,6 +580,29 @@ export class WahaClient {
       if (typeof candidato === "string" && candidato.trim()) return candidato.trim();
     }
     return null;
+  }
+
+  /**
+   * Quem está num grupo. Tenta a forma que a documentação recomenda (`participants/v2`, igual entre
+   * os engines) e, se a versão instalada não a tem, lê os participantes do objeto do grupo — que
+   * `listGroups` já mostrou existir. Erro do WAHA propaga: quem chama decide o que fazer sem a lista.
+   */
+  async getGroupParticipants(session: string, groupId: string): Promise<ParticipanteCru[]> {
+    const base = `${this.baseUrl}/api/${encodeURIComponent(session)}/groups/${encodeURIComponent(groupId)}`;
+    const cabecalhos = { "X-Api-Key": this.apiKey, Accept: "application/json" };
+
+    const v2 = await this.fetchComTeto(new URL(`${base}/participants/v2`), { headers: cabecalhos });
+    if (v2.ok) return normalizarParticipantes(await v2.json());
+
+    const grupo = await this.fetchComTeto(new URL(base), { headers: cabecalhos });
+    if (!grupo.ok) {
+      const corpo = await grupo.text().catch(() => "");
+      throw new Error(`waha_${grupo.status}: ${corpo.slice(0, 200)}`);
+    }
+    const cru: unknown = await grupo.json();
+    const participantes =
+      cru && typeof cru === "object" ? (cru as { participants?: unknown }).participants : null;
+    return normalizarParticipantes(participantes);
   }
 
   async sendContactVcard(

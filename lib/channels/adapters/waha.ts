@@ -15,9 +15,16 @@ import {
 } from "@/lib/waha/resolve-contact-whatsapp-id";
 import { bareWaMessageId, parseWahaMessageId } from "@/lib/waha/message-id";
 import { resolveWahaChatId } from "@/lib/waha/send";
+import { telefoneDoParticipante } from "@/lib/waha/participantes";
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 import { DETALHE_CREDENCIAL_RECUSADA } from "../health";
-import type { ChannelAdapter, ChannelHealth, OutboundEnvelope, RecipientInput } from "../types";
+import type {
+  ChannelAdapter,
+  ChannelHealth,
+  GroupParticipant,
+  OutboundEnvelope,
+  RecipientInput,
+} from "../types";
 
 /**
  * O HTTP que o WAHA devolveu, lido do PREFIXO da mensagem de erro.
@@ -102,6 +109,21 @@ export const wahaAdapter: ChannelAdapter = {
     const client = getWahaClient();
     if (!client) return [];
     return client.listGroups(input.sessionRef);
+  },
+
+  /**
+   * Quem está no grupo. `[]` quando o transporte não está configurado; erro do WAHA propaga para quem
+   * chama decidir (a rota devolve a lista vazia e registra o motivo — o `@` fica desligado, a conversa
+   * não).
+   */
+  async listGroupParticipants(input: {
+    sessionRef: string;
+    groupChatId: string;
+  }): Promise<GroupParticipant[]> {
+    const client = getWahaClient();
+    if (!client) return [];
+    const crus = await client.getGroupParticipants(input.sessionRef, input.groupChatId);
+    return crus.map((p) => ({ jid: p.id, phone: telefoneDoParticipante(p), admin: p.admin }));
   },
 
   async resolvePhoneForIdentity(input: {
@@ -221,6 +243,9 @@ export const wahaAdapter: ChannelAdapter = {
         // A citação é enfeite da conversa, nunca condição de envio: quando não
         // há, o envio segue igual. Ver `OutboundEnvelope.replyToExternalId`.
         envelope.replyToExternalId,
+        // A marcação também é aviso, não condição: `["all"]` marca o grupo inteiro e vence a
+        // lista (o WAHA não mistura os dois); sem nenhuma, nada vai e o envio segue igual.
+        envelope.mentionAll ? ["all"] : (envelope.mentions?.map((m) => m.jid) ?? null),
       );
     }
 

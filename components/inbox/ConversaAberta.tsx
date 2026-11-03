@@ -130,6 +130,7 @@ export function ConversaAberta({ conversation }: { conversation: ConversationWit
       <div className="min-h-0 flex-1 overflow-hidden">
         <ChatThread
           conversationId={conversation.id}
+          ehGrupo={conversation.is_group}
           onResponder={setRespondendo}
           onEncaminhar={comecarASelecionar}
           selecao={
@@ -165,6 +166,7 @@ export function ConversaAberta({ conversation }: { conversation: ConversationWit
           respondendo={respondendo}
           onCancelarResposta={() => setRespondendo(null)}
           currentContactId={conversation.contact_id}
+          ehGrupo={conversation.is_group}
         />
       </div>
       {selecao && (
