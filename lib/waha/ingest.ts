@@ -1055,6 +1055,18 @@ async function handleOutboundFromUserPhone(
   }
 }
 
+/**
+ * O que fica gravado quando o WhatsApp devolve ack de ERRO (`-1`) para uma mensagem nossa.
+ *
+ * Mora aqui, e não num texto solto, porque é o que a bolha mostra ao passar o mouse em "Falhou" e o que
+ * o atendente lê para decidir se manda de novo. A causa de fundo (grupo só de administradores, número
+ * que saiu do grupo…) o WAHA não diz; o texto afirma só o que é certo.
+ */
+export const ERRO_DE_ENTREGA = {
+  codigo: "whatsapp_ack_error",
+  mensagem: "O WhatsApp recusou o envio desta mensagem.",
+} as const;
+
 async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promise<void> {
   if (!p.id) return;
   const ack = p.ack ?? 0;
@@ -1064,6 +1076,11 @@ async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promis
   const update: Record<string, unknown> = { ack, status };
   if (ack >= 2) update.delivered_at = now;
   if (ack >= 3) update.read_at = now;
+  const falhou = status === "failed";
+  if (falhou) {
+    update.error_code = ERRO_DE_ENTREGA.codigo;
+    update.error_message = ERRO_DE_ENTREGA.mensagem;
+  }
 
   // O ack do WAHA 2026.x vem como `{fromMe}_{chatId}_{bareId}`. O NOWEB grava
   // `external_id` = bareId (id interno), o WEBJS grava o `_serialized` completo.
@@ -1071,11 +1088,51 @@ async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promis
   // inbound (que é full e sustenta o dedup 23505).
   const bare = bareWaMessageId(p.id);
   const candidates = bare === p.id ? [p.id] : [p.id, bare];
-  await admin
+  const consulta = admin
     .from("messages")
     .update(update)
     .eq("organization_id", session.organization_id)
     .in("external_id", candidates);
+
+  if (!falhou) {
+    await consulta;
+    return;
+  }
+
+  // ERRO DE ENTREGA: falha NA HORA, e só no que é nosso e ainda não foi confirmado pelo celular.
+  //
+  // Antes, o `-1` caía em "enviando" (`ackToStatus` só conhecia 0..3): o atendente via o relógio por 5
+  // minutos e então o cron `recover-stuck-messages` escrevia "Envio não confirmado em 5 min" — a causa
+  // errada, e a falha que o WhatsApp já tinha dito aparecia tarde. O estado final é o MESMO que o cron
+  // já dava a essas mensagens (`failed`); muda que chega na hora e com o motivo verdadeiro.
+  //
+  // `direction = outbound` e `status not in (delivered, read)`: um erro atrasado não desfaz o que o
+  // aparelho já confirmou, e ack nunca é sobre mensagem do cliente.
+  const { data } = await consulta
+    .eq("direction", "outbound")
+    .not("status", "in", "(delivered,read)")
+    .select("id, conversation_id");
+
+  // O trigger `trg_messages_emit_event` é AFTER INSERT: mudar o status não emite nada. O evento que a
+  // regra W-12 promete (`message.failed`) existe só se for emitido aqui — como o cron já faz para as
+  // presas. Só as linhas que ESTA chamada marcou.
+  const marcadas = (data ?? []) as Array<{ id: string; conversation_id: string | null }>;
+  await Promise.all(
+    marcadas.map(({ id, conversation_id }) =>
+      admin
+        .rpc("emit_event" as never, {
+          p_event_type: "message.failed",
+          p_entity_kind: "message",
+          p_entity_id: id,
+          p_payload: { message_id: id, conversation_id, reason: "ack_error" },
+          p_metadata: { source: "waha_webhook" },
+          p_organization_id: session.organization_id,
+        } as never)
+        .then(({ error }: { error: { message: string } | null }) => {
+          if (error) console.error("[waha.ingest] emit message.failed falhou", error.message);
+        }),
+    ),
+  );
 }
 
 interface SessionStatusRow extends Session {

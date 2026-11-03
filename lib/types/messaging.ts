@@ -119,11 +119,17 @@ export interface Note {
 }
 
 /**
- * Mapeia ack do WAHA (0..3) para o status canônico em messages.status.
- * 0=pending/sent server-side, 1=server-confirmed, 2=delivered (device), 3=read.
+ * Mapeia ack do WAHA para o status canônico em messages.status.
+ * -1=ERROR (o WhatsApp recusou), 0=pending, 1=server-confirmed, 2=delivered (device), 3=read
+ * (4=played também chega e vale como lida).
+ *
+ * O `-1` NÃO é "ainda enviando". A primeira versão só conhecia 0..3 e deixava o erro cair no último
+ * `return`: a mensagem que o WhatsApp tinha acabado de recusar ficava com relógio por 5 minutos e
+ * depois era marcada "Envio não confirmado" — uma causa que não era a verdadeira.
  */
 export function ackToStatus(ack: number | null | undefined): Message["status"] {
   if (ack == null) return "sent";
+  if (ack < 0) return "failed";
   if (ack >= 3) return "read";
   if (ack >= 2) return "delivered";
   if (ack >= 1) return "sent";
