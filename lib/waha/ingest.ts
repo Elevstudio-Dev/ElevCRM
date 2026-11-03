@@ -22,8 +22,10 @@ import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ACK_ERRO_DO_CANAL } from "@/lib/types/messaging";
 import { decidirAck } from "@/lib/waha/ack";
+import { getWahaClient } from "@/lib/waha/client";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
+import { nomearGrupoSeFaltar } from "@/lib/waha/nome-do-grupo";
 import { logger } from "@/lib/logger";
 
 export type Admin = ReturnType<typeof createAdminClient>;
@@ -109,6 +111,13 @@ async function ehEcoDeEnvioNosso(
 interface Session {
   id: string;
   organization_id: string;
+  /**
+   * O nome da sessão NO TRANSPORTE. A rota do webhook já o seleciona (`waha_session_name`) e o entrega
+   * aqui junto com o resto da linha; ele é opcional porque quem monta uma `Session` à mão (teste) não
+   * precisa dele. Só o batismo do grupo o usa (`nomearGrupoSeFaltar`) — sem ele, o grupo fica sem nome
+   * até a importação, que é o comportamento de antes.
+   */
+  waha_session_name?: string | null;
 }
 
 /**
@@ -475,14 +484,19 @@ async function upsertContact(
  * de QUEM ESCREVEU, não o nome do grupo. Usá-lo batizaria "Time comercial" de
  * "Roberto". O nome real chega pela importação, que lê `GET /api/{session}/groups`
  * do WAHA. Até lá o grupo aparece pelo id, e é melhor um id do que um nome errado.
+ *
+ * ATUALIZAÇÃO: "até lá" era até alguém apertar "Importar grupos", e nada na tela manda apertar — o
+ * resultado eram sete grupos "Sem nome". Agora, ao ver um grupo sem nome, a ingestão pergunta o assunto
+ * ao canal por conta própria (`nomearGrupoSeFaltar`, com conta-gotas). A importação segue valendo para
+ * os grupos parados e os renomeados.
  */
 async function upsertGroupContact(
   admin: Admin,
-  orgId: string,
+  session: Session,
   chatId: string,
 ): Promise<string | null> {
   const { data, error } = await admin.rpc("fn_upsert_wa_group_contact" as never, {
-    p_org: orgId,
+    p_org: session.organization_id,
     p_group_chat_id: chatId,
     p_subject: null,
   } as never);
@@ -490,7 +504,20 @@ async function upsertGroupContact(
     console.error("[waha.ingest] fn_upsert_wa_group_contact failed", error.message);
     return null;
   }
-  return (data as string) ?? null;
+  const contactId = (data as string) ?? null;
+  if (contactId) {
+    // Sem `await`: a mensagem do cliente vale mais que o nome do grupo, e a pergunta ao canal pode
+    // demorar. A função nunca lança; o `catch` é cinto e suspensório.
+    void nomearGrupoSeFaltar({
+      admin,
+      organizationId: session.organization_id,
+      contactId,
+      chatId,
+      sessionName: session.waha_session_name,
+      canal: getWahaClient(),
+    }).catch(() => undefined);
+  }
+  return contactId;
 }
 
 /**
@@ -684,7 +711,7 @@ async function handleInbound(
   }
 
   const contactId = ehGrupo
-    ? await upsertGroupContact(admin, session.organization_id, chatId)
+    ? await upsertGroupContact(admin, session, chatId)
     : await upsertContact(
         admin,
         session.organization_id,
@@ -944,7 +971,7 @@ async function handleOutboundFromUserPhone(
   // amostras de outbound mostram o número do cliente. Nome e telefone vêm de
   // lugares diferentes do mesmo payload, e só um deles inverte no envio.
   const contactId = ehGrupo
-    ? await upsertGroupContact(admin, session.organization_id, chatId)
+    ? await upsertGroupContact(admin, session, chatId)
     : await upsertContact(
         admin,
         session.organization_id,

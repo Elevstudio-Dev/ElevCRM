@@ -3,8 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 // ingest.ts importa @/lib/audit (→ supabase/server → validação de env);
 // o mock corta a cadeia sem tocar no que está sob teste.
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+// O batismo do grupo pergunta ao canal pelo assunto; aqui só importa SE e COM O QUÊ a ingestão o chama.
+// Resolve (e não devolve `undefined`) porque a ingestão encadeia `.catch` na chamada.
+vi.mock("@/lib/waha/nome-do-grupo", () => ({ nomearGrupoSeFaltar: vi.fn(async () => "nomeado") }));
 
 import { dispatchWahaEvent, parseChatId, type WahaEnvelope, type WahaPayload } from "@/lib/waha/ingest";
+import { nomearGrupoSeFaltar } from "@/lib/waha/nome-do-grupo";
 
 /**
  * A MENSAGEM QUE O DONO DIGITA NO CELULAR TEM QUE CHEGAR NO CRM.
@@ -341,6 +345,63 @@ describe("controles — o que tem que continuar sendo descartado", () => {
 
     expect(messages, "a mensagem recebida do grupo não foi gravada").toHaveLength(1);
     afirmaConversaDeGrupo(rpcs, messages, "120363000000000000@g.us");
+  });
+
+  /**
+   * O GRUPO PEDE O PRÓPRIO NOME. Antes, o assunto só chegava pelo botão "Importar grupos" — e quem não
+   * o apertou via todo grupo como "Sem nome". Ver `lib/waha/nome-do-grupo.ts`.
+   */
+  describe("o grupo que chega por mensagem se batiza sozinho", () => {
+    const SESSAO_COM_NOME = { ...SESSION, waha_session_name: "sessao-no-waha" };
+    const esperado = {
+      organizationId: "org-1",
+      contactId: "grupo-1",
+      chatId: "120363000000000000@g.us",
+      sessionName: "sessao-no-waha",
+    };
+
+    it("mensagem RECEBIDA do grupo", async () => {
+      vi.mocked(nomearGrupoSeFaltar).mockClear();
+      const { admin } = bancoDeMentira();
+      await dispatchWahaEvent(
+        admin as never,
+        SESSAO_COM_NOME as never,
+        envelope({
+          id: "false_120363000000000000@g.us_3ACA779885FA9DEA8C12_36438703866081@lid",
+          from: "120363000000000000@g.us",
+          fromMe: false,
+          body: "oi, grupo",
+          timestamp: 1_760_000_000,
+        }),
+        "req-nome-1",
+      );
+      expect(nomearGrupoSeFaltar).toHaveBeenCalledTimes(1);
+      expect(nomearGrupoSeFaltar).toHaveBeenCalledWith(expect.objectContaining(esperado));
+    });
+
+    it("mensagem que o dono mandou do celular para o grupo (fromMe)", async () => {
+      vi.mocked(nomearGrupoSeFaltar).mockClear();
+      const { admin } = bancoDeMentira();
+      await dispatchWahaEvent(
+        admin as never,
+        SESSAO_COM_NOME as never,
+        envelope({
+          id: "true_120363000000000000@g.us_2A1B890FB8AA87730CBC",
+          from: "120363000000000000@g.us",
+          fromMe: true,
+          body: "mensagem no grupo",
+        }),
+        "req-nome-2",
+      );
+      expect(nomearGrupoSeFaltar).toHaveBeenCalledWith(expect.objectContaining(esperado));
+    });
+
+    it("contato de PESSOA nunca dispara o batismo — só grupo tem assunto", async () => {
+      vi.mocked(nomearGrupoSeFaltar).mockClear();
+      const { admin } = bancoDeMentira();
+      await dispatchWahaEvent(admin as never, SESSAO_COM_NOME as never, envelope(CELULAR_NOWEB), "req-nome-3");
+      expect(nomearGrupoSeFaltar).not.toHaveBeenCalled();
+    });
   });
 
   it("id de 4 segmentos (grupo, formato documentado do WAHA) não cria contato", async () => {

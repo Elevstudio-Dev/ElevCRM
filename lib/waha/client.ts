@@ -552,6 +552,37 @@ export class WahaClient {
   }
 
   /**
+   * O assunto (o NOME) de UM grupo — para o grupo que chegou por mensagem se batizar sozinho, sem
+   * esperar alguém apertar "Importar grupos" (ver `lib/waha/nome-do-grupo.ts`).
+   *
+   * `null` quando o canal não diz o nome — e é um desfecho NORMAL, não erro: grupo recém-criado, store
+   * ainda sem o dado. Quem chama não trata como falha, só tenta de novo mais tarde.
+   *
+   * Erro de transporte (HTTP ≠ 2xx, timeout) LANÇA, ao contrário do `null` acima, porque "não deu para
+   * perguntar" e "perguntei e não há nome" pedem esperas diferentes — e quem chama mede as duas.
+   *
+   * O nome vem ora em `subject`, ora em `name` (o engine decide; `listGroups` documenta a mesma
+   * diferença), e a resposta pode trazer o grupo embrulhado em `{ id: ... }`.
+   */
+  async getGroupSubject(session: string, chatId: string): Promise<string | null> {
+    const url = `${this.baseUrl}/api/${encodeURIComponent(session)}/groups/${encodeURIComponent(chatId)}`;
+    const res = await this.fetchComTeto(url, {
+      headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`waha_${res.status}: ${body.slice(0, 200)}`);
+    }
+    const cru: unknown = await res.json().catch(() => null);
+    if (!cru || typeof cru !== "object") return null;
+    const g = cru as { subject?: unknown; name?: unknown };
+    for (const candidato of [g.subject, g.name]) {
+      if (typeof candidato === "string" && candidato.trim()) return candidato.trim();
+    }
+    return null;
+  }
+
+  /**
    * Quem está num grupo. Tenta a forma que a documentação recomenda (`participants/v2`, igual entre
    * os engines) e, se a versão instalada não a tem, lê os participantes do objeto do grupo — que
    * `listGroups` já mostrou existir. Erro do WAHA propaga: quem chama decide o que fazer sem a lista.
