@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { format, isToday } from "date-fns";
 
+import { MenuDeMencao } from "@/components/mencoes/MenuDeMencao";
+import { TextoComMencoes } from "@/components/mencoes/TextoComMencoes";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +18,11 @@ import {
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { useMarcaveisDoCanal } from "@/hooks/mencoes/useMarcaveis";
+import { useMencoes } from "@/hooks/mencoes/useMencoes";
+import { ROTULO_DO_PAPEL, type Role } from "@/lib/auth/types";
 import type { CanalDaEquipe } from "@/lib/chat-interno/canais";
+import { candidatosDaEquipe, mencaoDaEquipe } from "@/lib/mencoes/candidatos";
 import { CLASSE_DE_COR } from "@/lib/marcadores/cores";
 import type { CorDeMarcador } from "@/lib/schemas/settings";
 import { ChatsCircle, PaperPlaneTilt, Plus } from "@/lib/ui/icons";
@@ -230,6 +236,15 @@ function Fio({ canal, onVoltar }: { canal: CanalDaEquipe; onVoltar: () => void }
   const fimRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // O `@`: quem enxerga este canal. Na conversa direta não há a quem marcar (são
+  // duas pessoas), então o recurso fica desligado em vez de oferecer um `@` mudo.
+  const marcaveis = useMarcaveisDoCanal(canal.id, canal.kind !== "direto");
+  const candidatos = useMemo(
+    () => candidatosDaEquipe(marcaveis.data ?? [], (r) => t(ROTULO_DO_PAPEL[r as Role] ?? r)),
+    [marcaveis.data, t],
+  );
+  const mencao = useMencoes({ candidatos, paraMencao: mencaoDaEquipe, texto, setTexto, taRef });
+
   const lista = mensagens.data ?? [];
   const ultimaId = lista[lista.length - 1]?.id ?? null;
 
@@ -246,11 +261,24 @@ function Fio({ canal, onVoltar }: { canal: CanalDaEquipe; onVoltar: () => void }
   function submeter() {
     const body = texto.trim();
     if (!body || enviar.isPending) return;
+    // As marcações saem do que o texto AINDA cita, não do que ficou no estado.
+    const mentions = mencao.paraEnviar(body);
     setTexto("");
-    enviar.mutate(body, { onError: () => setTexto(body) });
+    mencao.limpar();
+    enviar.mutate(
+      { body, mentions },
+      {
+        onError: () => {
+          setTexto(body);
+          mencao.restaurar(mentions);
+        },
+      },
+    );
     requestAnimationFrame(() => taRef.current?.focus());
   }
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Com a lista do `@` aberta, as setas, o Enter, o Tab e o Esc são dela.
+    if (mencao.onKeyDown(e)) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submeter();
@@ -295,7 +323,7 @@ function Fio({ canal, onVoltar }: { canal: CanalDaEquipe; onVoltar: () => void }
                     {!minha && !mesmoAutor && (
                       <div className="text-[11px] font-semibold text-primary">{m.sender_name ?? t("Colega")}</div>
                     )}
-                    <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                    <TextoComMencoes texto={m.body} mencoes={m.mentions} euId={eu.id} className="block" />
                     <div className="mt-0.5 text-right text-[10px] text-muted-foreground tabular-nums">
                       {isToday(quando) ? format(quando, "HH:mm", { locale: localeDaData }) : format(quando, "dd/MM HH:mm", { locale: localeDaData })}
                     </div>
@@ -308,13 +336,23 @@ function Fio({ canal, onVoltar }: { canal: CanalDaEquipe; onVoltar: () => void }
         <div ref={fimRef} />
       </div>
 
-      <div className="border-t p-2">
+      <div className="relative border-t p-2">
+        <MenuDeMencao
+          aberto={mencao.aberto}
+          itens={mencao.itens}
+          ativo={mencao.ativo}
+          onEscolher={mencao.escolher}
+          onHover={mencao.onHover}
+          detalheDeTodos={t("Avisa quem está neste canal")}
+          className="bottom-16 left-2"
+        />
         <div className="flex items-end gap-2">
           <div className="flex flex-1 items-end rounded-3xl bg-[var(--chat-in)] px-3 py-1 shadow-[var(--chat-bolha-sombra)]">
             <textarea
               ref={taRef}
               value={texto}
-              onChange={(e) => setTexto(e.target.value)}
+              onChange={mencao.onChange}
+              onSelect={mencao.onSelect}
               onKeyDown={onKeyDown}
               rows={1}
               placeholder={t("Escreva para a equipe…")}

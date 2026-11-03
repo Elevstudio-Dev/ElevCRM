@@ -6,6 +6,8 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { apiClient } from "@/lib/api/client";
 import type { CanalDaEquipe, MensagemDaEquipe } from "@/lib/chat-interno/canais";
+import { mencoesDaEquipeParaApi } from "@/lib/mencoes/api";
+import type { Mencao } from "@/lib/mencoes/tipos";
 
 export const CANAIS_KEY = ["chat-interno", "canais"] as const;
 export const mensagensKey = (channelId: string) => ["chat-interno", "mensagens", channelId] as const;
@@ -35,8 +37,12 @@ export function useMensagensDoCanal(channelId: string | null) {
 export function useEnviarMensagemDaEquipe(channelId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: string) =>
-      apiClient.post<{ data: MensagemDaEquipe }>(`/api/v1/team-chat/channels/${channelId}/messages`, { body }),
+    mutationFn: async ({ body, mentions }: { body: string; mentions: Mencao[] }) =>
+      apiClient.post<{ data: MensagemDaEquipe }>(`/api/v1/team-chat/channels/${channelId}/messages`, {
+        body,
+        // Só o id e o tipo: o servidor confere quem pode ser marcado e põe o nome.
+        mentions: mencoesDaEquipeParaApi(mentions),
+      }),
     onSuccess: (res) => {
       if (!channelId) return;
       // A própria mensagem entra na hora — não se espera o realtime devolver o
@@ -76,6 +82,8 @@ export interface MensagemRecebida {
   sender_user_id: string | null;
   sender_name: string | null;
   body: string;
+  /** Quem foi marcado com @ — vem na linha do tempo real (migration 0222). */
+  mentions?: Mencao[];
   created_at: string;
 }
 

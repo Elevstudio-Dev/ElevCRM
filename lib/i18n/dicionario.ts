@@ -468,6 +468,13 @@ export const DICIONARIO: Traducoes = {
   Tema: { es: "Tema" },
   Claro: { es: "Claro" },
   Escuro: { es: "Oscuro" },
+  // ─── Marcar alguém com @ (migration 0222) ───
+  "Marcar alguém": { es: "Mencionar a alguien" },
+  "Avisa quem está neste canal": { es: "Avisa a quien está en este canal" },
+  "Avisa quem enxerga esta conversa": { es: "Avisa a quien ve esta conversación" },
+  "marcou você": { es: "te mencionó" },
+  "admin do grupo": { es: "admin del grupo" },
+  "Avisa o grupo inteiro": { es: "Avisa a todo el grupo" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
   "em aberto": { es: "abiertos" },

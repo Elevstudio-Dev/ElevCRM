@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import { COMANDOS_DO_BANCO, type ComandoDoBanco } from "@/lib/inbox/comando-da-conversa";
+import { mencoesDeGrupoPedidasSchema } from "@/lib/mencoes/grupo";
 
 /**
  * O que a API aceita ESCREVER. Cinco valores, e a ausência de `pending`/`resolved`
@@ -95,6 +96,12 @@ export const sendMessageSchema = z
      * o vocabulário do canal, que é justamente o que o seam existe para evitar.
      */
     reply_to_message_id: z.string().uuid().optional(),
+    /**
+     * Quem o texto MARCA com `@` num GRUPO de WhatsApp. Só vale para `type: "text"` em conversa de
+     * grupo (o handler recusa o resto). O nome é o rótulo que está no texto; o endereço (`jid`) é
+     * quem o canal avisa. Ver `lib/mencoes/grupo.ts`.
+     */
+    mentions: mencoesDeGrupoPedidasSchema,
   })
   .refine(
     (d) => {
