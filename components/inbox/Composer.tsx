@@ -2,12 +2,22 @@
 import { useT } from "@/hooks/i18n/useT";
 import {
   forwardRef,
+  useCallback,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
+import { MenuDeMencao } from "@/components/mencoes/MenuDeMencao";
+import { useMarcaveisDaConversa } from "@/hooks/mencoes/useMarcaveis";
+import { useMencoes } from "@/hooks/mencoes/useMencoes";
+import { useParticipantesDoGrupo } from "@/hooks/mencoes/useParticipantesDoGrupo";
+import { ROTULO_DO_PAPEL, type Role } from "@/lib/auth/types";
+import { candidatosDaEquipe, mencaoDaEquipe } from "@/lib/mencoes/candidatos";
+import { candidatosDoGrupo, mencaoDeGrupo } from "@/lib/mencoes/grupo";
+import type { CandidatoDeMencao } from "@/lib/mencoes/tipos";
 import { Lightning, PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
@@ -75,6 +85,11 @@ interface Props {
   attendantName?: string | null;
   /** Contato da conversa — excluído do seletor de cartão compartilhado. */
   currentContactId?: string | null;
+  /**
+   * A conversa é um GRUPO de WhatsApp: ao digitar `@` na resposta, a lista traz os participantes do
+   * grupo (e o `@todos`). Numa conversa 1:1 não há a quem marcar e o `@` é só um caractere.
+   */
+  ehGrupo?: boolean;
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
@@ -88,6 +103,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     currentContactId,
     respondendo,
     onCancelarResposta,
+    ehGrupo = false,
   },
   ref,
 ) {
@@ -110,6 +126,32 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const templates = useMessageTemplates();
   const slash = resolveSlash(text);
   const menuOpen = mode === "reply" && ((slash.open && !menuDismissed) || menuForcado);
+
+  // O `@`, e o que ele marca depende de PARA ONDE a mensagem vai:
+  //   - NOTA INTERNA: colegas que enxergam a conversa (ficam só no CRM);
+  //   - RESPOSTA num GRUPO de WhatsApp: os participantes do grupo — quem é marcado ouve o aparelho
+  //     tocar. É o `@` do WhatsApp;
+  //   - RESPOSTA numa conversa 1:1: ninguém. Lista vazia, e o campo trata `@` como um caractere.
+  const marcaveisDaNota = useMarcaveisDaConversa(conversationId, mode === "note");
+  const participantesDoGrupo = useParticipantesDoGrupo(conversationId, ehGrupo && mode === "reply");
+  const candidatosDeMencao = useMemo(() => {
+    if (mode === "note") {
+      return candidatosDaEquipe(marcaveisDaNota.data ?? [], (r) => t(ROTULO_DO_PAPEL[r as Role] ?? r));
+    }
+    return ehGrupo ? candidatosDoGrupo(participantesDoGrupo.data ?? [], t("admin do grupo")) : [];
+  }, [mode, ehGrupo, marcaveisDaNota.data, participantesDoGrupo.data, t]);
+  const paraMencao = useCallback(
+    (c: CandidatoDeMencao) => (mode === "note" ? mencaoDaEquipe(c) : mencaoDeGrupo(c)),
+    [mode],
+  );
+  const mencao = useMencoes({
+    candidatos: candidatosDeMencao,
+    paraMencao,
+    texto: text,
+    setTexto: setText,
+    taRef,
+    aoInserir: () => autoresize(),
+  });
   const valoresDaConversa = valoresAutomaticos({
     contato: { nome: contactName },
     atendente: { nome: attendantName },
@@ -138,16 +180,26 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     const body = text.trim();
     if (!body || (mode === "note" ? isDisabled : respostaBarrada)) return;
 
+    // As marcações saem do que o texto AINDA cita, não do que ficou no estado. Cada destino só leva as
+    // suas: colega da equipe numa nota, participante (ou @todos) numa resposta ao grupo.
+    const marcadas = mencao
+      .paraEnviar(body)
+      .filter((m) => (mode === "note" ? m.tipo !== "participante" : m.tipo !== "pessoa"));
     setText("");
+    mencao.limpar();
     requestAnimationFrame(() => autoresize());
 
     const restoreOnError = () => {
       setText(body);
+      mencao.restaurar(marcadas);
       requestAnimationFrame(() => autoresize());
     };
 
     if (mode === "note") {
-      createNote.mutate({ conversation_id: conversationId, body }, { onError: restoreOnError });
+      createNote.mutate(
+        { conversation_id: conversationId, body, mentions: marcadas },
+        { onError: restoreOnError },
+      );
       return;
     }
     send.mutate(
@@ -156,6 +208,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         body,
         type: "text",
         ...(respondendo ? { reply_to_message_id: respondendo.id } : {}),
+        ...(marcadas.length > 0 ? { mentions: marcadas } : {}),
       },
       {
         onSuccess: () => {
@@ -234,6 +287,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Com a lista do `@` aberta, as setas, o Enter, o Tab e o Esc são dela.
+    if (mencao.onKeyDown(e)) return;
     if (e.key === "Escape" && menuOpen) {
       setMenuDismissed(true);
       setMenuForcado(false);
@@ -273,10 +328,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             setMenuForcado(false);
           }}
         />
+        <MenuDeMencao
+          aberto={mencao.aberto}
+          itens={mencao.itens}
+          ativo={mencao.ativo}
+          onEscolher={mencao.escolher}
+          onHover={mencao.onHover}
+          detalheDeTodos={
+            mode === "note" ? t("Avisa quem enxerga esta conversa") : t("Avisa o grupo inteiro")
+          }
+        />
         <div className="mb-1.5 flex gap-1">
           <button
             type="button"
-            onClick={() => setMode("reply")}
+            onClick={() => {
+              // Quem se marca numa nota (colega) não é quem se marca numa resposta ao grupo
+              // (participante): trocar de aba zera as escolhas feitas na outra.
+              if (mode !== "reply") mencao.limpar();
+              setMode("reply");
+            }}
             className={cn(
               "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
               mode === "reply"
@@ -288,7 +358,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           </button>
           <button
             type="button"
-            onClick={() => setMode("note")}
+            onClick={() => {
+              if (mode !== "note") mencao.limpar();
+              setMode("note");
+            }}
             className={cn(
               "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
               mode === "note"
@@ -392,10 +465,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             ref={taRef}
             value={text}
             onChange={(e) => {
-              setText(e.target.value);
+              mencao.onChange(e);
               if (!resolveSlash(e.target.value).open) setMenuDismissed(false);
               autoresize();
             }}
+            onSelect={mencao.onSelect}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             rows={1}

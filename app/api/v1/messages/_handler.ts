@@ -20,6 +20,7 @@ import {
 } from "@/lib/channels";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
+import { prepararMencoesDeGrupo, type MencoesDeGrupoPreparadas } from "@/lib/mencoes/grupo";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import {
   buildVcard,
@@ -442,6 +443,41 @@ export async function sendMessageHandler(
     citada = alvo as { id: string; external_id: string | null };
   }
 
+  // ─── MARCAR ALGUÉM COM @ NUM GRUPO ─────────────────────────────────────────
+  //
+  // O texto que a atendente escreveu diz `@Maria Souza`; o que SAI para o grupo precisa dizer
+  // `@5511999990001` (é isso que o WhatsApp desenha como o nome, em destaque, e faz o aparelho
+  // dela tocar) e o canal precisa receber o endereço de quem avisar. A linha que guardamos fica com
+  // o texto da atendente e a lista de nomes em `metadata.mentions` — é o que a bolha desenha.
+  //
+  // Só vale para TEXTO em GRUPO: numa conversa 1:1 não há a quem marcar, e uma API que aceitasse
+  // em silêncio faria quem a chama achar que avisou alguém. Canal que não sabe listar os
+  // participantes não sabe marcar: o texto sai como a atendente escreveu e nada é reescrito.
+  let envioBody = input.body ?? "";
+  let mencoesDoGrupo: MencoesDeGrupoPreparadas | null = null;
+  const mencoesPedidas = input.mentions ?? [];
+  if (mencoesPedidas.length > 0) {
+    if (input.type !== "text" || !c.is_group) {
+      throw new ApiError(
+        422,
+        "validation_error",
+        undefined,
+        ctx.requestId,
+        "Marcar alguém com @ só vale em mensagem de texto num grupo.",
+      );
+    }
+    const adapterDaConversa = getAdapter(c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER);
+    if (typeof adapterDaConversa.listGroupParticipants === "function") {
+      mencoesDoGrupo = prepararMencoesDeGrupo(input.body ?? "", mencoesPedidas);
+      envioBody = mencoesDoGrupo.textoDeEnvio;
+    }
+  }
+  // `metadata.mentions` é do SERVIDOR: o que o cliente mandar ali dentro não vale.
+  const { mentions: _mentionsDoCliente, ...metadataDoCliente } = (input.metadata ?? {}) as Record<
+    string,
+    unknown
+  >;
+
   const insertRow = {
     organization_id: c.organization_id,
     // Guardado mesmo quando o canal não sabe citar: o fio existe no NOSSO
@@ -462,7 +498,8 @@ export async function sendMessageHandler(
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
-      ...(input.metadata ?? {}),
+      ...metadataDoCliente,
+      ...(mencoesDoGrupo && mencoesDoGrupo.gravar.length > 0 ? { mentions: mencoesDoGrupo.gravar } : {}),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
     },
   };
@@ -670,8 +707,15 @@ export async function sendMessageHandler(
           to: chatId,
           providerConversationId: c.provider_conversation_id,
           kind: input.type,
-          body: input.body ?? "",
+          // O texto que SAI: com `@Nome` já trocado por `@<número>` quando há marcação.
+          body: envioBody,
           replyToExternalId: citada?.external_id ?? null,
+          ...(mencoesDoGrupo
+            ? {
+                mentions: mencoesDoGrupo.jids.map((jid) => ({ jid })),
+                mentionAll: mencoesDoGrupo.todos,
+              }
+            : {}),
         }));
       }
       await removerEcoDoProprioEnvio(

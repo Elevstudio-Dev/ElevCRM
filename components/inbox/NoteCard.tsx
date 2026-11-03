@@ -1,5 +1,6 @@
 "use client";
 
+import { TextoComMencoes } from "@/components/mencoes/TextoComMencoes";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
@@ -9,16 +10,18 @@ import type { Note } from "@/lib/types/messaging";
 interface Props {
   note: Note;
   onDelete?: () => void;
+  /** Quem está olhando — a marcação que o inclui ganha mais destaque. */
+  euId?: string | null;
 }
 
 /** Onda 5.2: nota interna inline no thread — nunca vai ao cliente, destaque âmbar (token `warning`). */
-export function NoteCard({ note, onDelete }: Props) {
+export function NoteCard({ note, onDelete, euId }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const time = format(new Date(note.created_at), "HH:mm", { locale: localeDaData });
 
   return (
-    <div className="group flex w-full justify-center px-4 py-1">
+    <div className="group flex w-full justify-center px-4 py-1" data-testid="nota-interna">
       <div className="max-w-[85%] rounded-xl border border-warning/40 bg-warning-bg px-3 py-2 text-sm text-warning-fg shadow-sm">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide opacity-80">
@@ -38,8 +41,9 @@ export function NoteCard({ note, onDelete }: Props) {
             </button>
           )}
         </div>
-        {/* `anywhere` e não `break-words`: ver `MessageBubble` — só ele encolhe o mínimo do conteúdo. */}
-        <p className="mt-1 whitespace-pre-wrap leading-snug [overflow-wrap:anywhere]">{note.body}</p>
+        <p className="mt-1 leading-snug">
+          <TextoComMencoes texto={note.body} mencoes={note.mentions} euId={euId} />
+        </p>
         <div className="mt-1 text-right text-[10px] opacity-70">{time}</div>
       </div>
     </div>

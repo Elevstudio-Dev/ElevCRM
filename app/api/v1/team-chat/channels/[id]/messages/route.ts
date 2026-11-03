@@ -16,6 +16,9 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import type { MensagemDaEquipe } from "@/lib/chat-interno/canais";
+import { emitirMencoes } from "@/lib/mencoes/avisar";
+import { marcaveisDoCanal } from "@/lib/mencoes/marcaveis";
+import { mencoesPedidasSchema, resolverMencoes } from "@/lib/mencoes/servidor";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +27,12 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
-const COLS = "id, channel_id, sender_user_id, sender_name, body, created_at";
-const corpoSchema = z.object({ body: z.string().trim().min(1).max(4000) });
+const COLS = "id, channel_id, sender_user_id, sender_name, body, mentions, created_at";
+const corpoSchema = z.object({
+  body: z.string().trim().min(1).max(4000),
+  /** Quem foi marcado com @ (só o id; o servidor confere e põe o nome). Migration 0222. */
+  mentions: mencoesPedidasSchema,
+});
 
 export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
@@ -64,6 +71,17 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const supabase = await createClient();
   const agora = new Date().toISOString();
+
+  // Quem PODE ser marcado vem do banco (quem enxerga este canal). Canal alheio ou
+  // inexistente devolve lista vazia — e o INSERT logo abaixo o recusa por RLS.
+  const marcaveis = parsed.data.mentions.length > 0 ? await marcaveisDoCanal(org.orgId, id) : [];
+  const { gravar, avisar } = resolverMencoes({
+    texto: parsed.data.body,
+    pedidas: parsed.data.mentions,
+    marcaveis,
+    autorId: user.id,
+  });
+
   const { data, error } = await supabase
     .from("team_messages")
     .insert({
@@ -72,6 +90,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       sender_user_id: user.id,
       sender_name: user.full_name?.trim() || user.email,
       body: parsed.data.body,
+      mentions: gravar,
       created_at: agora,
     })
     .select(COLS)
@@ -88,5 +107,17 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     .from("team_channel_members")
     .upsert({ channel_id: id, user_id: user.id, organization_id: org.orgId, last_read_at: agora }, { onConflict: "channel_id,user_id" });
 
-  return ok(data as MensagemDaEquipe, { requestId, status: 201 });
+  // O aviso de quem foi marcado. Best-effort: nunca desfaz a mensagem.
+  const gravada = data as MensagemDaEquipe;
+  void emitirMencoes({
+    organizationId: org.orgId,
+    entityKind: "team_message",
+    entityId: gravada.id,
+    avisar,
+    fromUserId: user.id,
+    destino: { channel_id: id },
+    texto: parsed.data.body,
+  });
+
+  return ok(gravada, { requestId, status: 201 });
 }

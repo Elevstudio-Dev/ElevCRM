@@ -479,6 +479,13 @@ export const DICIONARIO: Traducoes = {
   "A mensagem ficou na fila e ainda não saiu. Se ela não sair logo, envie de novo.": {
     es: "El mensaje quedó en cola y aún no salió. Si no sale pronto, envíalo de nuevo.",
   },
+  // ─── Marcar alguém com @ (migration 0222) ───
+  "Marcar alguém": { es: "Mencionar a alguien" },
+  "Avisa quem está neste canal": { es: "Avisa a quien está en este canal" },
+  "Avisa quem enxerga esta conversa": { es: "Avisa a quien ve esta conversación" },
+  "marcou você": { es: "te mencionó" },
+  "admin do grupo": { es: "admin del grupo" },
+  "Avisa o grupo inteiro": { es: "Avisa a todo el grupo" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
   "em aberto": { es: "abiertos" },

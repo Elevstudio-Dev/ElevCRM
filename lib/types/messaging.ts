@@ -2,6 +2,7 @@
  * Shapes canônicos das tabelas conversations e messages (Spec 03).
  * Espelha o schema do Postgres — atualizar aqui quando a migration mudar.
  */
+import type { Mencao } from "@/lib/mencoes/tipos";
 
 export interface Conversation {
   id: string;
@@ -113,6 +114,8 @@ export interface Note {
   id: string;
   conversation_id: string;
   body: string;
+  /** Quem foi marcado com @ (migration 0222). Nota antiga: `[]`. */
+  mentions?: Mencao[];
   created_by_user_id: string | null;
   created_by_name: string | null;
   created_at: string;
