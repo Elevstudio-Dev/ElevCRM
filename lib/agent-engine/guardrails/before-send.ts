@@ -84,6 +84,12 @@ export interface GateContext {
    */
   optedOut: boolean;
   /**
+   * `contacts.fora_do_funil_em` preenchido, lido da fonte sob o lock: equipe, prestador, parceiro — não é cliente.
+   * Veto com código PRÓPRIO (`contato_fora_do_funil`), separado do opt-out: são fatos diferentes, e o trace não
+   * pode dizer que um prestador "optou por sair". Ausente = falso.
+   */
+  foraDoFunil?: boolean;
+  /**
    * Canal desta tentativa. Nenhum gate pergunta QUEM é o provider (invariante 1
    * de `docs/doctrine/restricao-de-canal.md`) — só o entrega a `capabilitiesOf`
    * para perguntar o que o canal permite.
@@ -266,16 +272,28 @@ export interface Gate {
 /** Gate 1 — STOP/opt-out/força-humano: veto IRREVOGÁVEL (regra dura nº 2), 1ª linha. */
 const stopGate: Gate = {
   name: 'stop',
-  evaluate: (ctx) =>
-    ctx.optedOut
-      ? {
-          pass: false,
-          code: 'contato_bloqueado',
-          reason:
-            'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
-            'possível enviar nada a ele; encerre o turno sem tentar de novo.',
-        }
-      : { pass: true },
+  evaluate: (ctx) => {
+    // O opt-out vem primeiro: é obrigação legal, e o código dele tem consumidores (cancela o job em definitivo).
+    if (ctx.optedOut) {
+      return {
+        pass: false,
+        code: 'contato_bloqueado',
+        reason:
+          'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
+          'possível enviar nada a ele; encerre o turno sem tentar de novo.',
+      };
+    }
+    if (ctx.foraDoFunil === true) {
+      return {
+        pass: false,
+        code: 'contato_fora_do_funil',
+        reason:
+          'este contato está marcado como fora do funil (equipe, prestador ou parceiro — não é cliente) — ' +
+          'o agente não envia nada a ele; encerre o turno sem tentar de novo.',
+      };
+    }
+    return { pass: true };
+  },
 };
 
 /**
@@ -831,7 +849,9 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     // Estado confiável carregado SOB o lock (os contadores de cap/janela de copies
     // são racy — precisam ver o que o worker anterior já efetivou).
     const provider = await loadChannelProvider(client, args.tenantId, args.channelSessionId);
-    const optedOut = args.optedOutThisTurn || (await readStopFlags(client, args.tenantId, args.leadId));
+    const stopFlags = await readStopFlags(client, args.tenantId, args.leadId);
+    const optedOut = args.optedOutThisTurn || stopFlags.optedOut;
+    const foraDoFunil = stopFlags.foraDoFunil;
     const pacingCfg = await loadChannelKnobs(client, args.tenantId, args.channelSessionId, args.log);
     const pacingState = await loadPacingState(client, args.tenantId, args.channelSessionId, {
       now: args.now,
@@ -866,6 +886,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       now: args.now,
       body: args.body,
       optedOut,
+      foraDoFunil,
       provider,
       messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
       pacing: { knobs: pacingCfg.knobs, state: pacingState, crmDailyLimit: args.crmDailyLimit, rng: args.rng },
@@ -1034,12 +1055,17 @@ export async function loadChannelProvider(
   return provider === undefined ? DEFAULT_CHANNEL_PROVIDER : (provider as ChannelProvider);
 }
 
-async function readStopFlags(db: Queryable, organizationId: string, contactId: string): Promise<boolean> {
-  const { rows } = await db.query<{ stopped: boolean }>(
-    'select (is_blocked or force_human) as stopped from contacts where organization_id = $1 and id = $2',
+async function readStopFlags(
+  db: Queryable,
+  organizationId: string,
+  contactId: string,
+): Promise<{ optedOut: boolean; foraDoFunil: boolean }> {
+  const { rows } = await db.query<{ stopped: boolean; fora: boolean }>(
+    'select (is_blocked or force_human) as stopped, (fora_do_funil_em is not null) as fora ' +
+      'from contacts where organization_id = $1 and id = $2',
     [organizationId, contactId],
   );
-  return rows[0]?.stopped === true;
+  return { optedOut: rows[0]?.stopped === true, foraDoFunil: rows[0]?.fora === true };
 }
 
 /**

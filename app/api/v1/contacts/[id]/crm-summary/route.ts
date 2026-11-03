@@ -86,6 +86,7 @@ export async function GET(
       .from("crm_leads")
       .select(LEAD_COLS)
       .eq("contact_id", contactId)
+      .eq("fora_do_funil", false)
       .order("updated_at", { ascending: false })
       .limit(3),
     supabase

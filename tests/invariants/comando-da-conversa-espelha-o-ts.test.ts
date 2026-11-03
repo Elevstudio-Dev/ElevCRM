@@ -168,14 +168,18 @@ describe("comando da conversa: o banco espelha o TypeScript", () => {
     // ele é onde mora o erro de copiar-colar mais provável: dois subselects
     // iguais, um para `force_human` e outro para `is_blocked`.
     const linhas = [
-      { n: 1, status: "open", dono: null, sil: null, fh: false, ib: false },
-      { n: 2, status: "open", dono: null, sil: null, fh: true, ib: false },
-      { n: 3, status: "open", dono: null, sil: null, fh: false, ib: true },
-      { n: 4, status: "open", dono: null, sil: "infinity", fh: false, ib: false },
-      { n: 5, status: "open", dono: DONO, sil: "infinity", fh: false, ib: false },
-      { n: 6, status: "closed", dono: null, sil: null, fh: false, ib: false },
-      { n: 7, status: "pending", dono: null, sil: null, fh: false, ib: false },
-      { n: 8, status: "resolved", dono: null, sil: null, fh: false, ib: false },
+      { n: 1, status: "open", dono: null, sil: null, fh: false, ib: false, fdf: false },
+      { n: 2, status: "open", dono: null, sil: null, fh: true, ib: false, fdf: false },
+      { n: 3, status: "open", dono: null, sil: null, fh: false, ib: true, fdf: false },
+      { n: 4, status: "open", dono: null, sil: "infinity", fh: false, ib: false, fdf: false },
+      { n: 5, status: "open", dono: DONO, sil: "infinity", fh: false, ib: false, fdf: false },
+      { n: 6, status: "closed", dono: null, sil: null, fh: false, ib: false, fdf: false },
+      { n: 7, status: "pending", dono: null, sil: null, fh: false, ib: false, fdf: false },
+      { n: 8, status: "resolved", dono: null, sil: null, fh: false, ib: false, fdf: false },
+      // contato FORA DO FUNIL (0221): parada dura, como o opt-out, sem trava a devolver
+      { n: 9, status: "open", dono: null, sil: null, fh: false, ib: false, fdf: true },
+      { n: 10, status: "open", dono: DONO, sil: null, fh: false, ib: false, fdf: true },
+      { n: 11, status: "closed", dono: null, sil: null, fh: false, ib: false, fdf: true },
     ];
 
     sql(`
@@ -192,8 +196,8 @@ describe("comando da conversa: o banco espelha o TypeScript", () => {
       ${linhas
         .map(
           (l) => `
-      insert into contacts (id, organization_id, force_human, is_blocked)
-        values ('aaaaaaaa-0000-4000-8000-00000000c${String(l.n).padStart(3, "0")}', '${ORG}', ${l.fh}, ${l.ib});
+      insert into contacts (id, organization_id, force_human, is_blocked, fora_do_funil_em)
+        values ('aaaaaaaa-0000-4000-8000-00000000c${String(l.n).padStart(3, "0")}', '${ORG}', ${l.fh}, ${l.ib}, ${l.fdf ? "now()" : "null"});
       insert into conversations (id, organization_id, contact_id, channel_session_id, status, assigned_to_user_id, bot_silenced_until)
         values ('aaaaaaaa-0000-4000-8000-00000000e${String(l.n).padStart(3, "0")}', '${ORG}',
                 'aaaaaaaa-0000-4000-8000-00000000c${String(l.n).padStart(3, "0")}', '${ORG}', '${l.status}',
@@ -225,13 +229,14 @@ describe("comando da conversa: o banco espelha o TypeScript", () => {
           bot_silenced_until: l.sil,
           force_human: l.fh,
           is_blocked: l.ib,
+          fora_do_funil_em: l.fdf ? new Date().toISOString() : null,
           automaticoDaOrg: true,
         },
         // O wrapper usa `now()` do banco; estas linhas não ficam na fronteira do
         // relógio de propósito (só `infinity`/`null`), então a comparação é estável.
         new Date(),
       ).comando.quem;
-      expect(doBanco.get(l.n), `linha ${l.n} (${l.status}, fh=${l.fh}, ib=${l.ib})`).toBe(ts);
+      expect(doBanco.get(l.n), `linha ${l.n} (${l.status}, fh=${l.fh}, ib=${l.ib}, fdf=${l.fdf})`).toBe(ts);
     }
   });
 

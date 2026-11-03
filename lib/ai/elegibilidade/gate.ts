@@ -49,6 +49,11 @@ export function lerModoDoGate(raw: unknown): AiGateMode {
 export interface EstadoDeElegibilidade {
   /** `channel_sessions.metadata.ai_gate` já normalizado. */
   modo: AiGateMode;
+  /**
+   * `contacts.fora_do_funil_em` preenchido: a pessoa é equipe, prestador ou parceiro — NÃO é cliente. A IA não
+   * atende, em canal nenhum e em modo nenhum.
+   */
+  foraDoFunil: boolean;
   /** `contacts.force_human` — a trava irrevogável pelo agente (regra dura 2). */
   forceHuman: boolean;
   /** `conversations.bot_silenced_until` (ou o da conversa em questão). `'infinity'` do Postgres vira `Infinity`. */
@@ -65,6 +70,7 @@ export interface EstadoDeElegibilidade {
 
 export type MotivoDeElegibilidade =
   | "gate_aberto"
+  | "fora_do_funil"
   | "force_human"
   | "conversa_silenciada"
   | "conversa_de_humano"
@@ -96,6 +102,11 @@ function silenciadoAgora(until: Date | number | null, agora: Date): boolean {
  * autorização positiva.
  */
 export function decidirElegibilidade(e: EstadoDeElegibilidade): DecisaoDeElegibilidade {
+  // Vem ANTES de tudo: é o que a pessoa É para o negócio, e não o estado desta conversa. Nem a allowlist, nem
+  // devolver a conversa à IA, nem apagar o silêncio a trazem de volta — só desmarcar o contato.
+  if (e.foraDoFunil) {
+    return { permite: false, motivo: "fora_do_funil", bloqueioPorAllowlist: false };
+  }
   if (e.forceHuman) {
     return { permite: false, motivo: "force_human", bloqueioPorAllowlist: false };
   }
@@ -156,6 +167,8 @@ export function normalizarInstante(v: Date | string | number | null | undefined)
  */
 export function montarEstadoDeElegibilidade(raw: {
   aiGate: unknown;
+  /** `contacts.fora_do_funil_em` cru (instante ou nulo): qualquer valor não nulo marca a pessoa. */
+  foraDoFunilEm: unknown;
   forceHuman: unknown;
   assigneeKind: string | null;
   botSilencedUntil: Date | string | number | null | undefined;
@@ -166,6 +179,7 @@ export function montarEstadoDeElegibilidade(raw: {
   const autorizadoEm = normalizarInstante(raw.aiAuthorizedAt);
   return {
     modo: lerModoDoGate(raw.aiGate),
+    foraDoFunil: raw.foraDoFunilEm !== null && raw.foraDoFunilEm !== undefined,
     forceHuman: raw.forceHuman === true,
     botSilencedUntil: normalizarInstante(raw.botSilencedUntil),
     assigneeKind: raw.assigneeKind,

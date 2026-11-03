@@ -61,7 +61,8 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data: rows, error } = await admin
     .from("crm_leads")
     .select("organization_id")
-    .eq("status", "open");
+    .eq("status", "open")
+    .eq("fora_do_funil", false);
   if (error) {
     logger.error("[risk-watcher] query failed", { error: error.message, requestId });
     return fail("internal_error", "Failed to list organizations.", 500, { requestId });

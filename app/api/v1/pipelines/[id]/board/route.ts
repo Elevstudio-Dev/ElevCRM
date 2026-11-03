@@ -365,6 +365,7 @@ async function withNextActions(
         )
         .eq("organization_id", organizationId)
         .eq("status", "open")
+        .eq("fora_do_funil", false)
         .in("contact_id", contactIds),
     ]);
   if (estadosErr) return { leads, error: estadosErr.message };
@@ -425,6 +426,8 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
       .from("crm_leads")
       .select("*")
       .eq("pipeline_id", pipelineId)
+      // Quem está FORA DO FUNIL (equipe, prestador, parceiro) não tem card: o espelho vem do contato (0221).
+      .eq("fora_do_funil", false)
       .neq("status", "archived")
       .order("position_in_stage"),
   ]);

@@ -67,6 +67,7 @@ const ROTULO_DE_ANUNCIO: Record<string, string> = {
 export type MotivoSemLead =
   | "ja_existe" // o contato já tem lead aberto: um por demanda, não um por mensagem
   | "contato_bloqueado" // pediu para sair; criar oportunidade seria desrespeito registrado
+  | "contato_fora_do_funil" // equipe, prestador ou parceiro: não é cliente, não vira negócio
   | "sem_funil_de_entrada" // a organização não tem funil padrão — falha de configuração, visível
   | "sem_etapa" // o funil existe e não tem etapa utilizável
   | "erro"; // qualquer falha de escrita
@@ -158,12 +159,16 @@ export async function garantirLeadDaConversa(
   // lugar onde ninguém olharia.
   const { data: contato } = await db
     .from("contacts")
-    .select("is_blocked,display_name,name,phone_number,source,source_metadata")
+    .select("is_blocked,fora_do_funil_em,display_name,name,phone_number,source,source_metadata")
     .eq("organization_id", organizationId)
     .eq("id", contactId)
     .maybeSingle();
 
   if (contato?.is_blocked === true) return { criado: false, motivo: "contato_bloqueado" };
+
+  // Equipe, prestador, parceiro: a conversa existe e a equipe responde, mas NENHUM negócio nasce. Vem depois do
+  // opt-out (a obrigação legal manda no motivo) e antes de qualquer funil — é o que a pessoa É, não onde ela cairia.
+  if (contato?.fora_do_funil_em) return { criado: false, motivo: "contato_fora_do_funil" };
 
   // 2 · já existe demanda aberta?
   const { data: existente } = await db

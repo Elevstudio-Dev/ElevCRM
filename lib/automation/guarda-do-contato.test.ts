@@ -33,6 +33,20 @@ describe("checarGuardasDeContato", () => {
     expect(r).toEqual({ ok: false, reason: "contact_blocked" });
   });
 
+  it("contato FORA DO FUNIL: contact_fora_do_funil — a automação (inclusive a de IA) não escreve para quem não é cliente", () => {
+    const r = checarGuardasDeContato(
+      ctxComContato({ id: "c1", fora_do_funil_em: "2026-10-29T12:00:00Z", phone_number: "+5511999999999" }),
+    );
+    expect(r).toEqual({ ok: false, reason: "contact_fora_do_funil" });
+  });
+
+  it("fora_do_funil_em nulo: passa, como qualquer contato comum", () => {
+    const r = checarGuardasDeContato(
+      ctxComContato({ id: "c1", fora_do_funil_em: null, phone_number: "+5511999999999" }),
+    );
+    expect(r).toEqual({ ok: true, contact: { id: "c1", phone_number: "+5511999999999" } });
+  });
+
   it("sem telefone: no_phone", () => {
     const r = checarGuardasDeContato(ctxComContato({ id: "c1", phone_number: null }));
     expect(r).toEqual({ ok: false, reason: "no_phone" });

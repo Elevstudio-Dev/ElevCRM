@@ -297,7 +297,8 @@ async function emitirAtividadeDeRetomada(
     .from("crm_leads")
     .select("id, organization_id, pipeline_id, status, last_activity_at, created_at")
     .eq("organization_id", deps.organizationId)
-    .eq("contact_id", contactId);
+    .eq("contact_id", contactId)
+    .eq("fora_do_funil", false);
   const { data: defaultPipeline } = await deps.supabase
     .from("crm_pipelines")
     .select("id")

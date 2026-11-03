@@ -10,6 +10,7 @@ import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
+import { SeloForaDoFunil } from "@/components/contacts/SeloForaDoFunil";
 import { ICONE_DA_MIDIA } from "@/components/inbox/CitacaoResumo";
 import { comandoDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { horaDaLinha, previaDaLinha, type Tique, tiqueDaUltima } from "@/lib/inbox/linha-da-conversa";
@@ -179,6 +180,7 @@ export function ConversationListItem({
     bot_silenced_until: conversation.bot_silenced_until ?? null,
     force_human: c?.force_human ?? null,
     is_blocked: c?.is_blocked ?? null,
+    fora_do_funil_em: c?.fora_do_funil_em ?? null,
     automaticoDaOrg,
   });
   const isAi = comando.quem === "automatico";
@@ -258,13 +260,16 @@ export function ConversationListItem({
           a pessoa certa.
         */}
         <div className="flex items-baseline justify-between gap-2">
-          <span
-            className={cn(
-              "truncate text-[15px] font-medium",
-              c?.is_anonymized && "italic text-muted-foreground",
-            )}
-          >
-            {displayName}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "truncate text-[15px] font-medium",
+                c?.is_anonymized && "italic text-muted-foreground",
+              )}
+            >
+              {displayName}
+            </span>
+            <SeloForaDoFunil foraDoFunilEm={c?.fora_do_funil_em} tipoId={c?.fora_do_funil_tipo_id} className="h-4 px-1.5 text-[10px]" />
           </span>
           {/* Verde e em negrito quando há não lida: é como o WhatsApp avisa, de longe, que a
               conversa pede o olho — a hora vira o sinal, sem precisar ler o contador. */}

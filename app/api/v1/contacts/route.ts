@@ -39,6 +39,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     search: url.searchParams.get("search") ?? undefined,
     tag: url.searchParams.get("tag") ?? undefined,
     source: url.searchParams.get("source") ?? undefined,
+    fora_do_funil: url.searchParams.get("fora_do_funil") ?? undefined,
+    tipo_id: url.searchParams.get("tipo_id") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
     order_by: url.searchParams.get("order_by") ?? undefined,

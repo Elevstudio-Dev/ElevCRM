@@ -82,7 +82,8 @@ export async function GET(req: NextRequest): Promise<Response> {
           "id, organization_id, pipeline_id, status, last_activity_at, created_at, contact_id",
         )
         .eq("organization_id", orgId)
-        .eq("status", "open"),
+        .eq("status", "open")
+        .eq("fora_do_funil", false),
     ]);
   if (estadosErr) return fail("internal", estadosErr.message, 500, { requestId });
   if (candErr) return fail("internal", candErr.message, 500, { requestId });

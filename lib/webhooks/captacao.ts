@@ -27,6 +27,7 @@ export type DesfechoDaCaptacao = "criado" | "duplicado" | "recusado";
 export type MotivoDaRecusa =
   | "sem_campo_mapeavel"
   | "assinatura_invalida"
+  | "contato_fora_do_funil"
   | "erro_ao_criar_lead";
 
 /** O que a tela mostra para cada motivo, em português de gente. */
@@ -35,9 +36,16 @@ export const MOTIVO_DA_RECUSA_LABEL: Record<MotivoDaRecusa, string> = {
     "O envio não trazia nome, telefone nem e-mail reconhecíveis — confira os nomes dos campos do formulário.",
   assinatura_invalida:
     "A assinatura não conferiu. Quem enviou não usou o segredo configurado nesta fonte.",
+  contato_fora_do_funil:
+    "Este contato está marcado como fora do funil (equipe, prestador ou parceiro), então nenhum negócio foi criado para ele.",
   erro_ao_criar_lead:
     "Os dados chegaram, mas o lead não pôde ser criado — confira se o funil e a etapa da fonte ainda existem.",
 };
+
+/** O motivo da recusa a partir do código do erro de `createLeadHandler`: só um tem texto próprio, o resto é genérico. */
+export function motivoDaRecusaDoErro(codigo: string): MotivoDaRecusa {
+  return codigo === "contato_fora_do_funil" ? "contato_fora_do_funil" : "erro_ao_criar_lead";
+}
 
 export interface CaptacaoParaRegistrar {
   organizationId: string;

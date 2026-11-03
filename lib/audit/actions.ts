@@ -444,6 +444,14 @@ export const AUDIT_ACTIONS = [
   "qr_code.updated",
   "qr_code.archived",
   "qr_code.restored",
+  // Contato "Fora do funil" (migration 0221): quem marcou ou desmarcou equipe, prestador ou parceiro — o que sai da
+  // IA, do funil e do relatório precisa ter autor — e os tipos que o dono cadastra.
+  "contact.fora_do_funil_marcado",
+  "contact.fora_do_funil_desmarcado",
+  "tipo_fora_do_funil.criado",
+  "tipo_fora_do_funil.renomeado",
+  "tipo_fora_do_funil.arquivado",
+  "tipo_fora_do_funil.reativado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

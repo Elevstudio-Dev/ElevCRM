@@ -5,7 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { useState } from "react";
 import { format } from "date-fns";
-import { ShieldCheck, PencilSimple } from "@/lib/ui/icons";
+import { Funnel, ShieldCheck, PencilSimple } from "@/lib/ui/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,8 @@ import { TimelineView } from "@/components/contacts/TimelineView";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
+import { ForaDoFunilDialog } from "@/components/contacts/ForaDoFunilDialog";
+import { SeloForaDoFunil } from "@/components/contacts/SeloForaDoFunil";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
@@ -33,6 +35,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const { user, activeOrg } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
+  const [foraOpen, setForaOpen] = useState(false);
 
   if (q.isLoading) {
     return (
@@ -97,13 +100,20 @@ export function ContactDetailClient({ contactId }: Props) {
             ))}
             {contact.is_blocked && <Badge variant="warning">Bloqueado</Badge>}
             {contact.is_anonymized && <Badge variant="destructive">Anonimizado</Badge>}
+            <SeloForaDoFunil foraDoFunilEm={contact.fora_do_funil_em} tipoId={contact.fora_do_funil_tipo_id} />
           </div>
         </div>
         {!contact.is_anonymized && (
-          <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
-            <PencilSimple size={16} weight="bold" aria-hidden />
-            <span>Editar</span>
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => setForaOpen(true)} data-testid="botao-fora-do-funil">
+              <Funnel size={16} weight={contact.fora_do_funil_em ? "fill" : "bold"} aria-hidden />
+              <span>{contact.fora_do_funil_em ? t("Voltar ao funil") : t("Marcar como fora do funil")}</span>
+            </Button>
+            <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
+              <PencilSimple size={16} weight="bold" aria-hidden />
+              <span>Editar</span>
+            </Button>
+          </div>
         )}
       </header>
 
@@ -221,6 +231,14 @@ export function ContactDetailClient({ contactId }: Props) {
         open={anonOpen}
         onOpenChange={setAnonOpen}
       />
+      {foraOpen && (
+        <ForaDoFunilDialog
+          contatos={[{ id: contact.id, nome: displayName, tipoId: contact.fora_do_funil_tipo_id ?? null }]}
+          marcar={!contact.fora_do_funil_em}
+          open
+          onOpenChange={(aberto) => !aberto && setForaOpen(false)}
+        />
+      )}
     </div>
   );
 }

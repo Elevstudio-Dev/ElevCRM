@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, formatRelative, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
-import { CaretDown, CaretUp, ChatCircle, Trash } from "@/lib/ui/icons";
+import { CaretDown, CaretUp, ChatCircle, Funnel, Trash } from "@/lib/ui/icons";
 import {
   Table,
   TableBody,
@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AvatarDoContato } from "@/components/contacts/AvatarDoContato";
+import { SeloForaDoFunil } from "@/components/contacts/SeloForaDoFunil";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,13 @@ interface Props {
   orderBy: ContactOrderBy;
   orderDir: "asc" | "desc";
   onSort: (column: ContactOrderBy) => void;
+  /** Ids marcados na lista (seleção em massa). */
+  selecionados?: ReadonlySet<string>;
+  onAlternar?: (id: string) => void;
+  /** Marca ou desmarca TODOS os que estão na tela. */
+  onAlternarTodos?: (marcarTodos: boolean) => void;
+  /** Abre o diálogo de "fora do funil" para UM contato. */
+  onForaDoFunil?: (c: Contact) => void;
 }
 
 function displayName(c: Contact, t: (texto: string) => string = (texto) => texto): string {
@@ -106,7 +114,16 @@ function SortableHead({
   );
 }
 
-export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
+export function ContactsTable({
+  contacts,
+  orderBy,
+  orderDir,
+  onSort,
+  selecionados,
+  onAlternar,
+  onAlternarTodos,
+  onForaDoFunil,
+}: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const del = useDeleteContact();
@@ -156,6 +173,17 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
     <Table>
       <TableHeader>
         <TableRow>
+          {onAlternar && (
+            <TableHead className="w-[40px]">
+              <input
+                type="checkbox"
+                aria-label={t("Selecionar todos desta página")}
+                className="h-4 w-4 cursor-pointer accent-[var(--color-accent)]"
+                checked={contacts.length > 0 && contacts.every((c) => selecionados?.has(c.id))}
+                onChange={(e) => onAlternarTodos?.(e.target.checked)}
+              />
+            </TableHead>
+          )}
           <SortableHead
             label={t("Nome")}
             column="display_name"
@@ -186,7 +214,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
             onSort={onSort}
           />
           <TableHead>{t("Status")}</TableHead>
-          <TableHead className="w-[88px]">
+          <TableHead className="w-[120px]">
             <span className="sr-only">{t("Ações")}</span>
           </TableHead>
         </TableRow>
@@ -194,6 +222,17 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
       <TableBody>
         {contacts.map((c) => (
           <TableRow key={c.id} className="cursor-pointer">
+            {onAlternar && (
+              <TableCell className="w-[40px]">
+                <input
+                  type="checkbox"
+                  aria-label={`${t("Selecionar")} ${displayName(c, t)}`}
+                  className="h-4 w-4 cursor-pointer accent-[var(--color-accent)]"
+                  checked={selecionados?.has(c.id) ?? false}
+                  onChange={() => onAlternar(c.id)}
+                />
+              </TableCell>
+            )}
             <TableCell className="font-medium">
               {/* O ROSTO, pela mesma regra das outras duas telas
                   (`AvatarDoContato`). Esta lista era a única sem ele. */}
@@ -237,6 +276,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                 {!c.is_anonymized && !c.is_blocked && (
                   <Badge variant="success">{t("Ativo")}</Badge>
                 )}
+                <SeloForaDoFunil foraDoFunilEm={c.fora_do_funil_em} tipoId={c.fora_do_funil_tipo_id} />
               </div>
             </TableCell>
             <TableCell>
@@ -267,6 +307,19 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                     <ChatCircle size={16} weight="regular" aria-hidden />
                   </Button>
                 ) : null}
+                {onForaDoFunil && !c.is_anonymized && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    data-testid="acao-fora-do-funil"
+                    title={c.fora_do_funil_em ? t("Voltar ao funil") : t("Marcar como fora do funil")}
+                    aria-label={`${c.fora_do_funil_em ? t("Voltar ao funil") : t("Marcar como fora do funil")}: ${displayName(c, t)}`}
+                    onClick={() => onForaDoFunil(c)}
+                  >
+                    <Funnel size={16} weight={c.fora_do_funil_em ? "fill" : "regular"} aria-hidden />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

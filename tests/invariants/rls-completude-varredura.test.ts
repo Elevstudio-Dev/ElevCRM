@@ -85,6 +85,12 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "por ACERTO ali.",
   },
   {
+    tabela: "tipos_fora_do_funil",
+    razao:
+      "tests/invariants/contato-fora-do-funil.test.ts prova que o atendente lê só os tipos da PRÓPRIA organização, " +
+      "que só manager+ cria e que organização vizinha não escreve. Fora de TABLES porque a escrita exige manager.",
+  },
+  {
     tabela: "qr_codes",
     razao:
       "tests/invariants/qr-codes-rls.test.ts prova isolamento cross-tenant E o gate de papel (agent não lê " +

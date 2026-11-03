@@ -14,6 +14,13 @@ export interface Contact {
   birthdate: string | null;
   is_blocked: boolean;
   blocked_reason: string | null;
+  /**
+   * Quando a pessoa foi marcada como FORA DO FUNIL (equipe, prestador, parceiro — não é cliente). `null` = é do
+   * funil. Ausente em quem lê um recorte antigo do contato.
+   */
+  fora_do_funil_em?: string | null;
+  /** O tipo cadastrado pelo dono (Equipe, Contador…), quando há. */
+  fora_do_funil_tipo_id?: string | null;
   is_anonymized: boolean;
   anonymized_at: string | null;
   is_merged_into: string | null;

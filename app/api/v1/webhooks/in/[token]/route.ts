@@ -28,7 +28,7 @@ import {
   respondiLeadTitle,
   type RespondiMapped,
 } from "@/lib/webhooks/respondi";
-import { origemDaPagina, registrarCaptacao } from "@/lib/webhooks/captacao";
+import { motivoDaRecusaDoErro, origemDaPagina, registrarCaptacao } from "@/lib/webhooks/captacao";
 import { ipDoClienteParaInet } from "@/lib/http/ip-do-cliente";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { ApiError } from "@/lib/api/types";
@@ -542,7 +542,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         ...dadosDaCaptacao,
         contactId: contactId ?? null,
         outcome: "recusado",
-        rejectReason: "erro_ao_criar_lead",
+        rejectReason: motivoDaRecusaDoErro(err.code),
       });
       return fail(err.code, err.message ?? "erro", err.status, { requestId });
     }

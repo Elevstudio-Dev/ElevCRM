@@ -25,7 +25,7 @@ function linha(over: Record<string, unknown> = {}) {
   return {
     bot_silenced_until: null,
     assignee_kind: "ai",
-    contacts: { force_human: false, ai_authorized_at: null },
+    contacts: { force_human: false, ai_authorized_at: null, fora_do_funil_em: null },
     channel_sessions: { metadata: {} },
     ...over,
   };
@@ -93,6 +93,31 @@ describe("decidirElegibilidadeDaConversaViaSupabase", () => {
       { organizationId: ORG, conversationId: CONV, agora: AGORA, ttlMs: TTL },
     );
     expect(d).toMatchObject({ permite: false, motivo: "conversa_silenciada", bloqueioPorAllowlist: false });
+  });
+
+  it("contato FORA DO FUNIL: NÃO permite, com o motivo próprio", async () => {
+    const d = await decidirElegibilidadeDaConversaViaSupabase(
+      adminStub({
+        data: linha({
+          contacts: { force_human: false, ai_authorized_at: null, fora_do_funil_em: "2026-10-29T12:00:00Z" },
+        }),
+        error: null,
+      }),
+      { organizationId: ORG, conversationId: CONV, agora: AGORA, ttlMs: TTL },
+    );
+    expect(d).toEqual({ permite: false, motivo: "fora_do_funil", bloqueioPorAllowlist: false });
+  });
+
+  it("a consulta PEDE a coluna do marcador (sem ela o filtro seria letra morta)", async () => {
+    const select = vi.fn(() => chain);
+    const chain = { select, eq: () => chain, maybeSingle: () => Promise.resolve({ data: linha(), error: null }) };
+    await decidirElegibilidadeDaConversaViaSupabase({ from: () => chain } as never, {
+      organizationId: ORG,
+      conversationId: CONV,
+      agora: AGORA,
+      ttlMs: TTL,
+    });
+    expect(String((select.mock.calls[0] as unknown[])[0])).toContain("fora_do_funil_em");
   });
 
   it("force_human do contato: NÃO permite em qualquer canal", async () => {
