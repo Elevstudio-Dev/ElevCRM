@@ -16,6 +16,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { aplicarMarcador } from "@/lib/contatos/fora-do-funil";
 import { marcarForaDoFunilSchema } from "@/lib/schemas/fora-do-funil";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       userId: authz.user.id,
       contactIds: contact_ids,
       marcar,
+      contador: createAdminClient(),
       ...(marcar ? { tipoId: tipo_id } : {}),
     });
 

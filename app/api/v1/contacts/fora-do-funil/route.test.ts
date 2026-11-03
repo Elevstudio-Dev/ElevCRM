@@ -24,6 +24,7 @@ vi.mock("@/lib/contatos/fora-do-funil", () => ({
   aplicarMarcador: (...a: unknown[]) => aplicar(...a),
   previaDoMarcador: (...a: unknown[]) => previa(...a),
 }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ admin: true }) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from() {
@@ -84,7 +85,7 @@ describe("POST /api/v1/contacts/fora-do-funil", () => {
     expect((await r.json()).data).toEqual({ alterados: 1, previa: PREVIA });
     expect(aplicar).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ organizationId: "org-1", userId: "u-1", contactIds: [A], marcar: true, tipoId: TIPO }),
+      expect.objectContaining({ organizationId: "org-1", userId: "u-1", contactIds: [A], marcar: true, tipoId: TIPO, contador: { admin: true } }),
     );
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -152,7 +153,8 @@ describe("POST /api/v1/contacts/fora-do-funil/previa", () => {
     const r = await pedir(POST_PREVIA, { contact_ids: [A], marcar: true });
     expect(r.status).toBe(200);
     expect((await r.json()).data).toEqual(PREVIA);
-    expect(previa).toHaveBeenCalledWith(expect.anything(), "org-1", [A], true);
+    // O 5º argumento é o cliente que conta TODOS os negócios (a RLS esconderia os de outros donos do atendente).
+    expect(previa).toHaveBeenCalledWith(expect.anything(), "org-1", [A], true, { admin: true });
     expect(aplicar).not.toHaveBeenCalled();
     expect(audit).not.toHaveBeenCalled();
   });

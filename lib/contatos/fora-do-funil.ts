@@ -22,6 +22,7 @@ interface LinhaDoContato {
   fora_do_funil_em: string | null;
 }
 interface LinhaDoNegocio {
+  id: string;
   status: string;
   value_cents: number | null;
   currency: string | null;
@@ -52,36 +53,62 @@ export async function previaDoMarcador(
   organizationId: string,
   contactIds: string[],
   marcar: boolean,
+  /**
+   * Cliente que enxerga TODOS os negócios da organização (o `admin`, sempre filtrado por organização). O gatilho
+   * do banco esconde os negócios todos, e não só os que o atendente vê (a RLS de `crm_leads` mostra ao atendente os
+   * dele e os sem dono): contar pelo cliente da sessão faria o diálogo prometer "2 saem" quando saem 5. Sem ele,
+   * conta pelo `supabase` mesmo (os testes e quem já vê tudo).
+   */
+  contador: SupabaseClient = supabase,
 ): Promise<PreviaDoMarcador> {
   const mudam = quemMuda(await contatosDaOrganizacao(supabase, organizationId, contactIds), marcar);
   const previa: PreviaDoMarcador = {
     contatos: mudam.length,
     negocios: { abertos: 0, ganhos: 0, perdidos: 0, valor_ganho_cents: 0 },
     aproximado: false,
+    valor_parcial: false,
   };
   if (mudam.length === 0) return previa;
 
   // Ao marcar contam os negócios que ainda aparecem; ao desmarcar, os que estão escondidos e voltariam.
-  const { data, error } = await supabase
-    .from("crm_leads")
-    .select("status, value_cents, currency")
-    .eq("organization_id", organizationId)
-    .in("contact_id", mudam.map((c) => c.id))
-    .eq("fora_do_funil", !marcar)
-    .limit(LIMITE_DE_LINHAS + 1);
-  if (error) throw new Error(error.message);
+  const consultar = (cliente: SupabaseClient, colunas: string) =>
+    cliente
+      .from("crm_leads")
+      .select(colunas)
+      .eq("organization_id", organizationId)
+      .in("contact_id", mudam.map((c) => c.id))
+      .eq("fora_do_funil", !marcar)
+      .limit(LIMITE_DE_LINHAS + 1);
 
-  const linhas = (data ?? []) as LinhaDoNegocio[];
+  const { data, error } = await consultar(contador, "id, status, value_cents, currency");
+  if (error) throw new Error(error.message);
+  const linhas = (data ?? []) as unknown as LinhaDoNegocio[];
   previa.aproximado = linhas.length > LIMITE_DE_LINHAS;
-  for (const n of linhas.slice(0, LIMITE_DE_LINHAS)) {
+  const contadas = linhas.slice(0, LIMITE_DE_LINHAS);
+
+  // O VALOR das vendas só aparece se quem pediu enxerga todas elas: o atendente não lê o valor do negócio de outro dono.
+  let visiveis: Set<string> | null = null;
+  if (contador !== supabase) {
+    const { data: meus, error: meusErr } = await consultar(supabase, "id");
+    if (meusErr) throw new Error(meusErr.message);
+    visiveis = new Set(((meus ?? []) as unknown as Array<{ id: string }>).map((l) => l.id));
+  }
+
+  for (const n of contadas) {
     if (n.status === "open") previa.negocios.abertos += 1;
     else if (n.status === "lost") previa.negocios.perdidos += 1;
     else if (n.status === "won") {
       previa.negocios.ganhos += 1;
+      if (visiveis && !visiveis.has(n.id)) {
+        previa.valor_parcial = true;
+        continue;
+      }
       // Só real: somar dólar em centavos de real mentiria no número que o dono confere.
       if ((n.currency ?? "BRL") === "BRL") previa.negocios.valor_ganho_cents += Number(n.value_cents ?? 0);
     }
   }
+  // Valor incompleto é pior que nenhum valor: some, e a frase diz só quantas vendas.
+  if (previa.valor_parcial) previa.negocios.valor_ganho_cents = 0;
   return previa;
 }
 
@@ -99,13 +126,15 @@ export async function aplicarMarcador(
     userId: string;
     contactIds: string[];
     marcar: boolean;
-    /** `undefined`: não mexe no tipo de quem já estava marcado. `null`: sem tipo. */
+    /** Tipo dos que PASSAM a ficar marcados. `null`/`undefined`: sem tipo — e não mexe no tipo de quem já estava marcado. */
     tipoId?: string | null;
+    /** Ver `previaDoMarcador`: cliente que conta todos os negócios da organização. */
+    contador?: SupabaseClient;
   },
 ): Promise<ResultadoDoMarcador> {
-  const { organizationId, userId, contactIds, marcar, tipoId } = args;
+  const { organizationId, userId, contactIds, marcar, tipoId, contador } = args;
   const existentes = await contatosDaOrganizacao(supabase, organizationId, contactIds);
-  const previa = await previaDoMarcador(supabase, organizationId, contactIds, marcar);
+  const previa = await previaDoMarcador(supabase, organizationId, contactIds, marcar, contador);
   const mudam = quemMuda(existentes, marcar);
 
   if (mudam.length > 0) {
@@ -120,8 +149,9 @@ export async function aplicarMarcador(
     if (error) throw new Error(error.message);
   }
 
-  // Quem JÁ estava marcado e vem com um tipo novo: troca só o tipo (a data e quem marcou ficam).
-  if (marcar && tipoId !== undefined) {
+  // Quem JÁ estava marcado e vem com um tipo novo: troca só o tipo (a data e quem marcou ficam). Sem tipo escolhido
+  // (seleção mista), quem já tinha um tipo o mantém — marcar de novo não apaga a classificação.
+  if (marcar && typeof tipoId === "string") {
     const jaMarcados = existentes.filter((c) => c.fora_do_funil_em !== null).map((c) => c.id);
     if (jaMarcados.length > 0) {
       const { error } = await supabase

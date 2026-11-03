@@ -3196,6 +3196,9 @@ export const DICIONARIO: Traducoes = {
     es: "El contacto pidió no recibir mensajes (opt-out).",
   },
   "O contato não tem telefone cadastrado.": { es: "El contacto no tiene teléfono registrado." },
+  "O contato está marcado como fora do funil (equipe, prestador ou parceiro), então a automação não escreve para ele.": {
+    es: "El contacto está marcado como fuera del embudo (equipo, proveedor o socio), así que la automatización no le escribe.",
+  },
   "Falta preencher alguma configuração desta ação — abra a automação e revise.": {
     es: "Falta completar alguna configuración de esta acción — abre la automatización y revísala.",
   },

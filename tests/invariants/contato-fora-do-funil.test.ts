@@ -44,6 +44,7 @@ const ORG_B = "eeeeeeee-0000-4000-8000-00000000000b";
 const MANAGER_A = "eeeeeeee-1111-4000-8000-00000000000a";
 const AGENT_A = "eeeeeeee-1111-4000-8000-00000000000c";
 const MANAGER_B = "eeeeeeee-1111-4000-8000-00000000000b";
+const VIEWER_A = "eeeeeeee-1111-4000-8000-00000000000d";
 const CLIENTE = "eeeeeeee-2222-4000-8000-00000000000a"; // é do funil
 const EQUIPE = "eeeeeeee-2222-4000-8000-00000000000b"; // vai ser marcado
 const LEAD_CLIENTE = "eeeeeeee-3333-4000-8000-00000000000a";
@@ -70,7 +71,8 @@ beforeAll(() => {
     insert into auth.users (id, email) values
       ('${MANAGER_A}', 'fdf-mgr-a@invariant.test'),
       ('${AGENT_A}',   'fdf-agent-a@invariant.test'),
-      ('${MANAGER_B}', 'fdf-mgr-b@invariant.test')
+      ('${MANAGER_B}', 'fdf-mgr-b@invariant.test'),
+      ('${VIEWER_A}',  'fdf-viewer-a@invariant.test')
       on conflict (id) do nothing;
     insert into public.organizations (id, slug, legal_name, display_name) values
       ('${ORG_A}', 'fdf-inv-a', 'FDF Invariant A', 'FDF A'),
@@ -79,7 +81,8 @@ beforeAll(() => {
     insert into public.user_organizations (user_id, organization_id, role, accepted_at) values
       ('${MANAGER_A}', '${ORG_A}', 'manager', now()),
       ('${AGENT_A}',   '${ORG_A}', 'agent',   now()),
-      ('${MANAGER_B}', '${ORG_B}', 'manager', now())
+      ('${MANAGER_B}', '${ORG_B}', 'manager', now()),
+      ('${VIEWER_A}',  '${ORG_A}', 'viewer',  now())
       on conflict do nothing;
     insert into public.contacts (id, organization_id, display_name) values
       ('${CLIENTE}', '${ORG_A}', 'Cliente de Verdade'),
@@ -136,6 +139,45 @@ describe("tipos_fora_do_funil: quem lê, quem escreve, isolamento", () => {
     expect(() =>
       sql(`update public.contacts set fora_do_funil_em = now(), fora_do_funil_tipo_id = '${TIPO_A}' where id = '${EQUIPE}';`),
     ).not.toThrow();
+  });
+});
+
+describe("quem pode escrever o marcador (a coluna é gravável por PostgREST, então o banco decide)", () => {
+  const marcarComo = (usuario: string) =>
+    comoUsuario(usuario, `update public.contacts set fora_do_funil_em = now() where id = '${EQUIPE}';`);
+
+  it("viewer NÃO marca, nem por escrita direta; o contato continua do funil", () => {
+    expect(() => marcarComo(VIEWER_A)).toThrow(/fora do funil/);
+    expect(sql(`select fora_do_funil_em is null from public.contacts where id = '${EQUIPE}';`)).toBe("t");
+  });
+
+  it("atendente marca e desmarca (a decisão do dono: agent+)", () => {
+    expect(() => marcarComo(AGENT_A)).not.toThrow();
+    expect(sql(`select fora_do_funil_em is not null from public.contacts where id = '${EQUIPE}';`)).toBe("t");
+    desmarcar(EQUIPE);
+  });
+
+  it("tipo de OUTRA organização é recusado pelo banco, mesmo sem passar pela API", () => {
+    expect(() =>
+      sql(`update public.contacts set fora_do_funil_em = now(), fora_do_funil_tipo_id = '${TIPO_B}' where id = '${EQUIPE}';`),
+    ).toThrow(/nao e desta organizacao/);
+    expect(sql(`select fora_do_funil_em is null from public.contacts where id = '${EQUIPE}';`)).toBe("t");
+  });
+
+  it("escrever o ESPELHO à mão é desfeito: ele sempre vem do contato", () => {
+    sql(`update public.crm_leads set fora_do_funil = true where id = '${LEAD_CLIENTE}';`);
+    expect(foraDoFunilDoLead(LEAD_CLIENTE)).toBe("f");
+    marcar(EQUIPE);
+    sql(`update public.crm_leads set fora_do_funil = false where id = '${LEAD_EQUIPE}';`);
+    expect(foraDoFunilDoLead(LEAD_EQUIPE)).toBe("t");
+    desmarcar(EQUIPE);
+  });
+
+  it("a função da guarda não é executável por anon nem por authenticated", () => {
+    expect(
+      sql(`select has_function_privilege('authenticated', 'public.fn_guarda_marcador_fora_do_funil()', 'execute')
+             or has_function_privilege('anon', 'public.fn_guarda_marcador_fora_do_funil()', 'execute');`),
+    ).toBe("f");
   });
 });
 

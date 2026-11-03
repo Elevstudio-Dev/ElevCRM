@@ -15,14 +15,15 @@ const EU = "user-1";
 type Linha = Record<string, unknown>;
 let tabelas: { contacts: Linha[]; crm_leads: Linha[] };
 
-function dublê() {
+/** `ver`: o que a RLS deixaria ESTE cliente enxergar (o atendente só lê os negócios dele e os sem dono). */
+function dublê(ver: (l: Linha) => boolean = () => true) {
   return {
     from(nome: "contacts" | "crm_leads") {
       let filtros: Array<(l: Linha) => boolean> = [];
       let patch: Linha | null = null;
       let teto: number | null = null;
       const executa = () => {
-        const alvo = tabelas[nome].filter((l) => filtros.every((f) => f(l)));
+        const alvo = tabelas[nome].filter((l) => ver(l) && filtros.every((f) => f(l)));
         if (patch) {
           for (const l of alvo) Object.assign(l, patch);
           return { data: null, error: null };
@@ -63,7 +64,9 @@ const contato = (id: string, org = ORG, fora: string | null = null): Linha => ({
   fora_do_funil_tipo_id: null,
   fora_do_funil_por: null,
 });
+let seq = 0;
 const negocio = (contact: string, status: string, over: Linha = {}): Linha => ({
+  id: `n${++seq}`,
   organization_id: ORG,
   contact_id: contact,
   status,
@@ -121,6 +124,44 @@ describe("previaDoMarcador — o que o diálogo mostra antes de confirmar", () =
   });
 });
 
+describe("previaDoMarcador — atendente que não enxerga todos os negócios do contato", () => {
+  // O gatilho do banco esconde TODOS os negócios do contato; a RLS só mostra ao atendente os dele.
+  const soOsDele = (l: Linha) => l.owner_user_id === EU || l.owner_user_id === undefined || l.owner_user_id === null;
+
+  it("conta pelo cliente que vê tudo: o diálogo não promete menos do que sai", async () => {
+    tabelas.crm_leads = [
+      negocio("a", "open", { owner_user_id: EU }),
+      negocio("a", "open", { owner_user_id: "outro" }),
+      negocio("a", "open", { owner_user_id: "outro" }),
+    ];
+    const subconta = await previaDoMarcador(dublê(soOsDele), ORG, ["a"], true);
+    expect(subconta.negocios.abertos).toBe(1); // só o cliente da sessão: era o defeito
+    const p = await previaDoMarcador(dublê(soOsDele), ORG, ["a"], true, dublê());
+    expect(p.negocios.abertos).toBe(3);
+  });
+
+  it("venda ganha de outro dono: conta, mas o VALOR some (o atendente não lê o valor do negócio alheio)", async () => {
+    tabelas.crm_leads = [
+      negocio("a", "won", { owner_user_id: EU, value_cents: 100_000 }),
+      negocio("a", "won", { owner_user_id: "outro", value_cents: 900_000 }),
+    ];
+    const p = await previaDoMarcador(dublê(soOsDele), ORG, ["a"], true, dublê());
+    expect(p.negocios.ganhos).toBe(2);
+    expect(p.valor_parcial).toBe(true);
+    expect(p.negocios.valor_ganho_cents).toBe(0);
+  });
+
+  it("quem vê todas as vendas (gestor) continua vendo o valor inteiro", async () => {
+    tabelas.crm_leads = [
+      negocio("a", "won", { owner_user_id: EU, value_cents: 100_000 }),
+      negocio("a", "won", { owner_user_id: "outro", value_cents: 900_000 }),
+    ];
+    const p = await previaDoMarcador(dublê(), ORG, ["a"], true, dublê());
+    expect(p.valor_parcial).toBe(false);
+    expect(p.negocios.valor_ganho_cents).toBe(1_000_000);
+  });
+});
+
 describe("aplicarMarcador", () => {
   it("marcar grava quando, quem e o tipo — e devolve só quem de fato mudou", async () => {
     const r = await aplicarMarcador(dublê(), { organizationId: ORG, userId: EU, contactIds: ["a", "c"], marcar: true, tipoId: "tipo-1" });
@@ -138,6 +179,13 @@ describe("aplicarMarcador", () => {
     expect(c.fora_do_funil_em).toBe("2026-10-01T00:00:00Z");
     expect(c.fora_do_funil_por).toBeNull();
     expect(c.fora_do_funil_tipo_id).toBe("tipo-2");
+  });
+
+  it("seleção mista marcada SEM tipo (null): quem já tinha tipo o mantém, quem passa a ficar marcado fica sem tipo", async () => {
+    tabelas.contacts.find((x) => x.id === "c")!.fora_do_funil_tipo_id = "tipo-9";
+    await aplicarMarcador(dublê(), { organizationId: ORG, userId: EU, contactIds: ["a", "c"], marcar: true, tipoId: null });
+    expect(tabelas.contacts.find((x) => x.id === "c")!.fora_do_funil_tipo_id).toBe("tipo-9");
+    expect(tabelas.contacts.find((x) => x.id === "a")!.fora_do_funil_tipo_id).toBeNull();
   });
 
   it("sem tipo no pedido (undefined), quem já estava marcado NÃO perde o tipo", async () => {

@@ -11,6 +11,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { previaDoMarcador } from "@/lib/contatos/fora-do-funil";
 import { previaForaDoFunilSchema } from "@/lib/schemas/fora-do-funil";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       authz.org.orgId,
       parsed.data.contact_ids,
       parsed.data.marcar,
+      createAdminClient(),
     );
     return ok(previa, { requestId });
   } catch (err) {

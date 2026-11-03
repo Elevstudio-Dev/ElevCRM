@@ -112,7 +112,8 @@ begin
   else
     select (c.fora_do_funil_em is not null) into new.fora_do_funil
       from public.contacts c
-     where c.id = new.contact_id and c.organization_id = new.organization_id;
+     where c.id = new.contact_id and c.organization_id = new.organization_id
+     for share of c; -- espera quem está marcando o contato agora, em vez de ler o valor antigo
     new.fora_do_funil := coalesce(new.fora_do_funil, false);
   end if;
   return new;
@@ -123,8 +124,45 @@ revoke execute on function public.fn_lead_herda_fora_do_funil() from anon, authe
 
 drop trigger if exists trg_crm_leads_herdam_fora_do_funil on public.crm_leads;
 create trigger trg_crm_leads_herdam_fora_do_funil
-  before insert or update of contact_id on public.crm_leads
+  before insert or update of contact_id, fora_do_funil on public.crm_leads
   for each row execute function public.fn_lead_herda_fora_do_funil();
+-- (A coluna `fora_do_funil` também dispara: escrever o espelho à mão é desfeito na hora; ele sempre vem do contato.)
+
+-- Quem escreve o MARCADOR no contato: só atendente+ (o contato é gravável por qualquer membro via PostgREST, e esta
+-- marca cala a IA e esconde negócios), e o tipo tem de ser da MESMA organização (a API já valida; o banco também).
+create or replace function public.fn_guarda_marcador_fora_do_funil() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.fora_do_funil_em is null and new.fora_do_funil_tipo_id is null and new.fora_do_funil_por is null then
+      return new;
+    end if;
+  elsif (new.fora_do_funil_em, new.fora_do_funil_tipo_id, new.fora_do_funil_por)
+        is not distinct from (old.fora_do_funil_em, old.fora_do_funil_tipo_id, old.fora_do_funil_por) then
+    return new;
+  end if;
+
+  if auth.uid() is not null
+     and not public.fn_role_at_least(new.organization_id, 'agent')
+     and not public.fn_is_platform_admin() then
+    raise exception 'sem permissao para marcar contato como fora do funil' using errcode = '42501';
+  end if;
+
+  if new.fora_do_funil_tipo_id is not null and not exists (
+       select 1 from public.tipos_fora_do_funil t
+        where t.id = new.fora_do_funil_tipo_id and t.organization_id = new.organization_id) then
+    raise exception 'o tipo de fora do funil nao e desta organizacao' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+
+revoke all on function public.fn_guarda_marcador_fora_do_funil() from public;
+revoke execute on function public.fn_guarda_marcador_fora_do_funil() from anon, authenticated;
+
+drop trigger if exists trg_contacts_guardam_marcador_fora_do_funil on public.contacts;
+create trigger trg_contacts_guardam_marcador_fora_do_funil
+  before insert or update of fora_do_funil_em, fora_do_funil_tipo_id, fora_do_funil_por on public.contacts
+  for each row execute function public.fn_guarda_marcador_fora_do_funil();
 
 -- Desempenho por atendente: o funil e os ganhos/perdidos ignoram quem está fora do funil.
 create or replace function public.fn_attendant_metrics(

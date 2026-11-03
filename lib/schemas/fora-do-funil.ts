@@ -63,4 +63,6 @@ export interface PreviaDoMarcador {
   };
   /** Mais de 1.000 negócios: a contagem é um piso. */
   aproximado: boolean;
+  /** Há venda ganha que quem pediu não enxerga (negócio de outro dono): o valor some em vez de sair incompleto. */
+  valor_parcial?: boolean;
 }
