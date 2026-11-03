@@ -163,6 +163,7 @@ jobs:
     # faz: 6,5 + 8,1 min em vez de 2,7 + 12,2.
     env:
       SPECS_PARTE_1: >-
+        marcar-com-arroba.spec.ts
         smoke.spec.ts auth.spec.ts error-pages.spec.ts
         icone-da-marca.spec.ts
         password-recovery.spec.ts signup-journey.spec.ts

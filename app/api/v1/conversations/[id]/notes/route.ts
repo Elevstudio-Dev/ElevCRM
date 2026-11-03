@@ -11,13 +11,14 @@ import { type NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { mencaoAtingeUsuario, tokensDeMencao } from "@/lib/notifications/mentions";
+import { emitirMencoes } from "@/lib/mencoes/avisar";
+import { marcaveisDaConversa } from "@/lib/mencoes/marcaveis";
+import { avisadosPeloTexto, resolverMencoes } from "@/lib/mencoes/servidor";
 import { createNoteSchema } from "@/lib/schemas/notes";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-const COLS = "id, conversation_id, body, created_by_user_id, created_by_name, created_at";
+const COLS = "id, conversation_id, body, mentions, created_by_user_id, created_by_name, created_at";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -74,12 +75,23 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
     });
   }
 
+  // QUEM PODE SER MARCADO vem do banco (quem enxerga esta conversa), nunca do
+  // corpo. A marcação que o navegador pediu só vale para quem está nessa lista.
+  const marcaveis = await marcaveisDaConversa(org.orgId, id);
+  const { gravar, avisar, recusadas } = resolverMencoes({
+    texto: parsed.data.body,
+    pedidas: parsed.data.mentions,
+    marcaveis,
+    autorId: user.id,
+  });
+
   const { data, error } = await supabase
     .from("conversation_notes")
     .insert({
       organization_id: org.orgId,
       conversation_id: id,
       body: parsed.data.body,
+      mentions: gravar,
       created_by_user_id: user.id,
       created_by_name: user.full_name ?? null,
     })
@@ -94,53 +106,21 @@ export async function POST(req: NextRequest, { params }: RouteParams): Promise<R
     resourceType: "conversation_note",
     resourceId: data.id,
     requestId,
-    metadata: { conversation_id: id },
+    // Só contagens: o texto da nota e os nomes marcados não vão para a auditoria.
+    metadata: { conversation_id: id, mencoes: gravar.length, mencoes_recusadas: recusadas },
   });
-  void emitirMencoesDaNota({
+  // Havendo marcação guardada, ELA manda em quem é avisado (o texto `@Ana` casaria
+  // com duas Anas; a marcação sabe qual foi escolhida). Sem ela, vale o que a nota
+  // sempre fez — o texto digitado à mão —, agora só entre quem vê a conversa.
+  void emitirMencoes({
     organizationId: org.orgId,
-    conversationId: id,
-    body: parsed.data.body,
+    entityKind: "conversation_note",
+    entityId: data.id,
+    avisar:
+      gravar.length > 0 ? avisar : avisadosPeloTexto({ texto: parsed.data.body, marcaveis, autorId: user.id }),
     fromUserId: user.id,
+    destino: { conversation_id: id },
+    texto: parsed.data.body,
   });
   return ok(data, { requestId, status: 201 });
-}
-
-async function emitirMencoesDaNota(input: {
-  organizationId: string;
-  conversationId: string;
-  body: string;
-  fromUserId: string;
-}): Promise<void> {
-  if (tokensDeMencao(input.body).length === 0) return;
-  const admin = createAdminClient();
-  const { data: members } = await admin
-    .from("user_organizations")
-    .select("user_id")
-    .eq("organization_id", input.organizationId)
-    .is("revoked_at", null);
-  const ids = ((members ?? []) as Array<{ user_id: string }>).map((m) => m.user_id).filter((id) => id !== input.fromUserId);
-  const preview = input.body.trim().slice(0, 140);
-  await Promise.all(
-    ids.map(async (userId) => {
-      const { data: userRes } = await admin.auth.admin.getUserById(userId);
-      const u = userRes?.user;
-      if (!u?.email) return;
-      const fullName =
-        (typeof u.user_metadata?.full_name === "string" ? u.user_metadata.full_name : null) ?? null;
-      if (!mencaoAtingeUsuario(input.body, { id: userId, email: u.email, full_name: fullName })) return;
-      await admin.rpc("emit_event", {
-        p_event_type: "user.mentioned",
-        p_entity_kind: "conversation_note",
-        p_entity_id: input.conversationId,
-        p_payload: {
-          conversation_id: input.conversationId,
-          to_user_id: userId,
-          from_user_id: input.fromUserId,
-          body_preview: preview,
-        },
-        p_metadata: {},
-        p_organization_id: input.organizationId,
-      });
-    }),
-  );
 }

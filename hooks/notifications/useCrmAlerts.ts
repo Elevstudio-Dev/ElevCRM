@@ -5,7 +5,7 @@ import { useCallback } from "react";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { entregarAviso } from "@/lib/notifications/deliver";
-import { mencaoAtingeUsuario } from "@/lib/notifications/mentions";
+import { notaMarcaUsuario } from "@/lib/mencoes/atinge";
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
@@ -89,10 +89,10 @@ export function useCrmAlerts(): void {
       if (author === user.id) return;
       const body = str(novo.body) ?? "";
       if (
-        !mencaoAtingeUsuario(body, {
-          id: user.id,
-          email: user.email,
-          full_name: user.full_name,
+        !notaMarcaUsuario({
+          mentions: novo.mentions,
+          body,
+          user: { id: user.id, email: user.email, full_name: user.full_name },
         })
       ) {
         return;

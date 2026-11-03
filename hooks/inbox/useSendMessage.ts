@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import type { Mencao } from "@/lib/mencoes/tipos";
 import type { Message } from "@/lib/types/messaging";
 
 interface SendArgs {
@@ -23,6 +24,11 @@ interface SendArgs {
   /** A mensagem citada — id da NOSSA linha; o handler traduz para o do canal. */
   reply_to_message_id?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Quem o texto marca com `@` num GRUPO de WhatsApp (participantes ou `@todos`). O servidor troca o
+   * `@Nome` do texto por `@<número>` na hora de enviar — a bolha daqui continua dizendo o nome.
+   */
+  mentions?: Mencao[];
 }
 
 interface MessagesPage {
@@ -67,7 +73,8 @@ export function useSendMessage() {
         sent_at: new Date().toISOString(),
         delivered_at: null,
         read_at: null,
-        metadata: { _optimistic: true },
+        // A bolha otimista já mostra o nome marcado em destaque, como a que volta do servidor.
+        metadata: { _optimistic: true, ...(args.mentions?.length ? { mentions: args.mentions } : {}) },
         // Mensagem que acaba de sair não foi editada nem apagada — mas os
         // campos precisam existir: sem eles o otimista não é do mesmo tipo do
         // que volta do servidor, e a bolha passaria a renderizar dois formatos.
