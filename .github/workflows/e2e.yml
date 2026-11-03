@@ -172,6 +172,7 @@ jobs:
         kanban-owner-filter.spec.ts queue-assign.spec.ts
         funil-rolagem.spec.ts
         funil-conversa-ao-lado.spec.ts
+        mensagem-longa-nao-estoura-a-tela.spec.ts
         funil-kanban-visual.spec.ts
         funil-card-mais-util.spec.ts
         relatorios-e-qr-codes.spec.ts
