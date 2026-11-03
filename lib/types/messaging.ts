@@ -122,11 +122,39 @@ export interface Note {
 }
 
 /**
- * Mapeia ack do WAHA (0..3) para o status canônico em messages.status.
- * 0=pending/sent server-side, 1=server-confirmed, 2=delivered (device), 3=read.
+ * O que a mensagem grava quando o WAHA devolve ack -1 (ERROR).
+ *
+ * Código PRÓPRIO, e não `send_timeout`: o `send_timeout` é o carimbo do cron
+ * `recover-stuck-messages` ("passaram 5 min e ninguém confirmou") e diz que o
+ * silêncio foi nosso. Aqui não houve silêncio — o WhatsApp respondeu, e a
+ * resposta foi erro. Dar o mesmo nome aos dois esconde de quem investiga qual
+ * dos dois aconteceu (foi exatamente o que escondeu o defeito em grupos).
+ *
+ * O texto descreve o que o CRM SABE (o WhatsApp não confirmou o envio) e não
+ * afirma por quê: o motivo do -1 não vem no evento.
+ */
+export const ACK_ERRO_DO_CANAL = {
+  code: "waha_ack_error",
+  message:
+    "O WhatsApp não confirmou este envio: devolveu erro para a mensagem. Confira no celular se o cliente recebeu e, se não, envie de novo.",
+} as const;
+
+/**
+ * Mapeia o ack do WAHA para o status canônico em messages.status.
+ *
+ *   -1 ERROR   → failed   (o WhatsApp recusou; NÃO é "enviando")
+ *    0 PENDING → sending
+ *    1 SERVER  → sent
+ *    2 DEVICE  → delivered
+ *    3 READ    → read
+ *    4 PLAYED  → read      (áudio/vídeo ouvido: mais que lido)
+ *
+ * Qualquer valor negativo é falha. Antes, o -1 caía no último `return` e virava
+ * "sending": o relógio rodava até o cron inventar um `send_timeout`.
  */
 export function ackToStatus(ack: number | null | undefined): Message["status"] {
   if (ack == null) return "sent";
+  if (ack < 0) return "failed";
   if (ack >= 3) return "read";
   if (ack >= 2) return "delivered";
   if (ack >= 1) return "sent";

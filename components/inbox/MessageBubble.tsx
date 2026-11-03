@@ -12,7 +12,7 @@ import { lerMencoes } from "@/lib/mencoes/atinge";
 import { nomearMencoesDeEntrada } from "@/lib/mencoes/entrada";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Message } from "@/lib/types/messaging";
+import { ACK_ERRO_DO_CANAL, type Message } from "@/lib/types/messaging";
 import { CitationButton } from "@/components/ai/CitationButton";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
@@ -482,7 +482,10 @@ export function MessageBubble({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {message.error_message ?? message.error_code ?? t("Erro desconhecido")}
+                  {message.error_code === ACK_ERRO_DO_CANAL.code
+                    ? // Texto fixo e traduzido: o gravado no banco é só português.
+                      t("O WhatsApp não confirmou este envio: devolveu erro para a mensagem. Confira no celular se o cliente recebeu e, se não, envie de novo.")
+                    : (message.error_message ?? message.error_code ?? t("Erro desconhecido"))}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

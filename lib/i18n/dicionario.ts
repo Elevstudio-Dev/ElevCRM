@@ -4146,6 +4146,10 @@ export const DICIONARIO: Traducoes = {
   editada: { es: "editado" },
   "O autor editou esta mensagem": { es: "El autor editó este mensaje" },
   "Erro desconhecido": { es: "Error desconocido" },
+  "O WhatsApp não confirmou este envio: devolveu erro para a mensagem. Confira no celular se o cliente recebeu e, se não, envie de novo.":
+    {
+      es: "WhatsApp no confirmó este envío: devolvió un error para el mensaje. Revisa en el celular si el cliente lo recibió y, si no, envíalo de nuevo.",
+    },
   "Você passa a responder esta conversa e o atendimento automático para aqui.": {
     es: "Pasas a responder esta conversación y la atención automática se detiene aquí.",
   },
