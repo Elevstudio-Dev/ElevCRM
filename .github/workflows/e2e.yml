@@ -443,9 +443,20 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # VERSÃO FIXA, e não `latest` — por causa de 2026-11-02.
+      #
+      # Com `latest`, o CLI resolveu para a 3.0.0 (publicada em 02/11) e o `supabase start` passou a
+      # sair com 1 antes de qualquer teste: "[inbucket] in supabase/config.toml is no longer supported.
+      # Use [local_smtp] instead". Os dois jobs do E2E (e o agregador) ficaram vermelhos em TODO PR,
+      # por uma mudança que nenhum PR fez — e o aviso vinha desde antes ("[inbucket] is deprecated and
+      # will be removed in v3"), no log verde de 27/10, sem ninguém ler.
+      #
+      # A 2.122.1 é a última 2.x e ainda aceita `[inbucket]` (só avisa). Para subir de versão: trocar
+      # `[inbucket]` por `[local_smtp]` em `supabase/config.toml`, rodar o Supabase local com o CLI novo
+      # e só então mudar este número — as duas coisas juntas, num PR só.
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: 2.122.1
 
       # Sobe Postgres + Auth (GoTrue) + PostgREST + Storage. Auth de verdade é
       # requisito: os specs de login exercitam o GoTrue, não um mock.
