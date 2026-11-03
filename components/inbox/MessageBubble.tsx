@@ -7,6 +7,9 @@ import { ArrowBendUpLeft, Check, Checks, Robot, ShareFat, WarningOctagon } from 
 import { useDeslizarParaResponder } from "@/hooks/inbox/useDeslizarParaResponder";
 import { foiEncaminhada, podeEncaminhar } from "@/lib/messaging/encaminhar";
 import { CitacaoResumo } from "@/components/inbox/CitacaoResumo";
+import { TextoComMencoes } from "@/components/mencoes/TextoComMencoes";
+import { lerMencoes } from "@/lib/mencoes/atinge";
+import { nomearMencoesDeEntrada } from "@/lib/mencoes/entrada";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/types/messaging";
@@ -50,6 +53,11 @@ interface Props {
    * seu bloco — assim quem renderiza uma sozinha não precisa saber desta regra.
    */
   primeiraDoGrupo?: boolean;
+  /**
+   * Num GRUPO: `dígitos → nome` dos participantes. Serve para mostrar o nome no lugar do `@<número>`
+   * que o WhatsApp entrega no corpo quando alguém marca outra pessoa.
+   */
+  nomesDeParticipantes?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -125,10 +133,18 @@ export function MessageBubble({
   onEncaminhar,
   selecao,
   primeiraDoGrupo = true,
+  nomesDeParticipantes,
 }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const isOutbound = message.direction === "outbound";
+  // A marcação que o CRM enviou (guardada) manda; a que CHEGOU vem como `@<número>` e ganha o nome do
+  // participante quando se sabe quem é.
+  const marcacoesGuardadas = lerMencoes(message.metadata?.mentions);
+  const textoNomeado =
+    marcacoesGuardadas.length === 0 && nomesDeParticipantes && message.body
+      ? nomearMencoesDeEntrada(message.body, nomesDeParticipantes)
+      : null;
   // Em seleção, a bolha só marca: responder e começar outro encaminhamento ficam de fora (os botões e
   // os gestos), senão tocar para marcar poderia abrir uma resposta.
   const emSelecao = Boolean(selecao);
@@ -401,7 +417,16 @@ export function MessageBubble({
             )}
 
             {message.body && !isContact && (
-              <p className="whitespace-pre-wrap break-words leading-snug">{message.body}</p>
+              <p className="leading-snug">
+                {/* Quem foi marcado com @ num grupo aparece em destaque. Na bolha de SAÍDA o texto
+                    herda a cor (o roxo da bolha esconderia um destaque em cor própria). Mensagem sem
+                    marcação — a imensa maioria — sai como texto puro, igual a antes. */}
+                <TextoComMencoes
+                  texto={textoNomeado?.texto ?? message.body}
+                  mencoes={textoNomeado?.mencoes ?? marcacoesGuardadas}
+                  tom={isOutbound ? "heranca" : "padrao"}
+                />
+              </p>
             )}
           </>
         )}

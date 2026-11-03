@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useCanaisDaEquipe, useChatInternoRealtime, type MensagemRecebida } from "@/hooks/chat-interno/useChatInterno";
 import { useT } from "@/hooks/i18n/useT";
 import { roleAtLeast } from "@/lib/auth/types";
+import { chatMarcaUsuario } from "@/lib/mencoes/atinge";
 import { ChatsCircle } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +33,11 @@ export function BotaoDoChat() {
   const aoReceber = useCallback(
     (m: MensagemRecebida) => {
       if (m.sender_user_id === user.id || aberto) return;
-      toast(m.sender_name ?? t("Equipe"), {
+      // Quem foi marcado (pelo nome ou pelo @todos) fica sabendo POR QUE o aviso é
+      // dele: "Ana marcou você" diz mais que "Ana" + um texto que talvez nem cite o nome.
+      const marcou = chatMarcaUsuario(m.mentions, user.id);
+      const autor = m.sender_name ?? t("Equipe");
+      toast(marcou ? `${autor} ${t("marcou você")}` : autor, {
         description: m.body.length > 120 ? `${m.body.slice(0, 117)}…` : m.body,
         action: {
           label: t("Abrir"),
