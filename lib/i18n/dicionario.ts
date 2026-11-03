@@ -468,6 +468,17 @@ export const DICIONARIO: Traducoes = {
   Tema: { es: "Tema" },
   Claro: { es: "Claro" },
   Escuro: { es: "Oscuro" },
+  // ─── Mensagem nossa que ficou na fila: o selo "Não saiu" (components/inbox/MessageBubble.tsx) ───
+  "Não saiu": { es: "No salió" },
+  "O número de WhatsApp está desconectado. A mensagem não foi enviada — se ele voltou, envie de novo.": {
+    es: "El número de WhatsApp está desconectado. El mensaje no se envió — si ya volvió, envíalo de nuevo.",
+  },
+  "O WhatsApp não está configurado neste servidor. A mensagem não foi enviada.": {
+    es: "WhatsApp no está configurado en este servidor. El mensaje no se envió.",
+  },
+  "A mensagem ficou na fila e ainda não saiu. Se ela não sair logo, envie de novo.": {
+    es: "El mensaje quedó en cola y aún no salió. Si no sale pronto, envíalo de nuevo.",
+  },
   // ─── Marcar alguém com @ (migration 0222) ───
   "Marcar alguém": { es: "Mencionar a alguien" },
   "Avisa quem está neste canal": { es: "Avisa a quien está en este canal" },
