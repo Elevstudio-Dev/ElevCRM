@@ -137,6 +137,31 @@ export interface OutboundEnvelope extends ChannelTenantScope {
    * `undefined` = envio solto, que é o caso comum.
    */
   replyToExternalId?: string | null;
+  /**
+   * Quem o texto MARCA num grupo — o endereço de cada pessoa no canal. O texto já vem com
+   * `@<número>` no lugar do nome (é o que o canal desenha como o nome da pessoa, em destaque, e
+   * faz o aparelho dela tocar); aqui vai só a lista de quem avisar.
+   *
+   * OPCIONAL e só vale para TEXTO em conversa de grupo. Canal que não sabe marcar ignora: a
+   * marcação é aviso, nunca condição de envio — recusar a mensagem inteira porque não sabe avisar
+   * alguém seria trocar a mensagem pelo aviso.
+   */
+  mentions?: ReadonlyArray<{ jid: string }>;
+  /** Marca o grupo inteiro (o `@todos`). Quem expande para os participantes é o canal. */
+  mentionAll?: boolean;
+}
+
+/** Quem está num grupo, no vocabulário do CRM (não do canal). */
+export interface GroupParticipant {
+  /** O endereço da pessoa no canal — é o que vai em `mentions` ao marcá-la. */
+  jid: string;
+  /**
+   * O telefone, só dígitos, quando o canal o diz. `null` para quem esconde o número (o
+   * identificador oculto do WhatsApp): sem telefone não há o que mostrar, e inventar um número a
+   * partir do identificador seria mostrar um número ERRADO.
+   */
+  phone: string | null;
+  admin: boolean;
 }
 
 /**
@@ -234,6 +259,20 @@ export interface ChannelAdapter {
   listGroups?(
     input: ChannelTenantScope & { sessionRef: string },
   ): Promise<Array<{ chatId: string; subject: string | null }>>;
+
+  /**
+   * Quem está num GRUPO — para a atendente escolher quem marcar com `@`.
+   *
+   * OPCIONAL pelo mesmo motivo de `listGroups`: canal sem grupo não implementa, e quem chama testa a
+   * presença do método em vez de perguntar QUAL provider é. `[]` quando o canal não responde — a
+   * lista vazia desliga o `@` no campo, que é o desfecho seguro.
+   *
+   * O NOME de cada pessoa não vem daqui: o canal só sabe o endereço. O CRM completa o nome com o que
+   * viu de cada participante nas mensagens do grupo.
+   */
+  listGroupParticipants?(
+    input: ChannelTenantScope & { sessionRef: string; groupChatId: string },
+  ): Promise<GroupParticipant[]>;
 
   /**
    * Gestão das definições aprovadas — criar, editar, apagar.

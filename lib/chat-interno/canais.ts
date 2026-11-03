@@ -2,6 +2,7 @@
  * CHAT INTERNO — o que é puro sobre canais: chave do par direto, nome de
  * exibição, contagem de não lidas. Migration 0214.
  */
+import type { Mencao } from "@/lib/mencoes/tipos";
 
 export type TipoDeCanal = "geral" | "setor" | "direto";
 
@@ -24,6 +25,8 @@ export interface MensagemDaEquipe {
   sender_user_id: string | null;
   sender_name: string | null;
   body: string;
+  /** Quem foi marcado com @ (migration 0222). Mensagem antiga: `[]`. */
+  mentions?: Mencao[];
   created_at: string;
 }
 

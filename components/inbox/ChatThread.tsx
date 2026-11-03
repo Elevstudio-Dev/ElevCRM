@@ -20,6 +20,8 @@ import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import { useDeleteNote } from "@/hooks/inbox/useDeleteNote";
 import { useDebugToggle } from "@/hooks/ai/useDebugToggle";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
+import { useParticipantesDoGrupo } from "@/hooks/mencoes/useParticipantesDoGrupo";
+import { nomesPorNumero } from "@/lib/mencoes/entrada";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { podeEncaminhar, TEXTO_DO_MOTIVO } from "@/lib/messaging/encaminhar";
 import type { Message, Note } from "@/lib/types/messaging";
@@ -35,6 +37,8 @@ interface Props {
    * quem monta (e não aqui) porque a barra de baixo e o diálogo precisam do mesmo conjunto.
    */
   selecao?: { ids: ReadonlySet<string>; aoAlternar: (m: Message) => void; maximo: number };
+  /** A conversa é um grupo de WhatsApp: o `@<número>` das mensagens que chegam ganha o nome do participante. */
+  ehGrupo?: boolean;
 }
 
 /** Onda 5.2: union de item do thread — mensagem real ou nota interna (nunca vai ao cliente). */
@@ -97,7 +101,7 @@ function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, loca
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder, onEncaminhar, selecao }: Props) {
+export function ChatThread({ conversationId, onResponder, onEncaminhar, selecao, ehGrupo = false }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
@@ -115,6 +119,18 @@ export function ChatThread({ conversationId, onResponder, onEncaminhar, selecao 
   const messages: Message[] = useMemo(
     () => q.data?.pages.flatMap((p) => p.data) ?? [],
     [q.data],
+  );
+
+  // O NOME de quem foi marcado numa mensagem que CHEGOU. Só se pergunta o grupo ao canal quando há
+  // `@<número>` na tela — a maioria dos grupos não tem, e a pergunta é uma ida ao transporte.
+  const temNumeroMarcado = useMemo(
+    () => ehGrupo && messages.some((m) => /(^|\s)@\d{5,20}(?![\p{L}\p{N}])/u.test(m.body ?? "")),
+    [ehGrupo, messages],
+  );
+  const participantes = useParticipantesDoGrupo(conversationId, temNumeroMarcado);
+  const nomesDeParticipantes = useMemo(
+    () => nomesPorNumero(participantes.data ?? []),
+    [participantes.data],
   );
 
   /**
@@ -340,6 +356,7 @@ export function ChatThread({ conversationId, onResponder, onEncaminhar, selecao 
                 <NoteCard
                   key={`note-${item.data.id}`}
                   note={item.data}
+                  euId={currentUser.id}
                   // Só o autor ou manager+ vê o excluir — o backend barra o resto (403),
                   // então não mostramos um botão que daria erro.
                   onDelete={
@@ -364,6 +381,7 @@ export function ChatThread({ conversationId, onResponder, onEncaminhar, selecao 
                   onEncaminhar={onEncaminhar}
                   selecao={selecao ? selecaoDaBolha(item.data, selecao, t) : undefined}
                   primeiraDoGrupo={primeiraDoGrupo}
+                  nomesDeParticipantes={nomesDeParticipantes}
                 />
               );
             })}
