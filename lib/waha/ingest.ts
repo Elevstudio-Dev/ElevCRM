@@ -20,7 +20,8 @@ import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { ackToStatus } from "@/lib/types/messaging";
+import { ACK_ERRO_DO_CANAL } from "@/lib/types/messaging";
+import { decidirAck } from "@/lib/waha/ack";
 import { getWahaClient } from "@/lib/waha/client";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
@@ -1082,15 +1083,13 @@ async function handleOutboundFromUserPhone(
   }
 }
 
+/** Quanto tempo um aviso aberto da mesma conversa silencia o seguinte (mesma ideia do cron irmão). */
+const JANELA_DO_AVISO_DE_ACK_MS = 15 * 60_000;
+
 async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promise<void> {
   if (!p.id) return;
   const ack = p.ack ?? 0;
-  const status = ackToStatus(ack);
   const now = new Date().toISOString();
-
-  const update: Record<string, unknown> = { ack, status };
-  if (ack >= 2) update.delivered_at = now;
-  if (ack >= 3) update.read_at = now;
 
   // O ack do WAHA 2026.x vem como `{fromMe}_{chatId}_{bareId}`. O NOWEB grava
   // `external_id` = bareId (id interno), o WEBJS grava o `_serialized` completo.
@@ -1098,11 +1097,129 @@ async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promis
   // inbound (que é full e sustenta o dedup 23505).
   const bare = bareWaMessageId(p.id);
   const candidates = bare === p.id ? [p.id] : [p.id, bare];
-  await admin
+
+  // LER antes de escrever: o ack é um evento e chega fora de ordem; o estado da
+  // mensagem só anda para a frente (ver `decidirAck`). Antes isto era um UPDATE
+  // cego, e um ack menor atrasado regredia "lido" para "enviada".
+  const { data: linhas, error: erroDeLeitura } = await admin
     .from("messages")
-    .update(update)
+    .select("id, conversation_id, direction, status, sent_via")
     .eq("organization_id", session.organization_id)
     .in("external_id", candidates);
+  if (erroDeLeitura) {
+    logger.warn("waha.ack: não deu para ler a mensagem", { detail: erroDeLeitura.message });
+    return;
+  }
+
+  for (const linha of (linhas ?? []) as Array<{
+    id: string;
+    conversation_id: string | null;
+    direction: string | null;
+    status: string | null;
+    sent_via: string | null;
+  }>) {
+    const decisao = decidirAck(linha, ack);
+    if (!decisao.aplicar) continue;
+
+    const update: Record<string, unknown> = { ack, status: decisao.status };
+    if (decisao.status === "delivered" || decisao.status === "read") update.delivered_at = now;
+    if (decisao.status === "read") update.read_at = now;
+    if (decisao.status === "failed") {
+      update.error_code = ACK_ERRO_DO_CANAL.code;
+      update.error_message = ACK_ERRO_DO_CANAL.message;
+      update.updated_at = now;
+    }
+    if (decisao.cura) {
+      // A prova de entrega desfaz a falha: o erro gravado deixou de ser verdade.
+      update.error_code = null;
+      update.error_message = null;
+    }
+
+    // Compare-and-set: só escreve se o status AINDA é o que foi lido. Sem isto,
+    // um ack maior gravado entre a leitura e a escrita seria pisado por este.
+    const { data: aplicadas, error } = await admin
+      .from("messages")
+      .update(update)
+      .eq("id", linha.id)
+      .eq("organization_id", session.organization_id)
+      .eq("status", linha.status ?? "")
+      .select("id");
+    if (error) {
+      logger.warn("waha.ack: update falhou", { detail: error.message, message_id: linha.id });
+      continue;
+    }
+    if (!aplicadas || aplicadas.length === 0) continue; // outro ack chegou primeiro
+
+    if (decisao.status === "failed") {
+      await anunciarFalhaPorAck(admin, session, linha);
+    }
+  }
+}
+
+/**
+ * O WhatsApp recusou o envio: alguém precisa SABER.
+ *
+ * Quando o -1 virava "sending", quem avisava era o cron `recover-stuck-messages`
+ * (evento `message.failed` + aviso na Central, 5 min depois). Agora a mensagem
+ * falha na hora e o cron não a toca mais — então o evento e o aviso passam a sair
+ * daqui, ou a falha ficaria só num ícone numa conversa que ninguém reabre.
+ *
+ * O trigger de eventos é AFTER INSERT: mudar o status não emite nada, por isso o
+ * evento é emitido à mão (regra W-12). O aviso é um por CONVERSA por janela: um
+ * grupo com várias mensagens recusadas não pode enterrar a Central.
+ */
+async function anunciarFalhaPorAck(
+  admin: Admin,
+  session: Session,
+  linha: { id: string; conversation_id: string | null; sent_via: string | null },
+): Promise<void> {
+  const { error: erroDoEvento } = await admin.rpc("emit_event" as never, {
+    p_event_type: "message.failed",
+    p_entity_kind: "message",
+    p_entity_id: linha.id,
+    p_payload: {
+      message_id: linha.id,
+      conversation_id: linha.conversation_id,
+      reason: ACK_ERRO_DO_CANAL.code,
+    },
+    p_metadata: { source: "waha_webhook_ack" },
+    p_organization_id: session.organization_id,
+  } as never);
+  if (erroDoEvento) {
+    logger.warn("waha.ack: emit message.failed falhou", { detail: erroDoEvento.message, message_id: linha.id });
+  }
+
+  // Mensagem digitada no celular não é "resposta do CRM que não chegou": a tela
+  // mostra a falha, mas não abre alerta crítico.
+  if (linha.sent_via === "external_device" || !linha.conversation_id) return;
+
+  const desde = new Date(Date.now() - JANELA_DO_AVISO_DE_ACK_MS).toISOString();
+  const { data: jaAvisado, error: erroDaBusca } = await admin
+    .from("agent_inbox_items")
+    .select("id")
+    .eq("organization_id", session.organization_id)
+    .eq("kind", "message_send_stuck")
+    .eq("status", "open")
+    .eq("ref_id", linha.conversation_id)
+    .gte("created_at", desde)
+    .limit(1);
+  // Falha ABERTA: se a checagem de ruído quebrou, o aviso sai.
+  if (!erroDaBusca && jaAvisado && jaAvisado.length > 0) return;
+
+  const { error } = await admin.from("agent_inbox_items").insert({
+    organization_id: session.organization_id,
+    kind: "message_send_stuck",
+    severity: "critical",
+    title: "Uma resposta não chegou ao cliente",
+    body:
+      "O WhatsApp não confirmou o envio de uma mensagem e devolveu erro. " +
+      "Confira no celular se o cliente recebeu. Nada foi reenviado automaticamente — reenviar sem saber a causa arrisca mandar a mesma mensagem duas vezes.",
+    ref_kind: "conversation",
+    ref_id: linha.conversation_id,
+  });
+  if (error) {
+    logger.error("waha.ack: aviso de envio recusado não entrou na Central", { detail: error.message });
+  }
 }
 
 interface SessionStatusRow extends Session {

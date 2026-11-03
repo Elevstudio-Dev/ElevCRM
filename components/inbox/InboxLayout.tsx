@@ -265,7 +265,13 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     <OpenConversationProvider conversationId={selectedId}>
     <div
       data-tela-cheia=""
-      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[300px_1fr_320px] 2xl:grid-cols-[340px_1fr_340px]"
+      // `minmax(0,1fr)` e NÃO `1fr`: `1fr` é `minmax(auto, 1fr)`, e `auto` no mínimo quer dizer "nunca
+      // menos que o conteúdo". Uma palavra sem espaço — o link de um convite, de 800 caracteres — é o
+      // conteúdo mais largo que existe: a coluna da conversa crescia até ela caber, e o painel do
+      // contato ia parar a milhares de pixels da borda, cortado sem barra de rolagem
+      // (`tests/e2e/mensagem-longa-nao-estoura-a-tela.spec.ts`). Com o mínimo em 0 a coluna divide o
+      // espaço que sobra, e o texto é quem quebra.
+      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -334,7 +340,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       */}
       <div
         className={cn(
-          "h-full min-h-0 flex-col md:flex",
+          // `min-w-0`: o item de grade também tem mínimo `auto`; sem isto o conteúdo vazaria da faixa
+          // mesmo com `minmax(0,1fr)` na grade.
+          "h-full min-h-0 min-w-0 flex-col md:flex",
           colunas.conversa,
         )}
       >
