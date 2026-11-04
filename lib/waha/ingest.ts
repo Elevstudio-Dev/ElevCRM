@@ -1111,6 +1111,9 @@ async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promis
     return;
   }
 
+  // O id composto do ack carrega o chat (`{fromMe}_{chatId}_{bareId}`): `@g.us` = grupo.
+  const grupo = chatIdFromWaMessageId(p.id)?.endsWith("@g.us") ?? false;
+
   for (const linha of (linhas ?? []) as Array<{
     id: string;
     conversation_id: string | null;
@@ -1118,7 +1121,7 @@ async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promis
     status: string | null;
     sent_via: string | null;
   }>) {
-    const decisao = decidirAck(linha, ack);
+    const decisao = decidirAck({ ...linha, grupo }, ack);
     if (!decisao.aplicar) continue;
 
     const update: Record<string, unknown> = { ack, status: decisao.status };
