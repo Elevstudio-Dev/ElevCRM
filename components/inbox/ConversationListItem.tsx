@@ -224,23 +224,22 @@ export function ConversationListItem({
       data-conversation-id={conversation.id}
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        // O DIVISOR SAIU DAQUI e foi para o bloco de texto (abaixo): assim ele
-        // começa DEPOIS do avatar, como no WhatsApp. Divisor cortando a linha
-        // inteira empilha retângulos; começando no texto, ele lê como uma lista
-        // de pessoas.
-        "group flex w-full items-start gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/40",
-        isSelected && "bg-accent/60",
+        // SEM DIVISOR, como o WhatsApp Web de hoje: a separação entre uma conversa e outra é o respiro,
+        // e a conversa aberta ganha um BLOCO arredondado (não uma faixa de ponta a ponta). Divisor
+        // empilha retângulos; bloco e respiro leem como uma lista de pessoas.
+        "group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/40",
+        isSelected && "bg-accent/70",
       )}
       aria-current={isSelected ? "true" : undefined}
     >
       <div className="relative shrink-0">
-        {/* 48px: é o tamanho que o WhatsApp usa, e o rosto é o que a pessoa
+        {/* 52px: o tamanho do avatar do WhatsApp Web, e o rosto é o que a pessoa
             procura primeiro numa lista de conversa. */}
         <AvatarDoContato
           contato={c}
           nome={displayName}
           reserva={phoneFallback}
-          className="h-12 w-12"
+          className="h-[52px] w-[52px]"
         />
         <span
           className={cn(
@@ -251,7 +250,7 @@ export function ConversationListItem({
         />
       </div>
 
-      <div className="min-w-0 flex-1 border-b border-border pb-2">
+      <div className="min-w-0 flex-1">
         {/*
           A POSIÇÃO NA FILA DESCEU. Ela ocupava a primeira linha, acima do nome,
           e empurrava para baixo justamente o que se procura numa lista de
@@ -263,7 +262,7 @@ export function ConversationListItem({
           <span className="flex min-w-0 items-center gap-1.5">
             <span
               className={cn(
-                "truncate text-[15px] font-medium",
+                "truncate text-base font-medium",
                 c?.is_anonymized && "italic text-muted-foreground",
               )}
             >
@@ -348,7 +347,12 @@ export function ConversationListItem({
                 <Badge
                   key={tag}
                   variant="secondary"
-                  className={cn("h-4 border-transparent px-1.5 text-[10px]", cor.fundo, cor.texto)}
+                  // A etiqueta como a do WhatsApp Business: pequena, em CAIXA ALTA, canto quase reto.
+                  className={cn(
+                    "h-4 rounded-sm border-transparent px-1.5 text-[10px] font-semibold uppercase tracking-wide",
+                    cor.fundo,
+                    cor.texto,
+                  )}
                 >
                   {tag}
                 </Badge>

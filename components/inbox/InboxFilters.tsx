@@ -30,6 +30,8 @@ import { CLASSE_DE_COR } from "@/lib/marcadores/cores";
 import { cn } from "@/lib/utils";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 
+import { CabecalhoDaLista } from "./CabecalhoDaLista";
+
 export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "ai" | "grupos";
 
 const INBOX_TABS: { value: InboxTab; label: string }[] = [
@@ -96,7 +98,9 @@ const ChipDoInbox = forwardRef<
       type="button"
       aria-pressed={ativo}
       className={cn(
-        "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[13px] transition-colors",
+        // `px-2.5 text-[13px]`: com 4 chips + a seta, a linha tem de caber nos 328px úteis da coluna de
+        // 360px (medido: com `px-3 text-sm` a seta caía para a linha de baixo).
+        "inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[13px] transition-colors",
         "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
         ativo
           ? "border-transparent bg-success-bg font-medium text-success-fg"
@@ -206,6 +210,7 @@ function ImportarGrupos() {
 export function InboxFilters({ value, onChange }: Props) {
   const t = useT();
   const [searchInput, setSearchInput] = useState(value.search);
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
   const { data: setores } = useSetores();
   const { activeOrg } = useAuth();
@@ -265,21 +270,33 @@ export function InboxFilters({ value, onChange }: Props) {
   const temSeletores =
     showChannelSwitch || (setores?.length ?? 0) > 0 || (tagVocabulary?.length ?? 0) > 0;
 
+  // Os filtros de número, setor e tag vivem atrás do menu ⋮ do cabeçalho — fora do caminho enquanto
+  // não se usa, como no WhatsApp. Mas filtro LIGADO nunca fica escondido: com algum ativo a fileira
+  // aparece sozinha (era o defeito de antes, dito de outro jeito: lista filtrada sem nada que diga).
+  const filtroSecundarioAtivo = Boolean(value.channel_session_id || value.sector_id || value.tag);
+  const mostrarSeletores = temSeletores && (filtrosAbertos || filtroSecundarioAtivo);
+
   return (
-    <div className="space-y-2 border-b border-border bg-background px-3 py-2">
-      {/* A busca em pílula, como a do WhatsApp: fundo próprio, sem borda, canto todo redondo. */}
+    <div className="space-y-3 bg-background px-4 pb-2 pt-4">
+      <CabecalhoDaLista
+        temFiltros={temSeletores}
+        filtrosAbertos={mostrarSeletores}
+        onAlternarFiltros={() => setFiltrosAbertos((aberto) => !aberto)}
+      />
+
+      {/* A busca em pílula, como a do WhatsApp: fundo próprio, sem borda, canto todo redondo, e alta. */}
       <div className="relative">
         <MagnifyingGlass
-          size={16}
+          size={18}
           weight="regular"
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
           aria-hidden
         />
         <Input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder={t("Buscar por nome, telefone ou mensagem…")}
-          className="h-9 rounded-full border-transparent bg-muted pl-9 pr-4 text-sm hover:border-transparent"
+          className="h-11 rounded-full border-transparent bg-muted pl-11 pr-4 text-[15px] hover:border-transparent"
           aria-label={t("Buscar conversas")}
         />
       </div>
@@ -373,7 +390,7 @@ export function InboxFilters({ value, onChange }: Props) {
         </DropdownMenu>
       </div>
 
-      {temSeletores && (
+      {mostrarSeletores && (
         <div className="flex flex-wrap items-center gap-1.5">
           {showChannelSwitch && (
             <Select

@@ -110,6 +110,8 @@ export {
   Flag,
   // misc
   DotsThree,
+  // cabeçalho da lista do inbox (o menu ⋮ do WhatsApp)
+  DotsThreeVertical,
   CaretDown,
   CaretUp,
   CaretDoubleLeft,

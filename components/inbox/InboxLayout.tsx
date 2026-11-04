@@ -273,7 +273,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       // contato ia parar a milhares de pixels da borda, cortado sem barra de rolagem
       // (`tests/e2e/mensagem-longa-nao-estoura-a-tela.spec.ts`). Com o mínimo em 0 a coluna divide o
       // espaço que sobra, e o texto é quem quebra.
-      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full md:h-dvh grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]"
+      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full md:h-dvh grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px] 2xl:grid-cols-[400px_minmax(0,1fr)_340px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,

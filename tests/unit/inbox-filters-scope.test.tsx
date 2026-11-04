@@ -159,11 +159,22 @@ describe("InboxFilters — seletor de número e o filtro órfão", () => {
     expect(screen.queryByLabelText(SELETOR)).not.toBeInTheDocument();
   });
 
-  it("dois números: o seletor aparece com os dois", () => {
+  it("dois números: o seletor mora atrás do menu ⋮ do cabeçalho — e aparece com os dois", async () => {
     setOrg("manager", "all");
     canaisRef.current = [canal(), canal({ id: "canal-2", display_name: "Suporte" })];
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
+    // Fechado por padrão: o painel fica limpo como o do WhatsApp (guarda de vacuidade abaixo).
+    expect(screen.queryByLabelText(SELETOR)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("menu-da-lista"));
+    await userEvent.click(screen.getByTestId("alternar-filtros"));
     expect(screen.getByLabelText(SELETOR)).toBeInTheDocument();
+  });
+
+  it("sem nenhum filtro secundário para mostrar, o menu ⋮ não existe (controle que não faz nada não entra)", () => {
+    setOrg("manager", "all");
+    canaisRef.current = [canal()];
+    render(<InboxFilters value={VALUE} onChange={() => {}} />);
+    expect(screen.queryByTestId("menu-da-lista")).not.toBeInTheDocument();
   });
 
   /**
