@@ -26,6 +26,7 @@ import { getWahaClient } from "@/lib/waha/client";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
 import { nomearGrupoSeFaltar } from "@/lib/waha/nome-do-grupo";
+import { aplicarReciboDeGrupo } from "@/lib/waha/recibo-de-grupo";
 import { logger } from "@/lib/logger";
 
 export type Admin = ReturnType<typeof createAdminClient>;
@@ -1353,6 +1354,9 @@ export async function dispatchWahaEvent(
     }
   } else if (eventType === "message.ack") {
     await handleAck(admin, session, payload);
+  } else if (eventType === "message.ack.group") {
+    // Em GRUPO o recibo (entregue/lido) de cada participante vem aqui, não em `message.ack` (ver `recibo-de-grupo.ts`).
+    await aplicarReciboDeGrupo(admin, session, payload, getWahaClient());
   } else if (eventType === "message.edited") {
     await handleMessageEdited(admin, session, payload);
   } else if (eventType === "message.revoked") {

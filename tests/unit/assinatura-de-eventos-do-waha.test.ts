@@ -58,10 +58,18 @@ describe("a assinatura de eventos do canal por QR", () => {
     });
 
     it(`${arquivo}: os outros eventos continuam`, () => {
-      // O conserto não pode ter custado o resto: ack move o status, revoked e
+      // O conserto não pode ter custado o resto: ack move o status (e `message.ack.group` traz os recibos de
+      // entrega e leitura de GRUPO, que o NOWEB não manda em `message.ack`), revoked e
       // edited corrigem linha existente, e os dois de sessão são o que faz o
       // canal enxergar a própria queda.
-      for (const e of ["message.ack", "message.edited", "message.revoked", "session.status", "state.change"]) {
+      for (const e of [
+        "message.ack",
+        "message.ack.group",
+        "message.edited",
+        "message.revoked",
+        "session.status",
+        "state.change",
+      ]) {
         expect(linha, `sumiu ${e}`).toContain(e);
       }
     });
