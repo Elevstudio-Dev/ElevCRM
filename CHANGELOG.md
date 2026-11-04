@@ -8,6 +8,26 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.24.2] — 2026-11-04
+
+### Corrigido
+
+- **Os tiques de uma mensagem enviada a grupo passam a acompanhar o que o WhatsApp mostra** Em grupo, a mensagem ficava sempre com um tique só ("enviada"), mesmo quando as pessoas já tinham recebido e lido: o
+  WhatsApp avisa o CRM disso por um evento separado (recibo de grupo), que o CRM não estava escutando.
+
+  Agora o CRM escuta esse evento e a mensagem de grupo anda como no WhatsApp:
+
+  - **dois tiques cinza (entregue)**: alguém do grupo recebeu;
+  - **dois tiques azuis (lida)**: **todos** os outros participantes leram.
+
+  Limites: o WhatsApp só entrega esses avisos para quem tem a confirmação de leitura ligada, então quem a desligou nunca
+  conta como "leu" (a mensagem fica cinza). O WhatsApp também não informa de forma confiável quando a mensagem chegou a
+  **todos**: por isso "entregue" aparece quando **alguém** recebeu. Se o CRM não conseguir ler a lista de participantes do
+  grupo, a mensagem nunca fica azul (fica cinza). Mensagens enviadas antes desta versão não ganham os tiques de volta.
+
+  A atualização reinicia o conector do WhatsApp (o WAHA) para passar a assinar o evento novo: o WhatsApp reconecta sozinho
+  em instantes.
+
 ## [1.24.1] — 2026-11-04
 
 ### Corrigido
@@ -3083,7 +3103,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.1...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.2...HEAD
+[1.24.2]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.1...v1.24.2
 [1.24.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.0...v1.24.1
 [1.24.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.22.0...v1.23.0
