@@ -48,7 +48,9 @@ export function MarcaNaBarra({ className }: { className?: string }) {
       href="/app/inbox"
       data-marca-da-barra=""
       className={cn(
-        "flex h-9 min-w-0 items-center gap-2 rounded-md px-1.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+        // De `md` em diante a marca mora no alto da coluna lateral (64px): só o selo, e o logo da
+        // organização (quando há) pequeno logo abaixo; o NOME some (continua no `aria-label`).
+        "flex h-9 min-w-0 items-center gap-2 rounded-md px-1.5 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring md:h-auto md:flex-col md:gap-1.5 md:px-0 md:py-1",
         className,
       )}
       aria-label={nome}
@@ -70,9 +72,9 @@ export function MarcaNaBarra({ className }: { className?: string }) {
         // `min-w-0` a imagem passava por cima da busca em 320, 360, 375 e 390px; com ele,
         // `object-contain` a reduz dentro da caixa que sobrou.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt={nome} className="h-7 min-w-0 w-auto max-w-[6rem] object-contain md:max-w-[10rem]" />
+        <img src={logo} alt={nome} className="h-7 min-w-0 w-auto max-w-[6rem] object-contain md:h-6 md:max-w-10" />
       ) : (
-        <span className="max-w-[6rem] truncate font-heading font-semibold tracking-tight md:max-w-[12rem]">{nome}</span>
+        <span className="max-w-[6rem] truncate font-heading font-semibold tracking-tight md:sr-only">{nome}</span>
       )}
     </Link>
   );

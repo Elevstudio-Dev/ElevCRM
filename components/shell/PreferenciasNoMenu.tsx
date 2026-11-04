@@ -24,9 +24,8 @@ import { NOME_DO_IDIOMA, useTrocarDeIdioma } from "./SeletorDeIdioma";
  * com a recarga que o `SeletorDeIdioma` explica) e o tema vai pelo mesmo `setTheme` do
  * `ThemeToggle`. Só o desenho muda.
  *
- * `lg:hidden` e não "não renderiza": de `lg` em diante os botões da barra aparecem e esta
- * seção some, sem depender de medir a tela em JavaScript — o que daria divergência entre o
- * HTML do servidor e o do cliente.
+ * Aparece em TODA largura: desde que a navegação virou uma coluna lateral de 64px (de `md` em
+ * diante), os botões de idioma e tema não têm mais lugar solto na casca — só existem aqui.
  */
 export function PreferenciasNoMenu() {
   const t = useT();
@@ -40,7 +39,7 @@ export function PreferenciasNoMenu() {
   ];
 
   return (
-    <div className="lg:hidden" data-testid="preferencias-no-menu">
+    <div data-testid="preferencias-no-menu">
       <DropdownMenuLabel>{t("Idioma")}</DropdownMenuLabel>
       {IDIOMAS.map((codigo) => (
         <DropdownMenuItem

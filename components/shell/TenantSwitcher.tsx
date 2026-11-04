@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { setActiveOrg } from "@/app/actions/shell/setActiveOrg";
+import { useNaColunaLateral } from "@/hooks/shell/useNaColunaLateral";
 
 /**
  * O seletor só existe para quem pertence a mais de uma organização. A condição
@@ -25,6 +26,7 @@ export function TenantSwitcher() {
   const active = useActiveOrg();
   const [isPending, startTransition] = useTransition();
   const temSeletor = useTemSeletorDeOrganizacao();
+  const naColuna = useNaColunaLateral();
 
   if (!temSeletor) return null;
 
@@ -44,15 +46,23 @@ export function TenantSwitcher() {
           variant="ghost"
           size="sm"
           disabled={isPending}
-          className="min-w-14 gap-1.5 px-2 md:min-w-[4.25rem] md:gap-2 md:px-3"
+          // Na coluna lateral (`md+`) o seletor vira só o ícone num círculo — o nome da organização
+          // vai para o `title` e para o `sr-only`, como o das abas.
+          className="min-w-14 gap-1.5 px-2 md:h-11 md:w-11 md:min-w-0 md:rounded-full md:p-0"
+          title={active?.name ?? undefined}
           data-testid="tenant-switcher"
         >
-          <Storefront size={16} weight="duotone" aria-hidden />
-          <span className="max-w-[160px] truncate">{active?.name ?? "Selecionar org"}</span>
-          <CaretDown size={12} aria-hidden />
+          <Storefront size={16} weight="duotone" aria-hidden className="md:size-5" />
+          <span className="max-w-[160px] truncate md:sr-only">{active?.name ?? "Selecionar org"}</span>
+          <CaretDown size={12} aria-hidden className="md:hidden" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[220px]">
+      <DropdownMenuContent
+        side={naColuna ? "right" : "bottom"}
+        sideOffset={naColuna ? 16 : 4}
+        align="start"
+        className="min-w-[220px]"
+      >
         {user.organizations.map((org) => (
           <DropdownMenuItem
             key={org.organization_id}

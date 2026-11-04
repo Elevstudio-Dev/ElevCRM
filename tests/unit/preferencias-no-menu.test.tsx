@@ -17,8 +17,8 @@ import {
  * o menu oferece os dois idiomas e os três temas, mostra o que está em vigor, e escolher chama a MESMA
  * troca que o botão da barra chama (`useTrocarDeIdioma`, `setTheme`) — não uma cópia que um dia diverge.
  *
- * ⚠️ O que ele NÃO prova: que a seção fique escondida de `lg` em diante. Isso é CSS (`lg:hidden`) e
- * jsdom não mede; quem prova é a spec e2e, no navegador de verdade, em 375px e em 1280px.
+ * Desde a coluna lateral (de `md` em diante) a seção aparece em toda largura — não há mais os botões
+ * de idioma e tema soltos na barra.
  */
 
 const escolher = vi.fn();
@@ -96,8 +96,11 @@ describe("idioma e tema no menu do usuário", () => {
     expect(escolher).toHaveBeenCalledWith("es");
   });
 
-  it("a seção some de `lg` em diante: é `lg:hidden`, e não um segundo par de botões na barra", () => {
+  it("aparece em TODA largura: a coluna lateral (64px) não tem lugar para botões soltos", () => {
+    // Antes era `lg:hidden` (de `lg` em diante os botões ficavam na barra). Com a navegação na
+    // coluna lateral, idioma e tema só existem aqui — esconder a seção seria perder a ação.
     abrirMenu();
-    expect(screen.getByTestId("preferencias-no-menu").className).toContain("lg:hidden");
+    const classes = screen.getByTestId("preferencias-no-menu").className.split(/\s+/);
+    expect(classes.some((c) => c.endsWith(":hidden") || c === "hidden")).toBe(false);
   });
 });

@@ -63,7 +63,7 @@ export function BotaoDoChat() {
         title={t("Chat da equipe")}
         data-testid="botao-do-chat"
         className={cn(
-          "relative inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:h-9 lg:w-9",
+          "relative inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
           aberto && "bg-accent text-accent-foreground",
         )}
       >

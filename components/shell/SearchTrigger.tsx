@@ -16,15 +16,17 @@ export function SearchTrigger() {
 
   return (
     <>
+      {/* Só o ícone, nos dois formatos da casca (barra no celular, coluna no desktop). O texto e o
+          atalho continuam acessíveis: `sr-only` e `title`. */}
       <Button
-        variant="outline"
+        variant="ghost"
         size="sm"
-        className="gap-2 text-muted-foreground"
+        className="gap-2 text-muted-foreground md:h-11 md:w-11 md:rounded-full md:p-0"
+        title={`${t("Buscar...")} (⌘K)`}
         onClick={() => setOpen(true)}
       >
-        <MagnifyingGlass size={14} aria-hidden />
-        <span className="hidden md:inline">{t("Buscar...")}</span>
-        <kbd className="ml-2 hidden md:inline rounded-md border bg-muted px-1.5 py-0.5 text-[10px]">⌘K</kbd>
+        <MagnifyingGlass size={18} aria-hidden />
+        <span className="sr-only">{t("Buscar...")}</span>
       </Button>
       <CommandPalette open={open} onOpenChange={setOpen} />
     </>

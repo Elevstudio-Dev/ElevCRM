@@ -230,7 +230,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // de 24px (`[&:has([data-tela-cheia])]:p-0`): a conversa é o produto, e o
   // WhatsApp de onde o atendente vem não tem moldura nenhuma. Por isso a
   // altura desconta SÓ a barra superior:
-  //   3.5rem            TopBar (`h-14`, em components/shell/TopBar.tsx)
+  //   3.5rem            TopBar (`h-14`, em components/shell/TopBar.tsx) — SÓ no celular.
+  //                     De `md` em diante a navegação é a coluna lateral, que ocupa a
+  //                     LARGURA e não a altura: a grade tem `md:h-dvh`.
   //
   // Antes a conta descontava também `2 * var(--space-6)` (o padding do main).
   // Se a moldura voltar um dia, a parcela volta junto — sem ela a grade media
@@ -271,7 +273,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       // contato ia parar a milhares de pixels da borda, cortado sem barra de rolagem
       // (`tests/e2e/mensagem-longa-nao-estoura-a-tela.spec.ts`). Com o mínimo em 0 a coluna divide o
       // espaço que sobra, e o texto é quem quebra.
-      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]"
+      className="grid h-[calc(100dvh-3.5rem)] max-h-full w-full md:h-dvh grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_320px] 2xl:grid-cols-[340px_minmax(0,1fr)_340px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,

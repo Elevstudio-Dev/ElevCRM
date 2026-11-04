@@ -155,12 +155,17 @@ async function textosVisiveis(page: Page): Promise<string[]> {
  * rodada anterior deixou. Uma spec que assume "começa em português" passa uma
  * vez e falha na seguinte por um motivo que não tem nada a ver com o produto.
  *
- * O botão mostra o código em vigor ("PT"/"ES"), então ele é a própria sonda.
+ * O idioma mora no menu do usuário (o avatar, no pé da coluna lateral): o item do idioma em vigor
+ * traz `aria-current="true"`, então o próprio menu é a sonda.
  */
 async function porIdiomaEm(page: Page, codigo: "pt-BR" | "es"): Promise<void> {
-  const curto = codigo === "es" ? "ES" : "PT";
-  const botao = page.getByTestId("seletor-de-idioma");
-  if ((await botao.innerText()).trim() === curto) return;
+  const menu = page.getByTestId("menu-do-usuario");
+  const item = page.getByTestId(`menu-idioma-${codigo}`);
+  await menu.click();
+  if ((await item.getAttribute("aria-current")) === "true") {
+    await page.keyboard.press("Escape");
+    return;
+  }
 
   // Carimba o documento ATUAL. O seletor grava e recarrega a página (o porquê
   // está no comentário dele), e a recarga cria um documento novo — o carimbo
@@ -172,15 +177,16 @@ async function porIdiomaEm(page: Page, codigo: "pt-BR" | "es"): Promise<void> {
   await page.evaluate(() => {
     (window as unknown as { __antesDaTroca?: boolean }).__antesDaTroca = true;
   });
-  await botao.click();
-  await page.getByTestId(`idioma-${codigo}`).click();
+  await item.click();
   await page.waitForFunction(
     () => !(window as unknown as { __antesDaTroca?: boolean }).__antesDaTroca,
     undefined,
     { timeout: PRAZO },
   );
   await page.waitForLoadState("networkidle", { timeout: PRAZO });
-  await expect(botao, `o seletor não passou a mostrar ${curto} depois da troca`).toHaveText(curto);
+  await menu.click();
+  await expect(item, `o menu não passou a marcar ${codigo} depois da troca`).toHaveAttribute("aria-current", "true");
+  await page.keyboard.press("Escape");
 }
 
 /**

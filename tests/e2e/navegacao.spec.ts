@@ -91,13 +91,13 @@ test.describe("navegação pela barra superior", () => {
     const links = abas(page).getByRole("link");
     await expect(links).toHaveText(["Inbox", "Contatos", "Funis", "Agenda", "IA", "Relatórios"]);
 
-    // E NÃO existe menu lateral: o conteúdo começa na borda esquerda da tela.
-    // (Não dá para afirmar "nenhum <aside>": o inbox tem o painel de CRM, que
-    // é um <aside> legítimo — dentro do conteúdo, não ao lado dele.)
+    // E NÃO existe o menu lateral ANTIGO (240px, com texto): à esquerda do conteúdo há só a coluna
+    // de ícones, de 64px — nem um pixel a mais. (Não dá para afirmar "nenhum <aside>": o inbox tem o
+    // painel de CRM, que é um <aside> legítimo — dentro do conteúdo, não ao lado dele.)
     const esquerdaDoMain = await page.evaluate(
       () => document.querySelector("main")!.getBoundingClientRect().left,
     );
-    expect(esquerdaDoMain, "há algo ocupando lugar à esquerda do conteúdo").toBe(0);
+    expect(esquerdaDoMain, "à esquerda do conteúdo só cabe a coluna de ícones (64px)").toBe(64);
 
     await page.screenshot({
       path: path.join(EVIDENCE, "nav-barra-superior.png"),
@@ -213,16 +213,21 @@ test.describe("navegação pela barra superior", () => {
         const r = header.getBoundingClientRect();
         const filhos = [...header.querySelectorAll("a, button")].map((el) => el.getBoundingClientRect());
         return {
-          alturaDaBarra: Math.round(r.height),
+          larguraDaColuna: Math.round(r.width),
+          alturaDaColuna: Math.round(r.height),
+          topo: Math.round(r.top),
+          telaAlt: window.innerHeight,
           foraDaBarra: filhos.filter((f) => f.right > r.right + 1 || f.bottom > r.bottom + 1).length,
         };
       });
-      expect(m.alturaDaBarra, "a barra tem de ser UMA linha (h-14 = 56px)").toBe(56);
-      expect(m.foraDaBarra, "nenhum controle da barra pode sair dela").toBe(0);
+      // De `md` (768) em diante a navegação é a coluna lateral de 64px, na altura da tela.
+      expect(m.larguraDaColuna, "a coluna lateral tem 64px (w-16)").toBe(64);
+      expect(m.alturaDaColuna, "a coluna ocupa a altura da casca").toBeGreaterThanOrEqual(m.telaAlt - m.topo - 1);
+      expect(m.foraDaBarra, "nenhum controle da coluna pode sair dela").toBe(0);
     });
   }
 
-  test("o inbox ocupa a tela inteira abaixo da barra, sem moldura", async ({ page }) => {
+  test("o inbox ocupa a tela inteira ao lado da coluna, sem moldura", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await loginAdmin(page);
     await page.goto("/app/inbox");
@@ -238,13 +243,14 @@ test.describe("navegação pela barra superior", () => {
         largura: Math.round(g.width),
         topo: Math.round(g.top),
         base: Math.round(g.bottom),
-        baseDaBarra: Math.round(h.bottom),
+        direitaDaColuna: Math.round(h.right),
+        topoDaColuna: Math.round(h.top),
         viewport: { w: window.innerWidth, h: window.innerHeight },
       };
     });
-    expect(m.esquerda, "a grade começa na borda esquerda — sem menu lateral e sem padding").toBe(0);
-    expect(m.largura, "a grade usa a largura inteira").toBe(m.viewport.w);
-    expect(m.topo, "a grade começa logo abaixo da barra").toBe(m.baseDaBarra);
+    expect(m.esquerda, "a grade começa logo depois da coluna lateral, sem padding").toBe(m.direitaDaColuna);
+    expect(m.largura, "a grade usa a largura que sobrou").toBe(m.viewport.w - m.direitaDaColuna);
+    expect(m.topo, "a grade começa no topo da casca — não há barra em cima").toBe(m.topoDaColuna);
     expect(m.base, "a grade termina na borda de baixo — o composer nunca nasce fora da tela").toBe(
       m.viewport.h,
     );
