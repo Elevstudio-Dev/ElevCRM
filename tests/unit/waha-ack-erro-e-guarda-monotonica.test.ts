@@ -133,7 +133,8 @@ function um<T>(lista: T[], i: number): T {
 }
 
 const EXTERNAL = "3EB0A1B2C3";
-const ID_NO_ACK = `true_120363999999999999@g.us_${EXTERNAL}`; // formato completo do WAHA 2026.x
+const ID_NO_ACK = `true_120363999999999999@g.us_${EXTERNAL}`; // formato completo do WAHA 2026.x (GRUPO)
+const ID_1A1 = `true_5511999999999@c.us_${EXTERNAL}`; // o mesmo, numa conversa 1:1
 
 function mensagem(status: string, extra: Linha = {}): Linha {
   return {
@@ -159,10 +160,10 @@ async function receberAck(banco: { admin: never }, ack: number, id: string = ID_
 
 beforeEach(() => vi.clearAllMocks());
 
-describe("ack -1 (ERROR) é FALHA do WhatsApp — não 'enviando', e não 'send_timeout'", () => {
+describe("ack -1 (ERROR) numa conversa 1:1 é FALHA do WhatsApp — não 'enviando', e não 'send_timeout'", () => {
   it("sending + ack -1 → failed, com código e texto próprios (não vira 'sending')", async () => {
     const b = criarBanco([mensagem("sending")]);
-    await receberAck(b, -1);
+    await receberAck(b, -1, ID_1A1);
 
     const m = um(b.banco.messages, 0);
     expect(m.status).toBe("failed");
@@ -177,7 +178,7 @@ describe("ack -1 (ERROR) é FALHA do WhatsApp — não 'enviando', e não 'send_
 
   it("sent + ack -1 → failed (o servidor aceitou e depois deu erro: o último fato vence)", async () => {
     const b = criarBanco([mensagem("sent", { ack: 1 })]);
-    await receberAck(b, -1);
+    await receberAck(b, -1, ID_1A1);
     expect(um(b.banco.messages, 0).status).toBe("failed");
     expect(um(b.banco.messages, 0).error_code).toBe("waha_ack_error");
   });
@@ -185,7 +186,7 @@ describe("ack -1 (ERROR) é FALHA do WhatsApp — não 'enviando', e não 'send_
   it("delivered/read + ack -1 → NÃO vira falha: já chegou ao aparelho do cliente", async () => {
     for (const estado of ["delivered", "read"]) {
       const b = criarBanco([mensagem(estado, { ack: estado === "read" ? 3 : 2 })]);
-      await receberAck(b, -1);
+      await receberAck(b, -1, ID_1A1);
       expect(um(b.banco.messages, 0).status).toBe(estado);
       expect(um(b.banco.messages, 0).error_code).toBeNull();
     }
@@ -193,7 +194,7 @@ describe("ack -1 (ERROR) é FALHA do WhatsApp — não 'enviando', e não 'send_
 
   it("a falha por ack é anunciada UMA vez: evento message.failed + aviso na Central", async () => {
     const b = criarBanco([mensagem("sending")]);
-    await receberAck(b, -1);
+    await receberAck(b, -1, ID_1A1);
 
     expect(b.banco.eventos).toHaveLength(1);
     expect(um(b.banco.eventos, 0)).toMatchObject({ p_event_type: "message.failed", p_entity_id: "msg-1" });
@@ -207,18 +208,18 @@ describe("ack -1 (ERROR) é FALHA do WhatsApp — não 'enviando', e não 'send_
     });
 
     // o webhook do WAHA repete: nada de segundo evento nem segundo aviso
-    await receberAck(b, -1);
+    await receberAck(b, -1, ID_1A1);
     expect(b.banco.eventos).toHaveLength(1);
     expect(b.banco.avisos).toHaveLength(1);
   });
 
-  it("aviso aberto há pouco NA MESMA conversa silencia o seguinte (rajada em grupo não enterra a Central)", async () => {
+  it("aviso aberto há pouco NA MESMA conversa silencia o seguinte (rajada não enterra a Central)", async () => {
     const b = criarBanco(
       [mensagem("sending"), mensagem("sending", { id: "msg-2", external_id: "3EB0FFFF" })],
       [],
     );
-    await receberAck(b, -1);
-    await receberAck(b, -1, `true_120363999999999999@g.us_3EB0FFFF`);
+    await receberAck(b, -1, ID_1A1);
+    await receberAck(b, -1, `true_5511999999999@c.us_3EB0FFFF`);
     expect(b.banco.messages.map((m) => m.status)).toEqual(["failed", "failed"]);
     expect(b.banco.eventos).toHaveLength(2); // o evento é por mensagem
     expect(b.banco.avisos).toHaveLength(1); // o aviso é por conversa
@@ -226,16 +227,65 @@ describe("ack -1 (ERROR) é FALHA do WhatsApp — não 'enviando', e não 'send_
 
   it("mensagem que veio do celular (external_device) falha na tela, mas não abre aviso crítico", async () => {
     const b = criarBanco([mensagem("sent", { sent_via: "external_device" })]);
-    await receberAck(b, -1);
+    await receberAck(b, -1, ID_1A1);
     expect(um(b.banco.messages, 0).status).toBe("failed");
     expect(b.banco.avisos).toHaveLength(0);
   });
 
   it("mensagem de ENTRADA nunca vira failed por ack", async () => {
     const b = criarBanco([mensagem("received", { direction: "inbound", sent_via: null })]);
-    await receberAck(b, -1);
+    await receberAck(b, -1, ID_1A1);
     expect(um(b.banco.messages, 0).status).toBe("received");
     expect(b.banco.eventos).toHaveLength(0);
+  });
+});
+
+describe("ack -1 (ERROR) em GRUPO é ruído do WAHA — a mensagem chegou, e o CRM não a chama de falha", () => {
+  // Medido na VPS (04/11): das 14 mensagens de atendente em grupo, NENHUMA teve ack 1/2/3 — só -1 ou 0 —, e o
+  // Carlos confirmou no celular que elas CHEGARAM ao grupo (algumas até foram lidas). Em 1:1 os acks andam 1→2→3.
+  // O -1 do NOWEB em grupo, portanto, não diz que o envio falhou.
+  it("sending + ack -1 em grupo → sobe para 'sent' (o WAHA conhece a mensagem), sem erro, sem evento e sem aviso", async () => {
+    const b = criarBanco([mensagem("sending")]);
+    await receberAck(b, -1);
+
+    const m = um(b.banco.messages, 0);
+    expect(m.status).toBe("sent");
+    expect(m.error_code).toBeNull();
+    expect(m.error_message).toBeNull();
+    expect(b.banco.eventos).toHaveLength(0);
+    expect(b.banco.avisos).toHaveLength(0);
+  });
+
+  it("sent + ack -1 em grupo → continua 'sent': NÃO vira failed", async () => {
+    const b = criarBanco([mensagem("sent", { ack: 1 })]);
+    await receberAck(b, -1);
+    const m = um(b.banco.messages, 0);
+    expect(m.status).toBe("sent");
+    expect(m.error_code).toBeNull();
+    expect(b.banco.eventos).toHaveLength(0);
+    expect(b.banco.avisos).toHaveLength(0);
+  });
+
+  it("delivered/read + ack -1 em grupo → nada muda", async () => {
+    for (const estado of ["delivered", "read"]) {
+      const b = criarBanco([mensagem(estado, { ack: estado === "read" ? 3 : 2 })]);
+      await receberAck(b, -1);
+      expect(um(b.banco.messages, 0).status).toBe(estado);
+    }
+  });
+
+  it("se o WAHA depois der ack 2/3 em grupo, a mensagem avança normalmente", async () => {
+    const b = criarBanco([mensagem("sent", { ack: -1 })]);
+    await receberAck(b, 2);
+    expect(um(b.banco.messages, 0).status).toBe("delivered");
+    await receberAck(b, 3);
+    expect(um(b.banco.messages, 0).status).toBe("read");
+  });
+
+  it("o mesmo -1 numa conversa 1:1 CONTINUA sendo falha (a regra só muda onde o WAHA é medido como ruidoso)", async () => {
+    const b = criarBanco([mensagem("sent", { ack: 1 })]);
+    await receberAck(b, -1, ID_1A1);
+    expect(um(b.banco.messages, 0).status).toBe("failed");
   });
 });
 

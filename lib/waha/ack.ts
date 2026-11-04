@@ -19,6 +19,12 @@
  *     deu por perdida e que depois mostra ack de aparelho chegou, de fato.
  *     0 e 1 não bastam — não provam o aparelho.
  *
+ * Exceção da exceção — GRUPO: lá o -1 NÃO é falha. Medido na VPS (04/11/2026): das 14 mensagens de atendente em
+ * grupo, nenhuma recebeu ack 1/2/3 (só -1 ou 0), e o dono confirmou no celular que elas CHEGARAM (algumas foram
+ * lidas); em 1:1 os acks andam 1→2→3. O NOWEB não dá o ack de recibo por mensagem em grupo, e o -1 que ele manda
+ * ali é ruído. Chamar isso de "Falhou" faz o atendente reenviar e o grupo receber duas vezes. Em grupo, o -1 só
+ * prova que o WAHA conhece a mensagem: ela sobe para `sent` e nada é anunciado.
+ *
  * Função pura de propósito: a regra se testa sem banco, e `handleAck` só a
  * executa.
  */
@@ -36,6 +42,8 @@ const POSICAO: Record<string, number> = {
 export interface LinhaDoAck {
   direction: string | null;
   status: string | null;
+  /** A conversa é um grupo (o chat do ack termina em `@g.us`). Sem a informação, vale a regra de 1:1. */
+  grupo?: boolean;
 }
 
 export type DecisaoDoAck =
@@ -59,6 +67,13 @@ export function decidirAck(linha: LinhaDoAck, ack: number): DecisaoDoAck {
   }
 
   const atual = linha.status ?? "";
+
+  if (novo === "failed" && linha.grupo) {
+    // Ruído do NOWEB em grupo (ver o cabeçalho): nunca é falha. Quem ainda não saiu da fila de envio passa a `sent`.
+    return atual === "sending" || atual === "queued"
+      ? { aplicar: true, status: "sent", cura: false }
+      : { aplicar: false };
+  }
 
   if (novo === "failed") {
     return atual === "sending" || atual === "sent"
