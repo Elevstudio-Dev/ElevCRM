@@ -3,44 +3,24 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 
 import { trocarIdioma } from "@/app/actions/settings/trocarIdioma";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useT } from "@/hooks/i18n/useT";
 import { useAplicarIdioma, useIdioma } from "@/lib/i18n/IdiomaProvider";
-import { IDIOMAS, type Idioma } from "@/lib/i18n/idiomas";
-import { Check } from "@/lib/ui/icons";
+import { type Idioma } from "@/lib/i18n/idiomas";
 
 /**
- * Trocar de idioma no TOPO, em dois cliques, de qualquer tela.
+ * A troca de idioma — a lógica e os nomes. O DESENHO mora em `PreferenciasNoMenu`, dentro do
+ * menu do usuário.
  *
- * ─── Por que aqui, e não só em Configurações ───────────────────────────────
+ * ─── Por que dois cliques, de qualquer tela ────────────────────────────────
  *
- * Porque quem precisa dele é justamente quem NÃO acha Configurações: alguém que
- * abriu o sistema num idioma que não lê. Enterrar a troca a três telas de
- * distância transforma "está em português" num beco — a pessoa teria de
- * navegar, em português, até a tela que resolve o problema de estar em
- * português. O botão fica ao lado do controle de tema, que é o lugar onde este
- * produto já guarda o que muda a APARÊNCIA e não os dados.
+ * Quem precisa dela é justamente quem NÃO acha Configurações: alguém que abriu o sistema num
+ * idioma que não lê. Enterrar a troca a três telas de distância transforma "está em português"
+ * num beco. O menu do usuário (o avatar, no pé da coluna lateral) está em toda tela e a troca fica
+ * a dois cliques dele.
  *
- * ─── Onde ele mora em cada largura ─────────────────────────────────────────
- *
- * De `lg` em diante, na barra, como acima. Abaixo disso (celular e tablet) a
- * barra não comporta idioma e tema ao lado de busca, chat, avisos e do menu do
- * usuário sem esmagar o hambúrguer e o seletor de organização — medido, ver o
- * orçamento no `TopBar` —, então os dois moram DENTRO do menu do usuário
- * (`PreferenciasNoMenu`), que é um toque do avatar e continua a dois cliques.
- * A troca em si é a mesma nos dois lugares: `useTrocarDeIdioma`.
- *
- * ─── O rótulo é o código, e é de propósito ─────────────────────────────────
- *
- * "PT" / "ES" são legíveis nos dois idiomas e cabem no mesmo espaço de um
- * ícone. Um ícone de globo diria "idioma" sem dizer QUAL — e saber qual está
- * em vigor é metade da pergunta de quem procura este botão.
+ * Havia um botão "PT"/"ES" solto na barra superior (`SeletorDeIdioma`). Saiu junto com a barra: a
+ * coluna lateral tem 64px e não comporta botões de texto. Quem o procurar o acha no menu do
+ * usuário, com o idioma em vigor marcado e o nome de cada língua na língua dela.
  */
 export const NOME_DO_IDIOMA: Record<Idioma, { curto: string; completo: string }> = {
   // Cada língua no nome dela própria: é assim que se reconhece a sua numa
@@ -94,44 +74,4 @@ export function useTrocarDeIdioma() {
   };
 
   return { idioma, escolher, salvando };
-}
-
-export function SeletorDeIdioma() {
-  const t = useT();
-  const { idioma, escolher, salvando } = useTrocarDeIdioma();
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={salvando}
-          aria-label={`${t("Idioma")}: ${NOME_DO_IDIOMA[idioma].completo}`}
-          data-testid="seletor-de-idioma"
-        >
-          <span className="text-xs font-semibold tabular-nums">
-            {NOME_DO_IDIOMA[idioma].curto}
-          </span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[180px]">
-        {IDIOMAS.map((codigo) => (
-          <DropdownMenuItem
-            key={codigo}
-            onClick={() => escolher(codigo)}
-            data-testid={`idioma-${codigo}`}
-            aria-current={codigo === idioma}
-          >
-            <Check
-              size={16}
-              className={`mr-2 ${codigo === idioma ? "" : "invisible"}`}
-              aria-hidden
-            />
-            {NOME_DO_IDIOMA[codigo].completo}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 }

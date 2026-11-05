@@ -22,9 +22,12 @@
  *  2. Nada fica fora da tela, e a PÁGINA não rola de lado — a garantia de 390px que o comentário do
  *     `TopBar` já dava: o nome da marca/organização trunca, a barra não depende dele.
  *  3. O hambúrguer mantém os 44px de alvo de toque abaixo de `md`.
- *  4. Com seletor, o nome da organização aparece (ao menos o começo) a partir de 360px, e a marca
- *     só entra de `xl` em diante; sem seletor a marca fica sempre.
- *  5. Idioma e tema, que saíram da barra abaixo de `lg`, continuam ALCANÇÁVEIS: no menu do usuário.
+ *  4. No celular, com seletor, o nome da organização aparece (ao menos o começo) a partir de 360px e a
+ *     marca cede a ele; sem seletor a marca fica sempre. De `md` em diante (coluna lateral) a marca e
+ *     o seletor aparecem os dois, em ícones.
+ *  5. De `md` em diante a casca é uma COLUNA de 64px encostada à esquerda, na altura da tela, e o
+ *     conteúdo começa logo depois; no celular é a barra de 56px no topo.
+ *  6. Idioma e tema continuam ALCANÇÁVEIS: no menu do usuário, que no desktop abre para o lado.
  *
  * ⚠️ O que ela NÃO prova: o espanhol (rótulos de aba mais longos) e uma organização com logo largo
  * ou nome de 60 caracteres. O que garante esses é o piso (`min-w-*` + truncate) e não a medida.
@@ -72,9 +75,8 @@ async function entrar(page: Page, creds: Creds, papel: "manager" | "agent"): Pro
 /** De mesa a celular pequeno: 320 é o iPhone SE de 1ª geração; 1280 é onde a barra sempre coube. */
 const LARGURAS = [320, 360, 375, 390, 414, 430, 768, 1024, 1280] as const;
 const ALTURA = 812;
-/** Mesmos cortes do Tailwind: `md` 768, `lg` 1024, `xl` 1280. */
+/** O corte do Tailwind em que a barra do topo vira a coluna lateral: `md` 768. */
 const MD = 768;
-const XL = 1280;
 
 interface Medida {
   clientWidth: number;
@@ -94,9 +96,11 @@ interface Medida {
 /** Roda no navegador. Peças = links, botões e os filhos da marca; pai e filho não contam entre si. */
 function medirBarra(): Medida {
   const barra = document.querySelector("header")!;
+  // `> 2`: o texto `sr-only` (nome da aba, da marca, do seletor) mede 1x1px e fica colado ao ícone —
+  // existe para o leitor de tela, não para o olho, e não é "peça" que possa cobrir outra.
   const visivel = (el: Element) => {
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && getComputedStyle(el).display !== "none";
+    return r.width > 2 && r.height > 2 && getComputedStyle(el).display !== "none";
   };
   const rotulo = (el: Element) =>
     el.getAttribute("data-testid") ||
@@ -194,43 +198,74 @@ for (const perfil of PERFIS) {
         expect(m.hamburguer, `${onde}: o hambúrguer deveria estar escondido de \`md\` em diante`).toBeNull();
       }
 
+      // De `md` em diante a casca é a COLUNA LATERAL (64px, só ícones): os nomes viram `title` e
+      // `sr-only`, e a marca e o seletor cabem um embaixo do outro. O que segue é do celular.
+      const naColuna = largura >= MD;
+
       if (perfil.comSeletor) {
         // 4a. O nome da organização é o que a pessoa precisa ver: ao menos o começo dele, de 360 em
         // diante. Em 320 o piso é ícone + seta — não há como caber mais com os botões de 44px.
-        if (largura >= 360) {
+        if (largura >= 360 && !naColuna) {
           expect(
             m.rotuloDoSeletor,
             `${onde}: o seletor não mostra nem o começo do nome da organização`,
           ).toBeGreaterThanOrEqual(24);
         }
-        // 4b. A marca só entra de `xl` em diante: abaixo disso o seletor leva a largura inteira.
-        expect(m.marcaVisivel, `${onde}: a marca ${largura >= XL ? "deveria aparecer" : "deveria ceder ao seletor"}`).toBe(
-          largura >= XL,
+        // 4b. No celular a marca cede ao seletor (a linha só comporta um dos dois); na coluna lateral
+        // os dois aparecem.
+        expect(m.marcaVisivel, `${onde}: a marca ${naColuna ? "deveria aparecer na coluna" : "deveria ceder ao seletor"}`).toBe(
+          naColuna,
         );
       } else {
         // 4c. Sem seletor a marca fica sempre — o selo nunca sai.
         expect(m.marcaVisivel, `${onde}: a marca sumiu`).toBe(true);
-        // E o nome dela aparece (era invisível mesmo em 390: o hambúrguer e a direita a esmagavam).
-        if (largura >= 375 && m.nomeDaMarca !== null) {
+        // E o nome dela aparece no celular (era invisível mesmo em 390: o hambúrguer e a direita a esmagavam).
+        if (largura >= 375 && !naColuna && m.nomeDaMarca !== null) {
           expect(m.nomeDaMarca, `${onde}: o nome da marca não aparece`).toBeGreaterThanOrEqual(16);
         }
+      }
+
+      // 5. A coluna lateral é mesmo uma coluna: encostada na esquerda, com 64px, na altura da tela, e o
+      // conteúdo começa logo depois dela. No celular é a barra de 56px no topo.
+      const forma = await page.evaluate(() => {
+        const h = document.querySelector("header")!.getBoundingClientRect();
+        const main = document.querySelector("main")!.getBoundingClientRect();
+        return {
+          h: { x: h.left, y: h.top, w: h.width, alt: h.height },
+          main: { x: main.left, y: main.top },
+          telaAlt: window.innerHeight,
+        };
+      });
+      // Medido a partir de onde a casca COMEÇA (`forma.h.y`): um aviso de impersonate ou de conexão
+      // caída empurra a casca inteira para baixo, e isso não é defeito da coluna.
+      if (naColuna) {
+        expect(forma.h.x, `${onde}: a coluna não está na borda esquerda`).toBe(0);
+        expect(forma.h.w, `${onde}: a coluna não tem 64px`).toBe(64);
+        expect(forma.h.alt, `${onde}: a coluna não ocupa a altura da casca`).toBeGreaterThanOrEqual(
+          forma.telaAlt - forma.h.y - 1,
+        );
+        expect(forma.main.x, `${onde}: o conteúdo não começa logo depois da coluna`).toBe(64);
+        expect(forma.main.y, `${onde}: o conteúdo deveria começar no topo da casca`).toBe(forma.h.y);
+      } else {
+        expect(forma.h.alt, `${onde}: a barra do celular deveria ter 56px`).toBe(56);
+        expect(forma.main.y, `${onde}: o conteúdo deveria começar logo abaixo da barra`).toBe(forma.h.y + 56);
       }
     }
   });
 }
 
-test("idioma e tema saíram da barra no celular e estão no menu do usuário — e voltam à barra em lg", async ({ page }) => {
+test("idioma e tema estão no menu do usuário, no celular e na coluna lateral, e o menu cabe na tela", async ({ page }) => {
   const creds = lerCreds();
   await page.setViewportSize({ width: 375, height: ALTURA });
   await entrar(page, creds, "agent");
   await page.goto("/app/inbox");
   await expect(page.locator("header")).toBeVisible({ timeout: 30_000 });
 
-  // No celular: os botões não estão na barra…
-  await expect(page.getByTestId("seletor-de-idioma")).toBeHidden();
+  // Não há botões soltos de idioma e tema na casca — nem no celular nem na coluna.
+  await expect(page.getByTestId("seletor-de-idioma")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Tema:/ })).toBeHidden();
 
-  // …e a escolha existe, dentro do menu do usuário.
+  // A escolha existe, dentro do menu do usuário.
   await page.getByRole("button", { name: "Menu do usuário" }).click();
   const secao = page.getByTestId("preferencias-no-menu");
   await expect(secao, "o menu do usuário não trouxe idioma e tema no celular").toBeVisible();
@@ -251,10 +286,21 @@ test("idioma e tema saíram da barra no celular e estão no menu do usuário —
   await page.getByTestId("menu-tema-dark").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
-  // De `lg` em diante os botões voltam à barra e a seção some do menu.
+  // Na coluna lateral (desktop) o MESMO menu continua trazendo idioma e tema, e ele abre PARA O LADO
+  // — à direita da coluna, sem ser cortado pela borda de baixo nem sobrepor o avatar.
+  await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 1280, height: ALTURA });
-  await expect(page.getByTestId("seletor-de-idioma")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Tema:/ })).toBeVisible();
-  await page.getByRole("button", { name: "Menu do usuário" }).click();
-  await expect(page.getByTestId("preferencias-no-menu"), "a seção do celular vazou para a mesa").toBeHidden();
+  await expect(page.getByTestId("seletor-de-idioma")).toHaveCount(0);
+  // `getByTestId` e não `getByRole`: com o menu aberto o Radix marca o resto da página como
+  // `aria-hidden`, e a consulta por papel deixa de achar o próprio botão que o abriu.
+  const avatar = page.getByTestId("menu-do-usuario");
+  await avatar.click();
+  await expect(page.getByTestId("preferencias-no-menu"), "o menu do desktop não trouxe idioma e tema").toBeVisible();
+  const menuDoDesktop = (await page.getByRole("menu").boundingBox())!;
+  const caixaDoAvatar = (await avatar.boundingBox())!;
+  expect(menuDoDesktop.x, "o menu deveria abrir à direita da coluna, não por cima dela").toBeGreaterThanOrEqual(
+    caixaDoAvatar.x + caixaDoAvatar.width - 1,
+  );
+  expect(menuDoDesktop.y, "o menu passa da borda de cima").toBeGreaterThanOrEqual(0);
+  expect(menuDoDesktop.y + menuDoDesktop.height, "o menu passa da borda de baixo").toBeLessThanOrEqual(ALTURA);
 });

@@ -48,7 +48,7 @@ function AtalhoDeConfiguracoes() {
         // `hidden md:inline-flex`: no celular a engrenagem mora no rodapé da
         // gaveta. Medido em 390px: com ela aqui a barra dava 450px de largura
         // e a página inteira rolava de lado.
-        "relative hidden h-11 w-11 items-center justify-center rounded-md transition-colors md:inline-flex lg:h-9 lg:w-9",
+        "relative hidden h-11 w-11 items-center justify-center rounded-full transition-colors md:inline-flex",
         ativo
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -61,18 +61,30 @@ function AtalhoDeConfiguracoes() {
 }
 
 /**
- * A barra superior é a navegação inteira do desktop: marca, abas de uso
- * diário, busca, chat da equipe, avisos, Configurações e o menu do usuário —
- * nessa ordem.
+ * A casca de navegação — UMA peça só, que muda de lugar conforme a tela:
  *
- * `sticky top-0` e `h-14`: a altura é subtraída pela grade do inbox
- * (`components/inbox/InboxLayout.tsx`, `h-[calc(100dvh-3.5rem)]`). Mudar uma
+ *  - abaixo de `md` (celular): barra fina no topo (`h-14`) com o botão do menu,
+ *    a marca, a busca, o chat, os avisos e o menu do usuário;
+ *  - de `md` em diante (desktop): COLUNA ESTREITA à esquerda (`w-16`), só de
+ *    ícones, como a do WhatsApp — a marca e as abas de uso diário em cima, e embaixo
+ *    a busca, o chat da equipe, os avisos, Configurações e o menu do usuário.
+ *
+ * É o MESMO elemento nos dois casos (só o CSS muda), e isso é de propósito: duas
+ * árvores — uma para o celular, outra para o desktop — montariam o chat e os
+ * avisos duas vezes (duas assinaturas de tempo real, dois avisos por mensagem).
+ *
+ * ⚠️ A altura mudou de dono. No celular a barra ainda ocupa `3.5rem` do topo, e a
+ * grade do inbox (`components/inbox/InboxLayout.tsx`) desconta isso; no desktop não
+ * há barra em cima e a grade ocupa a tela inteira (`md:h-dvh`). Mudar uma parte
  * sem a outra faz o composer nascer fora da tela.
  */
 export function TopBar() {
   const temSeletor = useTemSeletorDeOrganizacao();
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur md:gap-3 md:px-4">
+    <header
+      data-casca-de-navegacao=""
+      className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur md:static md:h-auto md:w-16 md:flex-col md:gap-1 md:border-b-0 md:border-r md:bg-background md:px-0 md:py-3 md:backdrop-blur-none"
+    >
       {/*
         SEM `shrink-0` neste grupo, e COM `min-w-0`: quem cede quando a linha
         aperta são as peças de LARGURA VARIÁVEL — o nome da marca e o nome da
@@ -103,13 +115,13 @@ export function TopBar() {
         o nome da organização — e saber em qual organização se está é o que
         importa antes do selo. Sem seletor a marca fica sempre, no piso do selo.
       */}
-      <div className="flex min-w-0 items-center gap-1 md:gap-2">
+      <div className="flex min-w-0 items-center gap-1 md:flex-col md:gap-2">
         <MenuMobile />
-        <MarcaNaBarra className={temSeletor ? "max-xl:hidden" : undefined} />
+        <MarcaNaBarra className={temSeletor ? "max-md:hidden" : undefined} />
         <TenantSwitcher />
       </div>
-      <AbasPrincipais className="hidden md:flex md:ml-2" />
-      <div className="ml-auto flex shrink-0 items-center gap-1 md:gap-2">
+      <AbasPrincipais className="hidden md:mt-3 md:flex md:flex-col md:border-t md:pt-3" />
+      <div className="ml-auto flex shrink-0 items-center gap-1 md:ml-0 md:mt-auto md:flex-col">
         <SearchTrigger />
         <BotaoDoChat />
         <AlertsBell />

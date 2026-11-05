@@ -9,24 +9,21 @@ import { abasPrincipais } from "@/lib/navigation/registry";
 import { cn } from "@/lib/utils";
 
 /**
- * As abas da barra superior — a navegação de uso diário, ao lado da busca.
+ * As abas da coluna lateral — a navegação de uso diário.
  *
  * Não decide nada: `abasPrincipais()` (lib/navigation/registry.ts) resolve
  * quais abas este papel vê e em que ordem; isto desenha. Cinco abas e não
  * vinte: o que não está aqui está em Configurações, que é o inventário.
  *
- * Abaixo de `lg` (1024px) o rótulo some e fica o ícone com `title` — cinco
- * abas com texto, a marca, a busca e três ícones não cabem em 768px, e uma
- * barra que rola de lado é o menu lateral de novo, deitado.
+ * Só ícones, em coluna (a coluna do WhatsApp): o nome fica no `title` e num
+ * `sr-only`. Larga ela não precisa ser — 64px — e é isso que devolve a largura
+ * ao inbox, que foi o motivo de o menu lateral antigo (240px) ter saído.
  */
 export function AbasPrincipais({ className }: { className?: string }) {
   const t = useT();
   const pathname = usePathname();
   const { user, activeOrg } = useAuth();
   const abas = abasPrincipais(user.is_platform_admin, activeOrg?.role ?? null);
-  // Com a sexta aba (Relatórios, gestor+) os rótulos só cabem de `xl`: a 1024px, ao lado do seletor de
-  // organização, seis rótulos passavam por cima dele (47px medidos). Cinco abas seguem com rótulo de `lg`.
-  const rotuloDeLg = abas.length <= 5;
 
   return (
     <nav aria-label={t("Navegação principal")} className={cn("flex items-center gap-1", className)}>
@@ -40,14 +37,16 @@ export function AbasPrincipais({ className }: { className?: string }) {
             title={t(aba.label)}
             aria-current={ativa ? "page" : undefined}
             className={cn(
-              "relative flex h-9 items-center gap-2 rounded-md px-2.5 text-sm transition-colors lg:px-3",
+              // Só o ícone, num círculo — como a coluna do WhatsApp. O nome vai no `title` (dica ao
+              // passar o mouse) e no `sr-only` (leitor de tela).
+              "relative flex h-11 w-11 items-center justify-center rounded-full transition-colors",
               ativa
-                ? "bg-accent font-medium text-accent-foreground"
+                ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
             )}
           >
-            <Icon size={18} weight={ativa ? "fill" : "regular"} aria-hidden />
-            <span className={rotuloDeLg ? "hidden lg:inline" : "hidden xl:inline"}>{t(aba.label)}</span>
+            <Icon size={22} weight={ativa ? "fill" : "regular"} aria-hidden />
+            <span className="sr-only">{t(aba.label)}</span>
             {aba.healthDot && <ConnectionHealthDot className="absolute right-1 top-1" />}
           </Link>
         );

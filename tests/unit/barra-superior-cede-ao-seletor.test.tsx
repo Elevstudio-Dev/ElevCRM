@@ -6,10 +6,12 @@ import { TopBar } from "@/components/shell/TopBar";
 /**
  * A MARCA CEDE AO SELETOR DE ORGANIZAÇÃO — a decisão da barra, provada.
  *
- * Com mais de uma organização o seletor aparece, e abaixo de `xl` a barra não comporta a marca
+ * Com mais de uma organização o seletor aparece, e no celular a barra não comporta a marca
  * (selo + nome) AO LADO dele: medido em 375px, o seletor sobrava 109px e a marca o empurrava por cima
- * de Buscar, Chat e Avisos. A saída é a marca ceder a largura inteira ao seletor — `max-xl:hidden`,
+ * de Buscar, Chat e Avisos. A saída é a marca ceder a largura inteira ao seletor — `max-md:hidden`,
  * passado pelo `TopBar` — porque saber em qual organização se está importa mais que o selo.
+ * (Era `max-xl:hidden` quando a barra ficava no topo também no desktop; a coluna lateral de `md`
+ * em diante empilha os dois e não precisa mais ceder.)
  *
  * Sem seletor a marca NÃO cede: o selo da Elev fica sempre (1.19.0), e é por isso que a classe só
  * pode ir quando o seletor existe. As larguras de verdade, no navegador, são da spec e2e
@@ -47,10 +49,14 @@ afterEach(() => {
 });
 
 describe("a marca na barra superior", () => {
-  it("COM seletor de organização cede a largura a ele abaixo de xl", () => {
+  it("COM seletor de organização cede a largura a ele no celular (abaixo de md)", () => {
+    // De `md` em diante a casca é a coluna lateral de 64px, e ali cabem a marca E o seletor, um
+    // embaixo do outro — por isso a marca só cede onde a barra é uma linha só.
     temSeletor = true;
     render(<TopBar />);
-    expect(screen.getByTestId("marca").className).toContain("max-xl:hidden");
+    const classes = screen.getByTestId("marca").className.split(/\s+/);
+    expect(classes).toContain("max-md:hidden");
+    expect(classes).not.toContain("max-xl:hidden");
   });
 
   it("SEM seletor não cede nunca: o selo fica sempre", () => {

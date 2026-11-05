@@ -10,24 +10,25 @@ interface AppShellProps {
 }
 
 /**
- * A casca do app do tenant: barra superior + conteúdo. Só isso.
+ * A casca do app do tenant: a navegação + o conteúdo. Só isso.
  *
- * ⚠️ O MENU LATERAL FOI REMOVIDO (2026-09-10). Ele ocupava 240px (64
- * recolhido) de toda tela, e a tela que importa — o inbox — é a que mais
- * sentia: em 1280px sobravam 1040 para três colunas. Toda a navegação passou
- * para a barra superior (abas de uso diário) e para Configurações (o
- * inventário). Ver `lib/navigation/registry.ts`.
+ * A navegação (`TopBar`) é uma barra fina no topo no celular e uma COLUNA
+ * ESTREITA de ícones (64px) à esquerda de `md` em diante — a do WhatsApp. Por
+ * isso a raiz é coluna no celular e LINHA no desktop (`md:flex-row`), e o
+ * `main` voltou a precisar de `min-w-0`: ele divide a linha com a coluna.
  *
- * Com a barra fora, o `flex` horizontal e o `min-w-0` que existiam para a
- * coluna de conteúdo dividir a linha com ela deixaram de ter razão de ser: o
- * conteúdo É a linha.
+ * ⚠️ Histórico: o menu lateral ANTIGO (240px, 64 recolhido, com texto e vinte
+ * links) foi removido em 2026-09-10 porque comia a largura do inbox — em 1280px
+ * sobravam 1040 para três colunas. A coluna de agora tem 64px FIXOS, só ícones,
+ * e o inventário continua em Configurações (`lib/navigation/registry.ts`):
+ * não é o menu antigo de volta, e quem a alargar está desfazendo aquela decisão.
  */
 export function AppShell({ children }: AppShellProps) {
   useInboundMessageAlerts();
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
   return (
-    <div className="flex h-dvh min-h-0 w-full flex-col bg-background">
+    <div className="flex h-dvh min-h-0 w-full flex-col bg-background md:flex-row">
       <TopBar />
       {/*
         `p-6` é a moldura padrão de toda tela. A EXCEÇÃO é declarada pela
@@ -59,7 +60,7 @@ export function AppShell({ children }: AppShellProps) {
         resultante segue DEFINIDA (item de flex num contêiner de altura definida),
         então o `h-full` de quem está abaixo continua resolvendo.
       */}
-      <main className="min-h-0 flex-1 overflow-auto p-6 [&:has([data-tela-cheia])]:p-0">{children}</main>
+      <main className="min-h-0 min-w-0 flex-1 overflow-auto p-6 [&:has([data-tela-cheia])]:p-0">{children}</main>
     </div>
   );
 }
