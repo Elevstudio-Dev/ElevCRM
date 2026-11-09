@@ -8,6 +8,19 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.26.0] — 2026-11-09
+
+### Adicionado
+
+- **A conversa mostra de qual anúncio o cliente veio, e o relatório separa cada anúncio** Dois pedidos sobre os anúncios da Meta:
+
+  - **Na conversa:** quem chegou por um anúncio ganha o selo "Anúncio" no cabeçalho e, no painel ao lado, o bloco
+    "Veio de um anúncio" com o título, o texto do anúncio, se o clique foi no Instagram ou no Facebook, a hora do clique
+    e o botão "Ver anúncio".
+  - **Nos Relatórios:** cada anúncio passa a ser identificado pelo código dele, e não só pelo título. Dois anúncios com o
+    mesmo título aparecem em linhas separadas, e um anúncio que o anunciante renomeou continua sendo uma linha só. Cada
+    linha mostra negócios, abertos, vendas, perdidos, conversão e valor ganho.
+
 ## [1.25.1] — 2026-11-09
 
 ### Corrigido
@@ -3142,7 +3155,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.1...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.26.0...HEAD
+[1.26.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.1...v1.26.0
 [1.25.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.2...v1.25.0
 [1.24.2]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.1...v1.24.2
