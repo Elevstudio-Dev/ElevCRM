@@ -26,6 +26,8 @@ import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { cn } from "@/lib/utils";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import type { AnuncioDoContato as Anuncio } from "@/lib/leads/anuncio-do-contato";
+import { AnuncioDoContato } from "./AnuncioDoContato";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -365,6 +367,7 @@ export function CRMSidePanel({ conversation }: Props) {
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [activities, setActivities] = useState<ActivityRow[] | null>(null);
   const [demandas, setDemandas] = useState<DemandaRow[] | null>(null);
+  const [anuncio, setAnuncio] = useState<Anuncio | null>(null);
   const [loading, setLoading] = useState(false);
   /**
    * O TERCEIRO ESTADO. Antes existiam dois — carregando e "tem N itens" — e a
@@ -393,6 +396,7 @@ export function CRMSidePanel({ conversation }: Props) {
       setOrders(null);
       setActivities(null);
       setDemandas(null);
+      setAnuncio(null);
       setLeadAtivoId(null);
       return;
     }
@@ -411,6 +415,7 @@ export function CRMSidePanel({ conversation }: Props) {
             orders: OrderRow[];
             activities: ActivityRow[];
             demandas: DemandaRow[];
+            anuncio?: Anuncio | null;
           };
         }>(`/api/v1/contacts/${contactId}/crm-summary`);
         if (cancelled) return;
@@ -422,6 +427,7 @@ export function CRMSidePanel({ conversation }: Props) {
         // mostraria esqueleto para sempre num contato sem demanda aberta —
         // que é o caso saudável.
         setDemandas(r.data.demandas ?? []);
+        setAnuncio(r.data.anuncio ?? null);
       } catch {
         if (cancelled) return;
         // Falha NÃO vira lista vazia. Os dados ficam `null` e o painel diz que
@@ -431,6 +437,7 @@ export function CRMSidePanel({ conversation }: Props) {
         setOrders(null);
         setActivities(null);
         setDemandas(null);
+        setAnuncio(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -537,6 +544,8 @@ export function CRMSidePanel({ conversation }: Props) {
           {tagEditorOpen && contactId && <ContactTagsEditor contactId={contactId} tags={tags} />}
         </Card>
       </section>
+
+      {anuncio && <AnuncioDoContato anuncio={anuncio} locale={localeDaData} />}
 
       {contactId && defaultPipeline.data && (
         <NewLeadDialog
