@@ -29,6 +29,8 @@ export interface ContactSummary {
   force_human?: boolean | null;
   fora_do_funil_em?: string | null;
   fora_do_funil_tipo_id?: string | null;
+  /** De onde o contato veio (meta_ads, qr_code, whatsapp…). Só a etiqueta: o detalhe do anúncio vem do painel. */
+  source?: string | null;
 }
 
 /**

@@ -4211,6 +4211,9 @@ export const DICIONARIO: Traducoes = {
   // ─── Inbox: painel lateral CRM (demandas, leads, pedidos, atividade) ───
   "Nenhuma demanda aberta.": { es: "No hay demandas abiertas." },
   "Demandas abertas": { es: "Demandas abiertas" },
+  "Veio de um anúncio": { es: "Vino de un anuncio" },
+  "Clicou em": { es: "Hizo clic el" },
+  "Ver anúncio": { es: "Ver anuncio" },
   "Leads recentes": { es: "Leads recientes" },
   "Pedidos recentes": { es: "Pedidos recientes" },
   "O que acontece a seguir?": { es: "¿Qué pasa a continuación?" },

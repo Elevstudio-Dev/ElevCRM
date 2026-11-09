@@ -61,6 +61,9 @@ export function grupoDaOrigem(source: string): GrupoDeOrigem {
   }
 }
 
+/** Separa o código do anúncio do título no `detalhe` (`chr(31)` no banco, migration 0223). */
+const SEPARADOR_DO_ANUNCIO = "\u001f";
+
 /** Uma linha de `fn_relatorio_de_origens`, com os `bigint` já convertidos. */
 export interface LinhaDeOrigem {
   source: string;
@@ -128,9 +131,15 @@ function detalheDaLinha(l: LinhaDeOrigem, grupo: GrupoDeOrigem, nomes: NomesDoRe
       return { chave: `qr:${id}`, rotulo: nomes.qr.get(id) ?? "QR removido" };
     }
     case "anuncio": {
-      const titulo = l.detalhe?.trim();
+      // 0223: `<código do anúncio>␟<título>`. O CÓDIGO é a identidade do anúncio (dois anúncios de mesmo título
+      // são dois; um título trocado continua sendo um). Sem código (linha de antes da 0223, ou formato que não
+      // o trouxe) a identidade volta a ser o título — o comportamento de antes.
+      const bruto = l.detalhe ?? "";
+      const corte = bruto.indexOf(SEPARADOR_DO_ANUNCIO);
+      const codigo = corte === -1 ? "" : bruto.slice(0, corte).trim();
+      const titulo = (corte === -1 ? bruto : bruto.slice(corte + 1)).trim();
       const rotulo = titulo ? titulo : "Anúncio sem título";
-      return { chave: rotulo, rotulo };
+      return { chave: codigo ? `anuncio:${codigo}` : rotulo, rotulo };
     }
     case "formulario": {
       const bruto = l.detalhe?.trim() ?? "";

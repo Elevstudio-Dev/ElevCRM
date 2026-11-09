@@ -30,6 +30,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
+import { anuncioDoContato } from "@/lib/leads/anuncio-do-contato";
 import { camposDoFunil, settingsDoEmbed } from "@/lib/leads/campos-do-funil";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
@@ -81,7 +82,7 @@ export async function GET(
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
 
-  const [leads, orders, activities, demandas] = await Promise.all([
+  const [leads, orders, activities, demandas, contato] = await Promise.all([
     supabase
       .from("crm_leads")
       .select(LEAD_COLS)
@@ -117,11 +118,15 @@ export async function GET(
       .is("fechada_em", null)
       .order("aberta_em", { ascending: true })
       .limit(5),
+    // De qual anúncio o contato veio (se veio). A leitura é do servidor, sob a sessão do usuário (RLS): o
+    // `source_metadata` carrega o dado bruto do anúncio, inclusive a miniatura inteira — por isso o navegador
+    // recebe só o que `anuncioDoContato` escolhe, nunca a linha.
+    supabase.from("contacts").select("source, source_metadata").eq("id", contactId).maybeSingle(),
   ]);
 
   // A falha SOBE. Engolir aqui devolveria lista vazia ao cliente e recriaria,
   // do lado do servidor, exatamente a mentira que esta rota veio desfazer.
-  const falha = leads.error ?? orders.error ?? activities.error ?? demandas.error;
+  const falha = leads.error ?? orders.error ?? activities.error ?? demandas.error ?? contato.error;
   if (falha) {
     return fail("internal_error", falha.message, 500, { requestId });
   }
@@ -146,6 +151,10 @@ export async function GET(
           : null,
       })),
       demandas: demandas.data ?? [],
+      anuncio: anuncioDoContato(
+        contato.data?.source,
+        (contato.data?.source_metadata ?? null) as Record<string, unknown> | null,
+      ),
     },
     { requestId },
   );

@@ -19344,6 +19344,58 @@ revoke execute on function public.fn_membros_do_canal(uuid, uuid) from anon, aut
 grant execute on function public.fn_membros_do_canal(uuid, uuid) to service_role;
 
 
+-- ---- o relatório de origens separa os anúncios pelo código do anúncio (migration 0223) ----
+--
+-- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, pelo mesmo motivo dos blocos acima:
+-- `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts` proíbe `create function` depois dele.
+--
+-- Explicação completa no cabeçalho de supabase/migrations/20261109120000_0223_*.sql.
+create or replace function public.fn_relatorio_de_origens(p_org uuid, p_de timestamptz, p_ate timestamptz)
+returns table (
+  source text,
+  detalhe text,
+  leads bigint,
+  abertos bigint,
+  ganhos bigint,
+  perdidos bigint,
+  valor_ganho_cents bigint
+)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select
+    coalesce(nullif(l.source, ''), 'desconhecida') as source,
+    case
+      when l.source = 'qr_code' then l.source_metadata->>'qr_code_id'
+      when l.source in ('meta_ads', 'google_ads') then
+        coalesce(nullif(l.source_metadata->'ad_raw'->>'sourceId', ''), '')
+        || chr(31)
+        || coalesce(nullif(l.source_metadata->>'ad_title', ''), nullif(l.source_metadata->>'ad_source_id', ''), '')
+      when l.source = 'webhook' then
+        coalesce(
+          nullif(l.source_metadata->>'utm_campaign', ''),
+          nullif(l.source_metadata->>'utm_source', ''),
+          'fonte:' || nullif(l.source_metadata->>'webhook_source_id', '')
+        )
+      else null
+    end as detalhe,
+    count(*) as leads,
+    count(*) filter (where l.status = 'open') as abertos,
+    count(*) filter (where l.status = 'won') as ganhos,
+    count(*) filter (where l.status = 'lost') as perdidos,
+    coalesce(sum(l.value_cents) filter (where l.status = 'won' and coalesce(l.currency, 'BRL') = 'BRL'), 0)::bigint
+      as valor_ganho_cents
+  from public.crm_leads l
+  where l.organization_id = p_org
+    and l.created_at >= p_de
+    and l.created_at < p_ate
+    and l.status in ('open', 'won', 'lost')
+    and not l.fora_do_funil
+  group by 1, 2
+$$;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

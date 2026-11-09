@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
-import { Phone, ArrowRight } from "@/lib/ui/icons";
+import { Phone, ArrowRight, Megaphone } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useLimiteDeResposta } from "@/hooks/inbox/useLimiteDeResposta";
@@ -221,6 +221,13 @@ export function ConversationHeader({ conversation }: Props) {
           />
           <h2 className="truncate text-sm font-semibold">{displayName}</h2>
           <SeloForaDoFunil foraDoFunilEm={c?.fora_do_funil_em} tipoId={c?.fora_do_funil_tipo_id} className="h-4 px-1.5 text-[10px]" />
+          {/* Veio de anuncio: o selo e so o aviso; titulo e link ficam no painel ao lado. */}
+          {c?.source === "meta_ads" || c?.source === "google_ads" ? (
+            <Badge variant="secondary" className="h-4 shrink-0 gap-1 px-1.5 text-[10px]" data-testid="selo-anuncio">
+              <Megaphone size={10} aria-hidden />
+              {t("Anúncio")}
+            </Badge>
+          ) : null}
           {/* O telefone ja era calculado e nunca era renderizado. Some no
               celular, onde o nome sozinho ja ocupa a linha. */}
           {phone ? (

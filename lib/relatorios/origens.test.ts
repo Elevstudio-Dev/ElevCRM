@@ -116,6 +116,29 @@ describe("agruparOrigens", () => {
     ]);
   });
 
+  it("anúncio (0223): o CÓDIGO é a identidade — mesmo título com códigos diferentes são dois anúncios; título trocado com o mesmo código é um só", () => {
+    const US = "\u001f";
+    const { grupos } = agruparOrigens(
+      [
+        linha({ source: "meta_ads", detalhe: `111${US}Clareamento`, leads: 2 }),
+        linha({ source: "meta_ads", detalhe: `222${US}Clareamento`, leads: 5 }),
+        // o anunciante renomeou o anúncio 111: continua sendo o mesmo
+        linha({ source: "meta_ads", detalhe: `111${US}Clareamento — novo título`, leads: 1 }),
+        // sem código (formato antigo, ou o WhatsApp não trouxe): agrupa pelo título, como antes
+        linha({ source: "meta_ads", detalhe: `${US}Implante`, leads: 1 }),
+        linha({ source: "meta_ads", detalhe: "Implante", leads: 1 }),
+        linha({ source: "meta_ads", detalhe: US, leads: 1 }),
+      ],
+      SEM_NOMES,
+    );
+    const detalhes = grupos[0]!.detalhes;
+    expect(detalhes.find((d) => d.chave === "anuncio:222")).toMatchObject({ rotulo: "Clareamento", leads: 5 });
+    expect(detalhes.find((d) => d.chave === "anuncio:111")).toMatchObject({ leads: 3 });
+    expect(detalhes.find((d) => d.chave === "Implante")).toMatchObject({ leads: 2 });
+    expect(detalhes.find((d) => d.rotulo === "Anúncio sem título")).toMatchObject({ leads: 1 });
+    expect(detalhes).toHaveLength(4);
+  });
+
   it("origens sem detalhe têm um detalhe só, com o rótulo do grupo", () => {
     const { grupos } = agruparOrigens(
       [linha({ source: "whatsapp", leads: 8 }), linha({ source: "landing", leads: 1 }), linha({ source: "xyz", leads: 1 })],
