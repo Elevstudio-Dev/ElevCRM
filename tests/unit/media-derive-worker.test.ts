@@ -58,6 +58,10 @@ vi.mock("@/lib/messaging/media/derive", () => ({
 // resolveOrgLlmConfig e generateText mockados: o worker precisa de credencial p/
 // montar as deps, mas o teste não exercita rede.
 vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
+  // Mesmo nome e mesma forma do erro real (`instanceof` no worker).
+  LlmNotConfiguredError: class LlmNotConfiguredError extends Error {
+    override readonly name = "llm_not_configured";
+  },
   resolveOrgLlmConfig: vi.fn(async () => ({
     provider: "openai",
     apiKey: "sk-test",
@@ -69,7 +73,7 @@ vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
   })),
 }));
 
-import { resolveOrgLlmConfig } from "@/lib/agent-engine/edge/llm/credentials";
+import { LlmNotConfiguredError, resolveOrgLlmConfig } from "@/lib/agent-engine/edge/llm/credentials";
 import { deriveMessageMedia, MARCADOR_NAO_LIDA } from "@/workers/media-derive-worker";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
 
@@ -204,6 +208,44 @@ describe("por onde o áudio é transcrito (rota escolhida pelo worker)", () => {
     const auth = (init.headers as Record<string, string>).Authorization;
     expect(auth).toBe("Bearer sk-or-achada");
     expect(auth).not.toContain("chave-do-provedor-da-org");
+  });
+
+  it("org na Anthropic SEM chave da Anthropic e só com a da OpenAI (o caso da clínica): o áudio é transcrito mesmo assim", async () => {
+    // O defeito real: `settings.llm.provider = anthropic`, única credencial
+    // `openai`. A resolução da config de CONVERSA lançava `llm_not_configured` e
+    // o áudio morria em 5 tentativas sem nunca procurar a chave do Whisper.
+    const fetchEspiao = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ text: "texto do áudio" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchEspiao);
+    vi.mocked(resolveOrgLlmConfig).mockImplementation(async (_pool, _cfg, _org, override) => {
+      if (override?.provider === "openai") return cfgDe("openai", "sk-da-clinica");
+      throw new LlmNotConfiguredError();
+    });
+
+    const r = await deriveMessageMedia(eventRow());
+    expect(r.status).toBe("ok");
+    const deps = vi.mocked(deriveMediaText).mock.calls[0]![3] as DeriveDeps;
+    const texto = await deps.transcriber.transcribe(Buffer.from([1, 2, 3]), "audio/ogg");
+    expect(texto).toBe("texto do áudio");
+    const [url, init] = fetchEspiao.mock.calls[0]!;
+    expect(String(url)).toBe("https://api.openai.com/v1/audio/transcriptions");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sk-da-clinica");
+  });
+
+  it("a mesma org, com uma FOTO: vira o marcador de não lida (visão precisa de chave de conversa), sem chamar a rede", async () => {
+    messageRow.type = "image";
+    const fetchEspiao = vi.fn();
+    vi.stubGlobal("fetch", fetchEspiao);
+    vi.mocked(resolveOrgLlmConfig).mockImplementation(async () => {
+      throw new LlmNotConfiguredError();
+    });
+
+    const r = await deriveMessageMedia(eventRow());
+    expect(r.status).toBe("ok");
+    const deps = vi.mocked(deriveMediaText).mock.calls[0]![3] as DeriveDeps;
+    expect(await deps.describeImage(Buffer.from([1]), "image/jpeg")).toBe(MARCADOR_NAO_LIDA);
+    expect(fetchEspiao).not.toHaveBeenCalled();
   });
 
   it("sem chave de quem transcreve: devolve o marcador e NÃO chama a rede", async () => {

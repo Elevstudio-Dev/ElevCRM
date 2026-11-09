@@ -55,7 +55,72 @@ describe("extrairAtribuicaoMeta — referral do webhook oficial", () => {
   });
 });
 
-describe("extrairAtribuicaoWaha — externalAdReplyInfo do Baileys", () => {
+describe("extrairAtribuicaoWaha — o formato REAL do webhook (campanha da Meta, 06/11/2026)", () => {
+  // A estrutura abaixo foi lida do webhook de uma campanha real (só os nomes de
+  // chave e as categorias; nada de pessoa). A chave é `externalAdReply` — o
+  // extrator procurava `externalAdReplyInfo` e por isso NENHUM anúncio real foi
+  // reconhecido: o contato nascia sem origem.
+  const mensagemReal = (sourceType = "ad") => ({
+    extendedTextMessage: {
+      text: "Olá! Posso saber mais informações sobre o clareamento dental?",
+      contextInfo: {
+        entryPointConversionSource: "ctwa_ad",
+        entryPointConversionApp: "facebook",
+        conversionSource: "FB_Ads",
+        ctwaPayload: "payload-opaco",
+        externalAdReply: {
+          title: "Clareamento dental",
+          body: "Agende sua avaliação",
+          mediaType: "IMAGE",
+          sourceType,
+          sourceApp: "facebook",
+          sourceId: "120210000000000",
+          sourceUrl: "https://fb.me/abc123",
+          ctwaClid: "AfQ-clid-do-clique",
+          showAdAttribution: true,
+        },
+      },
+    },
+    messageContextInfo: { messageSecret: "x" },
+  });
+
+  it("reconhece a campanha: plataforma, título, corpo, url e o clique", () => {
+    expect(extrairAtribuicaoWaha(mensagemReal())).toEqual({
+      plataforma: "meta_ads",
+      sourceId: "AfQ-clid-do-clique",
+      titulo: "Clareamento dental",
+      corpo: "Agende sua avaliação",
+      sourceUrl: "https://fb.me/abc123",
+      bruto: expect.objectContaining({ sourceType: "ad", sourceApp: "facebook" }),
+    });
+  });
+
+  it("o mesmo formato, mas de post orgânico, NÃO vira anúncio", () => {
+    expect(extrairAtribuicaoWaha(mensagemReal("post"))).toBeNull();
+  });
+
+  it("acha o anúncio também quando o clique chega como áudio ou documento", () => {
+    const real = mensagemReal().extendedTextMessage.contextInfo;
+    expect(extrairAtribuicaoWaha({ audioMessage: { contextInfo: real } })?.titulo).toBe(
+      "Clareamento dental",
+    );
+    expect(extrairAtribuicaoWaha({ documentMessage: { contextInfo: real } })?.plataforma).toBe(
+      "meta_ads",
+    );
+  });
+
+  it("um contextInfo de RESPOSTA que vem antes não esconde o anúncio do irmão", () => {
+    const real = mensagemReal().extendedTextMessage.contextInfo;
+    expect(
+      extrairAtribuicaoWaha({
+        extendedTextMessage: { contextInfo: { stanzaId: "resposta" } },
+        imageMessage: { contextInfo: real },
+      })?.titulo,
+    ).toBe("Clareamento dental");
+  });
+});
+
+describe("extrairAtribuicaoWaha — externalAdReplyInfo do Baileys (forma antiga, ainda aceita)", () => {
   it("extrai de extendedTextMessage.contextInfo.externalAdReplyInfo", () => {
     const r = extrairAtribuicaoWaha({
       extendedTextMessage: {
