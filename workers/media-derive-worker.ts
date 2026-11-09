@@ -9,7 +9,12 @@ import type pg from "pg";
 
 import { extractPdfText } from "@/lib/ai/rag/extractors/pdf";
 import { visaoEmVigor } from "@/lib/ai/pontos/capacidade-em-vigor";
-import { resolveOrgLlmConfig, type LlmEdgeConfig } from "@/lib/agent-engine/edge/llm/credentials";
+import {
+  LlmNotConfiguredError,
+  resolveOrgLlmConfig,
+  type LlmEdgeConfig,
+  type OrgLlmConfig,
+} from "@/lib/agent-engine/edge/llm/credentials";
 import {
   cabecalhosDeAtribuicaoOpenRouter,
   createDefaultRegistry,
@@ -106,7 +111,29 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       openrouterApiKey: process.env.OPENROUTER_API_KEY,
       cacheTtl: "1h",
     };
-    let llm = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
+    // ─── Sem chave de CONVERSA não é sem chave de TRANSCRIÇÃO ────────────────
+    //
+    // A org pode ter o provedor de conversa em `anthropic` e só uma chave da
+    // OpenAI cadastrada (visto numa clínica: `settings.llm.provider=anthropic`,
+    // única credencial `openai`). `resolveOrgLlmConfig` então lança
+    // `LlmNotConfiguredError` — e, como esta chamada vinha ANTES da escolha da
+    // rota de transcrição, o áudio morria em 5 tentativas sem nunca perguntar se
+    // havia chave de Whisper. O cliente mandava o áudio e o agente respondia como
+    // se ele não existisse.
+    //
+    // A chave de conversa só é precisa para a VISÃO. Sem ela, `llm` fica `null`:
+    // a rota de transcrição continua procurando a sua própria chave (OpenAI,
+    // depois OpenRouter) e a imagem vira o marcador de "não consegui ler" com o
+    // aviso na Central, em vez de falhar calada depois de 5 tentativas.
+    let llm: OrgLlmConfig | null = null;
+    try {
+      llm = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
+    } catch (err) {
+      if (!(err instanceof LlmNotConfiguredError)) throw err;
+      logger.warn("[media-derive] org sem credencial de conversa; só a transcrição segue", {
+        organization_id: row.organization_id,
+      });
+    }
 
     // ─── O painel de provedores manda AQUI também ────────────────────────────
     //
@@ -119,7 +146,7 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     // `lib/ai/gateway-binding.ts` declara ter vindo matar — três pontos foram
     // fechados e este ficou igual.
     const bindingDaVisao = await lerBindingDoPonto(admin, row.organization_id, "visao_de_imagem");
-    if (bindingDaVisao) {
+    if (bindingDaVisao && llm) {
       try {
         const comBinding = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, {
           provider: bindingDaVisao.provider,
@@ -149,8 +176,8 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     // para quem escolheu esse caminho no instalador) — a ordem e o porquê estão
     // em `rota-de-transcricao.ts`.
     const rota = await escolherRotaDeTranscricao({
-      provedorDaOrg: llm.provider,
-      chaveDoProvedorDaOrg: llm.apiKey,
+      provedorDaOrg: llm?.provider ?? "",
+      chaveDoProvedorDaOrg: llm?.apiKey ?? "",
       buscarChave: async (provedor) => {
         try {
           const cfg = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, {
@@ -210,7 +237,7 @@ async function lerBindingDoPonto(
 }
 
 function buildDeriveDeps(
-  llm: { provider: string; apiKey: string; defaultModel: string | null },
+  llm: { provider: string; apiKey: string; defaultModel: string | null } | null,
   rota: RotaDeTranscricao | null,
   orgId: string,
   admin: ReturnType<typeof createAdminClient>,
@@ -228,6 +255,7 @@ function buildDeriveDeps(
   // torna o helper uma armadilha que só aparece no CI. O que precisava ser único
   // é a REGRA, e ela é: `visaoEmVigor` decide, aqui e em `media-parts.ts`.
   const catalogo = async (): Promise<boolean | null> => {
+    if (!llm) return null;
     const { data } = await admin
       .from("ai_models")
       .select("supports_vision")
@@ -238,6 +266,16 @@ function buildDeriveDeps(
     return data?.supports_vision ?? null;
   };
   const describeImage: DeriveDeps["describeImage"] = async (buffer, mime) => {
+    // Sem credencial de conversa utilizável não há modelo para olhar a foto. O
+    // desfecho é o mesmo de "modelo sem visão": marcador + aviso na Central.
+    if (!llm) {
+      await avisarMidiaNaoLida(
+        orgId,
+        "imagem",
+        "a organização não tem uma chave utilizável para o provedor de conversa — cadastre uma em Agente de IA → Credenciais",
+      );
+      return MARCADOR_NAO_LIDA;
+    }
     // ⚠️ A resposta é resolvida AQUI, não na montagem das deps, porque num
     // roteador ela depende do catálogo e a consulta é assíncrona. Antes disto
     // a pergunta ia direto ao registro, que num roteador responde pelo prefixo

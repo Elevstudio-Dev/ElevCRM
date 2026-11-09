@@ -10,10 +10,17 @@ import type { AtribuicaoDeAnuncio, Bruto } from "@/lib/leads/atribuicao-de-anunc
 import { obj, str } from "@/lib/leads/atribuicao-de-anuncio";
 
 /**
- * `contextInfo.externalAdReplyInfo` do Baileys — o mesmo dado do anúncio,
+ * `contextInfo.externalAdReply` do Baileys — o mesmo dado do anúncio,
  * embutido na PRÓPRIA mensagem que o app do cliente manda ao clicar num
  * anúncio "Clique para o WhatsApp". `messageRaw` é `_data.message` do payload
  * do WAHA (NOWEB) — a forma bruta do Baileys, sem normalização.
+ *
+ * ⚠️ O NOME DA CHAVE é `externalAdReply`. Este extrator lia `externalAdReplyInfo`
+ * (o nome do TIPO no protobuf, não o do campo) e nunca reconheceu um anúncio:
+ * a primeira mensagem de uma campanha real da Meta chegou, o contato foi criado
+ * e ficou sem origem. Os testes escreviam a mesma chave errada, então passavam.
+ * O formato real foi lido do webhook da clínica (06/11/2026); a forma antiga
+ * continua aceita por não custar nada.
  *
  * O ad-reply pode chegar em qualquer tipo de mensagem com `contextInfo`
  * (o clique manda texto na maioria dos casos, daí `extendedTextMessage` vir
@@ -24,14 +31,22 @@ export function extrairAtribuicaoWaha(messageRaw: unknown): AtribuicaoDeAnuncio 
   const m = obj(messageRaw);
   if (!m) return null;
 
+  // Os tipos comuns primeiro (o clique manda texto na maioria dos casos), depois
+  // QUALQUER outro tipo de mensagem que traga `contextInfo` — áudio, documento,
+  // figurinha: o anúncio pode vir em qualquer um, e a lista fixa os perdia.
   const candidatos = [
     obj(m.extendedTextMessage)?.contextInfo,
     obj(m.imageMessage)?.contextInfo,
     obj(m.videoMessage)?.contextInfo,
     obj(m.conversation) ? null : m.contextInfo,
+    ...Object.values(m).map((v) => obj(v)?.contextInfo),
   ];
-  const contextInfo = candidatos.map(obj).find((c): c is Bruto => c !== null);
-  const ad = obj(contextInfo?.externalAdReplyInfo);
+  // O primeiro `contextInfo` que de fato carrega o anúncio — um `contextInfo`
+  // de resposta/menção que vem antes não pode esconder o que está num irmão.
+  const ad = candidatos
+    .map(obj)
+    .map((c) => obj(c?.externalAdReply) ?? obj(c?.externalAdReplyInfo))
+    .find((a): a is Bruto => a !== null);
   if (!ad) return null;
 
   // O mesmo filtro que o irmão da API oficial aplica, e que aqui faltava: post
