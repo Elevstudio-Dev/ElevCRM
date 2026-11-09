@@ -8,6 +8,21 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.25.1] — 2026-11-09
+
+### Corrigido
+
+- **Contatos que chegam de anúncio da Meta passam a ser reconhecidos, e o áudio volta a ser transcrito** Dois defeitos que apareciam no atendimento:
+
+  - **Campanha da Meta não era reconhecida.** Quando alguém clicava num anúncio "Clique para o WhatsApp" e mandava a
+    primeira mensagem, o contato nascia sem origem. O sistema procurava o dado do anúncio por um nome que o WhatsApp não usa;
+    agora lê o formato real, em qualquer tipo de mensagem (texto, foto, áudio, documento). Posts orgânicos compartilhados
+    continuam não contando como anúncio.
+  - **Áudio não era transcrito (e a IA não entendia o que o cliente disse)** em organizações cujo provedor de conversa não
+    tem chave cadastrada mas que têm uma chave da OpenAI. A transcrição agora procura a própria chave (OpenAI, depois
+    OpenRouter) sem depender da chave de conversa. Fotos nessa mesma situação viram o aviso de "não consegui ler a imagem"
+    na Central, em vez de falharem em silêncio depois de cinco tentativas.
+
 ## [1.25.0] — 2026-11-05
 
 ### Alterado
@@ -3127,7 +3142,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.1...HEAD
+[1.25.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.2...v1.25.0
 [1.24.2]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.1...v1.24.2
 [1.24.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.24.0...v1.24.1
