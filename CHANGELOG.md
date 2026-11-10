@@ -8,6 +8,20 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.27.1] — 2026-11-10
+
+### Corrigido
+
+- **Meta Ads: o relatório passa a incluir o gasto de anúncios arquivados e de campanhas desativadas** O gasto que vinha da Meta trazia só os anúncios "vivos". Campanhas antigas, já desativadas ou com os anúncios
+  arquivados, tinham gasto no Gerenciador de Anúncios mas **não apareciam** no relatório, e o total ficava menor do que o
+  da Meta.
+
+  Agora a leitura pede à Meta também os anúncios pausados, arquivados, apagados e de campanha ou conjunto desativado. Se
+  a Meta recusar esse pedido, o sistema lê como antes em vez de ficar sem nada.
+
+  Para quem atualiza: nenhuma migration. Para trazer o histórico que ficou de fora, é preciso reler os últimos 90 dias
+  da conta uma vez; isso é feito junto da atualização.
+
 ## [1.27.0] — 2026-11-10
 
 ### Adicionado
@@ -3175,7 +3189,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.1...HEAD
+[1.27.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.1...v1.26.0
 [1.25.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.0...v1.25.1
