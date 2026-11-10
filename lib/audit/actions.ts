@@ -444,6 +444,9 @@ export const AUDIT_ACTIONS = [
   "qr_code.updated",
   "qr_code.archived",
   "qr_code.restored",
+  // Meta Ads (migration 0224): quem ligou ou desligou a conta de anúncios da organização. A chave nunca entra aqui.
+  "meta_ads.conectada",
+  "meta_ads.desconectada",
   // Contato "Fora do funil" (migration 0221): quem marcou ou desmarcou equipe, prestador ou parceiro — o que sai da
   // IA, do funil e do relatório precisa ter autor — e os tipos que o dono cadastra.
   "contact.fora_do_funil_marcado",

@@ -70,6 +70,11 @@ CRONS="
 */10 * * * *|60|api/v1/cron/contact-avatars
 */10 * * * *|60|api/v1/cron/agenda-google-refresh
 */15 * * * *|90|api/v1/cron/agenda-google-sync
+# Meta Ads: o gasto por anúncio de cada organização conectada. De hora em hora, no minuto 7 (fora do pico do
+# minuto 0, em que os outros serviços também acordam): a Meta fecha os números do dia aos poucos, e o botão
+# Atualizar agora, na tela, cobre a pressa. Sem aspas, crase ou cifrão neste comentário: ele mora DENTRO da
+# string CRONS, e aspas duplas aqui fechariam a string no meio.
+7 * * * *|120|api/v1/cron/meta-ads-sync
 # A IDA. Cadência mais curta que a volta de propósito: quem marcou pela tela
 # espera ver o compromisso no celular dele em minutos, e a ida é barata (só
 # manda o que mudou). A volta é cara — varre calendário inteiro — e por isso

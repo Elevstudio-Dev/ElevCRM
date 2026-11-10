@@ -13,7 +13,19 @@ import type { RelatorioDeOrigens } from "@/hooks/relatorios/useRelatorioDeOrigen
  * servidor, e o vazio diz que está vazio em vez de mostrar uma tabela de zeros.
  */
 const get = vi.fn();
-vi.mock("@/lib/api/client", () => ({ apiClient: { get: (...a: unknown[]) => get(...a) } }));
+// A tela faz DUAS perguntas (origens e anúncios). Estes casos são sobre a de origens; a de anúncios responde "sem
+// conexão e sem nada" (o que `tabela-de-anuncios.test.tsx` cobre em detalhe) e não entra na contagem de `get`.
+const ANUNCIOS_VAZIO = {
+  anuncios: [],
+  total: { leads: 0, ganhos: 0, valorGanhoCents: 0, gastoCents: 0, moeda: null, custoPorContatoCents: null, custoPorVendaCents: null, retorno: null },
+  conexao: { conectada: false, ad_account_id: null, account_name: null, currency: null, status: null, last_synced_at: null, last_error: null },
+};
+vi.mock("@/lib/api/client", () => ({
+  apiClient: {
+    get: (url: string, ...a: unknown[]) =>
+      String(url).includes("/relatorios/anuncios") ? Promise.resolve({ data: ANUNCIOS_VAZIO }) : get(url, ...a),
+  },
+}));
 
 // jsdom não mede layout: o ResponsiveContainer real renderiza 0×0 e o gráfico some.
 vi.mock("recharts", async (orig) => {
