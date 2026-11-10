@@ -5,12 +5,14 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/hooks/i18n/useT";
+import { useRelatorioDeAnuncios } from "@/hooks/relatorios/useRelatorioDeAnuncios";
 import { useRelatorioDeOrigens } from "@/hooks/relatorios/useRelatorioDeOrigens";
 import { periodoPreDefinido } from "@/lib/relatorios/periodo";
 
 import { FiltroDePeriodo, fusoDoNavegador, type EstadoDoPeriodo } from "./FiltroDePeriodo";
 import { GraficoPorDia } from "./GraficoPorDia";
 import { ResumoDoPeriodo } from "./ResumoDoPeriodo";
+import { TabelaDeAnuncios } from "./TabelaDeAnuncios";
 import { TabelaDeOrigens } from "./TabelaDeOrigens";
 
 const DIA_EM_MS = 86_400_000;
@@ -31,6 +33,7 @@ export function RelatoriosClient() {
   }));
   const consultavel = periodoConsultavel(periodo);
   const q = useRelatorioDeOrigens({ de: periodo.de, ate: periodo.ate, fuso }, { enabled: consultavel });
+  const anuncios = useRelatorioDeAnuncios({ de: periodo.de, ate: periodo.ate, fuso }, { enabled: consultavel });
 
   return (
     <div className="flex flex-col gap-6">
@@ -62,6 +65,21 @@ export function RelatoriosClient() {
           <section className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold">{t("Leads por origem")}</h2>
             <TabelaDeOrigens grupos={q.data.grupos} total={q.data.total} />
+          </section>
+          <section className="flex flex-col gap-3" data-testid="secao-anuncios">
+            <h2 className="text-lg font-semibold">{t("Anúncios: gasto, custo e retorno")}</h2>
+            {anuncios.isPending ? (
+              <Skeleton className="h-32 w-full" />
+            ) : anuncios.isError || !Array.isArray(anuncios.data?.anuncios) ? (
+              <div className="flex flex-col items-start gap-3 rounded-md border border-border p-4">
+                <p className="text-sm text-text">{t("Não foi possível carregar os anúncios.")}</p>
+                <Button variant="outline" onClick={() => void anuncios.refetch()}>
+                  {t("Tentar de novo")}
+                </Button>
+              </div>
+            ) : (
+              <TabelaDeAnuncios dados={anuncios.data} />
+            )}
           </section>
           <GraficoPorDia serie={q.data.serie} />
         </>

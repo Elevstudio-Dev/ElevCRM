@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { QrCode } from "@/lib/ui/icons";
+import { Megaphone, QrCode } from "@/lib/ui/icons";
 
 import { RelatoriosClient } from "./_components/RelatoriosClient";
 
@@ -27,13 +27,22 @@ export default async function RelatoriosPage() {
             {traduzir("De onde vêm os leads e quantos viram venda.", idioma)}
           </p>
         </div>
-        <Link
-          href="/app/relatorios/qr-codes"
-          className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm text-text transition-colors hover:border-accent hover:text-accent lg:h-9"
-        >
-          <QrCode size={16} aria-hidden />
-          {traduzir("QR codes", idioma)}
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/app/settings/meta-ads"
+            className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm text-text transition-colors hover:border-accent hover:text-accent lg:h-9"
+          >
+            <Megaphone size={16} aria-hidden />
+            {traduzir("Meta Ads", idioma)}
+          </Link>
+          <Link
+            href="/app/relatorios/qr-codes"
+            className="inline-flex h-11 items-center gap-2 rounded-md border border-border px-4 text-sm text-text transition-colors hover:border-accent hover:text-accent lg:h-9"
+          >
+            <QrCode size={16} aria-hidden />
+            {traduzir("QR codes", idioma)}
+          </Link>
+        </div>
       </header>
       <RelatoriosClient />
     </div>
