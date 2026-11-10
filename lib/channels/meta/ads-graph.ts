@@ -19,6 +19,22 @@ const PAGINAS_NO_MAXIMO = 60;
 const POR_PAGINA = 500;
 const TIMEOUT_MS = 25_000;
 
+/** Todos os estados em que um anúncio pode estar — incluindo arquivado, apagado e de campanha desativada. */
+const STATUS_DE_ANUNCIO = [
+  "ACTIVE",
+  "PAUSED",
+  "DELETED",
+  "ARCHIVED",
+  "PENDING_REVIEW",
+  "DISAPPROVED",
+  "PREAPPROVED",
+  "PENDING_BILLING_INFO",
+  "CAMPAIGN_PAUSED",
+  "ADSET_PAUSED",
+  "IN_PROCESS",
+  "WITH_ISSUES",
+];
+
 export type ErroDaMeta = "token_invalido" | "sem_permissao" | "limite" | "conta_invalida" | "indisponivel";
 
 export class MetaAdsError extends Error {
@@ -107,29 +123,47 @@ export async function lerGastoPorAnuncio(
   if (!/^\d{5,20}$/.test(adAccountId)) throw new MetaAdsError("conta_invalida");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) throw new MetaAdsError("conta_invalida");
 
-  const q = new URLSearchParams({
-    level: "ad",
-    fields: "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,account_currency",
-    time_range: JSON.stringify({ since: de, until: ate }),
-    time_increment: "1",
-    limit: String(POR_PAGINA),
-  });
-  let url: string | null = `https://${HOST}/${VERSAO_DA_GRAPH}/act_${adAccountId}/insights?${q.toString()}`;
-
-  const linhas: LinhaDeGasto[] = [];
-  let descartadas = 0;
-  for (let pagina = 0; url && pagina < PAGINAS_NO_MAXIMO; pagina += 1) {
-    const corpo = (await pedir(url, token, fetcher)) as {
-      data?: unknown;
-      paging?: { next?: unknown };
-    } | null;
-    const dados = Array.isArray(corpo?.data) ? corpo.data : [];
-    for (const bruta of dados) {
-      const l = linhaDeGasto(bruta, moedaDaConta);
-      if (l) linhas.push(l);
-      else descartadas += 1;
+  const montar = (comFiltroDeStatus: boolean): string => {
+    const q = new URLSearchParams({
+      level: "ad",
+      fields: "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,account_currency",
+      time_range: JSON.stringify({ since: de, until: ate }),
+      time_increment: "1",
+      limit: String(POR_PAGINA),
+    });
+    // Sem este filtro a Meta devolve só os anúncios "vivos": o gasto dos arquivados e dos de campanhas
+    // desativadas some do relatório, embora o Gerenciador o mostre (e some do total).
+    if (comFiltroDeStatus) {
+      q.set("filtering", JSON.stringify([{ field: "ad.effective_status", operator: "IN", value: STATUS_DE_ANUNCIO }]));
     }
-    url = typeof corpo?.paging?.next === "string" ? corpo.paging.next : null;
+    return `https://${HOST}/${VERSAO_DA_GRAPH}/act_${adAccountId}/insights?${q.toString()}`;
+  };
+
+  const lerTudo = async (primeira: string): Promise<ResultadoDosInsights> => {
+    let url: string | null = primeira;
+    const linhas: LinhaDeGasto[] = [];
+    let descartadas = 0;
+    for (let pagina = 0; url && pagina < PAGINAS_NO_MAXIMO; pagina += 1) {
+      const corpo = (await pedir(url, token, fetcher)) as {
+        data?: unknown;
+        paging?: { next?: unknown };
+      } | null;
+      const dados = Array.isArray(corpo?.data) ? corpo.data : [];
+      for (const bruta of dados) {
+        const l = linhaDeGasto(bruta, moedaDaConta);
+        if (l) linhas.push(l);
+        else descartadas += 1;
+      }
+      url = typeof corpo?.paging?.next === "string" ? corpo.paging.next : null;
+    }
+    return { linhas, descartadas };
+  };
+
+  try {
+    return await lerTudo(montar(true));
+  } catch (err) {
+    // Se a Meta recusar o filtro (parâmetro inválido), lê como antes: pior ter só os anúncios vivos do que nada.
+    if (err instanceof MetaAdsError && err.codigo === "conta_invalida") return lerTudo(montar(false));
+    throw err;
   }
-  return { linhas, descartadas };
 }

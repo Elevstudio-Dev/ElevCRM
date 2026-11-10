@@ -154,6 +154,41 @@ describe("lerGastoPorAnuncio", () => {
       codigo: "indisponivel",
     });
   });
+
+  it("pede também os anúncios arquivados, apagados e de campanha desativada", async () => {
+    const f = vi.fn().mockResolvedValue(resposta({ data: [bruta()] }));
+    await lerGastoPorAnuncio("1234567", "t", "2026-10-01", "2026-11-08", "BRL", f as never);
+    const filtro = JSON.parse(new URL(String(f.mock.calls[0]![0])).searchParams.get("filtering") ?? "[]") as Array<{
+      field: string;
+      operator: string;
+      value: string[];
+    }>;
+    expect(filtro).toHaveLength(1);
+    expect(filtro[0]).toMatchObject({ field: "ad.effective_status", operator: "IN" });
+    for (const estado of ["ACTIVE", "PAUSED", "ARCHIVED", "DELETED", "CAMPAIGN_PAUSED", "ADSET_PAUSED"]) {
+      expect(filtro[0]!.value).toContain(estado);
+    }
+  });
+
+  it("se a Meta recusar o filtro, lê de novo sem ele em vez de ficar sem nada", async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(resposta({ error: { code: 100, message: "parâmetro inválido" } }, 400))
+      .mockResolvedValueOnce(resposta({ data: [bruta()] }));
+    const r = await lerGastoPorAnuncio("1234567", "t", "2026-10-01", "2026-11-08", "BRL", f as never);
+    expect(r.linhas).toHaveLength(1);
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(new URL(String(f.mock.calls[0]![0])).searchParams.has("filtering")).toBe(true);
+    expect(new URL(String(f.mock.calls[1]![0])).searchParams.has("filtering")).toBe(false);
+  });
+
+  it("chave inválida não é repetida sem filtro: falha na primeira", async () => {
+    const f = vi.fn().mockResolvedValue(resposta({ error: { code: 190 } }, 401));
+    await expect(lerGastoPorAnuncio("1234567", "t", "2026-10-01", "2026-11-08", null, f as never)).rejects.toMatchObject({
+      codigo: "token_invalido",
+    });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("classificarErro", () => {
