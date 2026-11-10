@@ -35,6 +35,7 @@ interface LinhaBruta {
   gasto_cents: number | string;
   impressoes: number | string;
   cliques: number | string;
+  conversas: number | string;
   moeda: string | null;
 }
 
@@ -83,6 +84,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     gasto_cents: Number(l.gasto_cents),
     impressoes: Number(l.impressoes),
     cliques: Number(l.cliques),
+    conversas: Number(l.conversas ?? 0),
     moeda: l.moeda,
   }));
 

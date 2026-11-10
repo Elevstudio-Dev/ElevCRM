@@ -68,7 +68,17 @@ function Numeros({ d, comGasto }: { d: Desempenho; comGasto: boolean }) {
   return (
     <>
       {comGasto && (
-        <TableCell className={NUM}>{d.gastoCents > 0 ? formatarDinheiro(d.gastoCents, moeda) : TRACO}</TableCell>
+        <>
+          <TableCell className={NUM}>{d.gastoCents > 0 ? formatarDinheiro(d.gastoCents, moeda) : TRACO}</TableCell>
+          <TableCell className={NUM}>{d.impressoes.toLocaleString("pt-BR")}</TableCell>
+          <TableCell className={NUM}>{d.cliques.toLocaleString("pt-BR")}</TableCell>
+          <TableCell className={NUM} data-testid="conversas-da-meta">
+            {d.conversas.toLocaleString("pt-BR")}
+          </TableCell>
+          <TableCell className={NUM}>
+            {d.custoPorConversaCents === null ? TRACO : formatarDinheiro(d.custoPorConversaCents, moeda)}
+          </TableCell>
+        </>
       )}
       <TableCell className={NUM}>{d.leads.toLocaleString("pt-BR")}</TableCell>
       {comGasto && (
@@ -104,10 +114,39 @@ export function TabelaDeAnuncios({ dados }: { dados: RelatorioDeAnuncios }) {
         <div className="overflow-x-auto rounded-md border border-border">
           <Table>
             <TableHeader>
+              {comGasto && (
+                <TableRow className="border-b-0">
+                  <TableHead />
+                  <TableHead colSpan={5} className="text-center text-xs uppercase tracking-wide text-text-muted">
+                    {t("Informado pela Meta")}
+                  </TableHead>
+                  <TableHead colSpan={6} className="text-center text-xs uppercase tracking-wide text-text-muted">
+                    {t("Reconhecido no CRM")}
+                  </TableHead>
+                </TableRow>
+              )}
               <TableRow>
                 <TableHead>{t("Anúncio")}</TableHead>
-                {comGasto && <TableHead className={NUM}>{t("Gasto")}</TableHead>}
-                <TableHead className={NUM}>{t("Contatos")}</TableHead>
+                {comGasto && (
+                  <>
+                    <TableHead className={NUM}>{t("Gasto")}</TableHead>
+                    <TableHead className={NUM}>{t("Impressões")}</TableHead>
+                    <TableHead className={NUM}>{t("Cliques")}</TableHead>
+                    <TableHead
+                      className={NUM}
+                      title={t("Conversas por mensagem iniciadas, como a Meta conta (o número do Gerenciador de Anúncios).")}
+                    >
+                      {t("Conversas")}
+                    </TableHead>
+                    <TableHead className={NUM}>{t("Custo por conversa")}</TableHead>
+                  </>
+                )}
+                <TableHead
+                  className={NUM}
+                  title={t("Pessoas que o CRM reconheceu como vindas deste anúncio. Pode ser menos que as conversas da Meta.")}
+                >
+                  {t("Contatos")}
+                </TableHead>
                 {comGasto && <TableHead className={NUM}>{t("Custo por contato")}</TableHead>}
                 <TableHead className={NUM}>{t("Vendas")}</TableHead>
                 {comGasto && <TableHead className={NUM}>{t("Custo por venda")}</TableHead>}

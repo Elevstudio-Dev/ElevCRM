@@ -16,6 +16,7 @@ const linha = (extra: Partial<LinhaDeAnuncio> = {}): LinhaDeAnuncio => ({
   gasto_cents: 20_000,
   impressoes: 1000,
   cliques: 50,
+  conversas: 8,
   moeda: "BRL",
   ...extra,
 });
@@ -37,6 +38,13 @@ describe("desempenho", () => {
     });
   });
 
+  it("custo por conversa usa as conversas que a Meta informa; sem conversa ou sem gasto é nulo, nunca zero", () => {
+    const base = { leads: 0, ganhos: 0, valorGanhoCents: 0, moeda: "BRL" };
+    expect(desempenho({ ...base, conversas: 10, gastoCents: 25_000 }).custoPorConversaCents).toBe(2500);
+    expect(desempenho({ ...base, conversas: 0, gastoCents: 25_000 }).custoPorConversaCents).toBeNull();
+    expect(desempenho({ ...base, conversas: 4, gastoCents: 0 }).custoPorConversaCents).toBeNull();
+  });
+
   it("sem venda, o custo por venda é nulo (e o retorno é 0, porque houve gasto)", () => {
     const d = desempenho({ leads: 3, ganhos: 0, valorGanhoCents: 0, gastoCents: 9000, moeda: "BRL" });
     expect(d.custoPorVendaCents).toBeNull();
@@ -55,12 +63,36 @@ describe("montarAnuncios", () => {
   it("ordena pelo maior gasto e marca o anúncio que gastou sem trazer ninguém", () => {
     const { anuncios } = montarAnuncios([
       linha({ ad_id: "1", anuncio: "Barato", gasto_cents: 1000 }),
-      linha({ ad_id: "2", anuncio: "Caro e vazio", gasto_cents: 90_000, leads: 0, ganhos: 0, abertos: 0, perdidos: 0, valor_ganho_cents: 0 }),
+      linha({ ad_id: "2", anuncio: "Caro e vazio", gasto_cents: 90_000, leads: 0, conversas: 0, ganhos: 0, abertos: 0, perdidos: 0, valor_ganho_cents: 0 }),
     ]);
     expect(anuncios.map((a) => a.rotulo)).toEqual(["Caro e vazio", "Barato"]);
     expect(anuncios[0]!.gastouSemContato).toBe(true);
     expect(anuncios[0]!.custoPorContatoCents).toBeNull();
     expect(anuncios[1]!.gastouSemContato).toBe(false);
+  });
+
+  it("os números da Meta aparecem completos mesmo quando o CRM não reconheceu ninguém", () => {
+    // Gasto e 12 conversas na Meta, 0 contatos marcados no CRM: não é "ninguém chamou" — alguém chamou.
+    const { anuncios, total } = montarAnuncios([
+      linha({ ad_id: "1", gasto_cents: 36_000, leads: 0, ganhos: 0, abertos: 0, perdidos: 0, valor_ganho_cents: 0, conversas: 12, impressoes: 9000, cliques: 300 }),
+    ]);
+    expect(anuncios[0]).toMatchObject({
+      conversas: 12,
+      impressoes: 9000,
+      cliques: 300,
+      custoPorConversaCents: 3000,
+      custoPorContatoCents: null,
+      gastouSemContato: false,
+    });
+    expect(total).toMatchObject({ conversas: 12, impressoes: 9000, cliques: 300, custoPorConversaCents: 3000 });
+  });
+
+  it("o total soma conversas, impressões e cliques de todos os anúncios", () => {
+    const { total } = montarAnuncios([
+      linha({ ad_id: "1", conversas: 5, impressoes: 100, cliques: 10, gasto_cents: 10_000 }),
+      linha({ ad_id: "2", conversas: 3, impressoes: 200, cliques: 20, gasto_cents: 6_000 }),
+    ]);
+    expect(total).toMatchObject({ conversas: 8, impressoes: 300, cliques: 30, custoPorConversaCents: 2000 });
   });
 
   it("o rótulo é o nome na Meta; sem ele, o título do clique; sem código, 'sem identificação'", () => {

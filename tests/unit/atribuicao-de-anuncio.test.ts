@@ -120,6 +120,70 @@ describe("extrairAtribuicaoWaha — o formato REAL do webhook (campanha da Meta,
   });
 });
 
+describe("extrairAtribuicaoWaha — clique de anúncio SEM o cartão (10/11/2026)", () => {
+  // Lido do webhook real da clínica: a mensagem de um clique chegou com os sinais da Meta
+  // (`conversionSource: FB_Ads`, `ctwaPayload`, `ctwaSignals`) mas SEM `externalAdReply` — o WhatsApp
+  // às vezes omite o cartão do anúncio. O extrator só reconhecia o cartão, e o contato (uma pessoa que
+  // clicou num anúncio pago) nasceu como "whatsapp" e sumiu do relatório de campanhas.
+  const semCartao = (extra: Record<string, unknown> = {}) => ({
+    extendedTextMessage: {
+      text: "Olá! Posso saber mais informações sobre o clareamento dental?",
+      contextInfo: {
+        conversionSource: "FB_Ads",
+        conversionData: "dado-opaco",
+        ctwaPayload: "payload-opaco",
+        ctwaSignals: "all,all",
+        ...extra,
+      },
+    },
+    messageContextInfo: { messageSecret: "x" },
+  });
+
+  it("reconhece como anúncio da Meta, sem título nem código (a mensagem não os traz)", () => {
+    expect(extrairAtribuicaoWaha(semCartao())).toEqual({
+      plataforma: "meta_ads",
+      sourceId: null,
+      titulo: null,
+      corpo: null,
+      sourceUrl: null,
+      bruto: expect.objectContaining({ conversionSource: "FB_Ads", ctwaSignals: "all,all" }),
+    });
+  });
+
+  it("guarda só o que prova o clique — nunca o corpo da mensagem", () => {
+    const r = extrairAtribuicaoWaha(semCartao());
+    expect(JSON.stringify(r?.bruto)).not.toContain("clareamento");
+  });
+
+  it("com o cartão presente, o cartão vence (título, código e clique continuam lidos)", () => {
+    const r = extrairAtribuicaoWaha(
+      semCartao({ externalAdReply: { sourceType: "ad", title: "Clareamento dental", sourceId: "1202" } }),
+    );
+    expect(r?.titulo).toBe("Clareamento dental");
+    expect(r?.bruto).toMatchObject({ sourceId: "1202" });
+  });
+
+  it("um cartão de post ORGÂNICO continua não sendo anúncio, mesmo com o sinal na mensagem", () => {
+    expect(
+      extrairAtribuicaoWaha(semCartao({ externalAdReply: { sourceType: "post", title: "Promo" } })),
+    ).toBeNull();
+  });
+
+  it("só 'conversionSource' de anúncio conta: outro valor, vazio ou ausente não carimba", () => {
+    expect(extrairAtribuicaoWaha(semCartao({ conversionSource: "organic" }))).toBeNull();
+    expect(extrairAtribuicaoWaha(semCartao({ conversionSource: "" }))).toBeNull();
+    expect(
+      extrairAtribuicaoWaha({ extendedTextMessage: { contextInfo: { ctwaSignals: "all,all" } } }),
+    ).toBeNull();
+  });
+
+  it("acha o sinal também em áudio, imagem ou documento", () => {
+    const ctx = semCartao().extendedTextMessage.contextInfo;
+    expect(extrairAtribuicaoWaha({ audioMessage: { contextInfo: ctx } })?.plataforma).toBe("meta_ads");
+    expect(extrairAtribuicaoWaha({ imageMessage: { contextInfo: ctx } })?.plataforma).toBe("meta_ads");
+  });
+});
+
 describe("extrairAtribuicaoWaha — externalAdReplyInfo do Baileys (forma antiga, ainda aceita)", () => {
   it("extrai de extendedTextMessage.contextInfo.externalAdReplyInfo", () => {
     const r = extrairAtribuicaoWaha({

@@ -105,8 +105,8 @@ beforeAll(() => {
     insert into public.meta_ads_gasto_diario (organization_id, dia, ad_id, ad_name, spend_cents, currency)
     select '${ORG_A}', d::date, '111111', 'Clareamento — vídeo', 2500, 'BRL' from generate_series(now() at time zone 'America/Sao_Paulo' - interval '1 day', now() at time zone 'America/Sao_Paulo', interval '1 day') d
       on conflict do nothing;
-    insert into public.meta_ads_gasto_diario (organization_id, dia, ad_id, ad_name, spend_cents, currency)
-    values ('${ORG_A}', (now() at time zone 'America/Sao_Paulo')::date, '222222', 'Gastou e ninguém chamou', 9000, 'BRL') on conflict do nothing;
+    insert into public.meta_ads_gasto_diario (organization_id, dia, ad_id, ad_name, spend_cents, conversations, currency)
+    values ('${ORG_A}', (now() at time zone 'America/Sao_Paulo')::date, '222222', 'Gastou e ninguém chamou', 9000, 7, 'BRL') on conflict do nothing;
     insert into public.meta_ads_gasto_diario (organization_id, dia, ad_id, ad_name, spend_cents, currency)
     values ('${ORG_B}', (now() at time zone 'America/Sao_Paulo')::date, '444444', 'Da outra organização', 5000, 'BRL') on conflict do nothing;
   `);
@@ -195,6 +195,23 @@ describe("fn_relatorio_de_anuncios", () => {
     const l = linhas(GESTOR_A, ORG_A);
     expect(l).toContain("222222|Gastou e ninguém chamou|Gastou e ninguém chamou|0|0|9000");
     expect(l).toContain("333333|Só clique|∅|1|0|0");
+  });
+
+  it("devolve as conversas iniciadas que a Meta informou, mesmo sem nenhum negócio no CRM", () => {
+    const out = comoUsuario(
+      GESTOR_A,
+      `select conversas from public.fn_relatorio_de_anuncios('${ORG_A}', ${JANELA}) where ad_id = '222222';`,
+    );
+    expect(out.split("\n").pop()).toBe("7");
+    // A linha antiga (inserida sem a coluna) vale 0, não nulo.
+    expect(
+      comoUsuario(
+        GESTOR_A,
+        `select conversas from public.fn_relatorio_de_anuncios('${ORG_A}', ${JANELA}) where ad_id = '111111';`,
+      )
+        .split("\n")
+        .pop(),
+    ).toBe("0");
   });
 
   it("negócios sem código ficam numa linha só, com ad_id nulo", () => {

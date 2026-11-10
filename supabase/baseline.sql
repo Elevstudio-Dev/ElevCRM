@@ -19437,6 +19437,7 @@ create table if not exists public.meta_ads_gasto_diario (
   spend_cents bigint not null check (spend_cents >= 0),
   impressions bigint not null default 0 check (impressions >= 0),
   clicks bigint not null default 0 check (clicks >= 0),
+  conversations bigint not null default 0 check (conversations >= 0),
   currency text check (currency is null or currency ~ '^[A-Z]{3}$'),
   updated_at timestamptz not null default now(),
   primary key (organization_id, dia, ad_id)
@@ -19444,6 +19445,8 @@ create table if not exists public.meta_ads_gasto_diario (
 
 comment on table public.meta_ads_gasto_diario is
   'O que a Meta informou por dia e por anúncio. spend_cents está na MOEDA DA CONTA (coluna currency), não necessariamente em reais.';
+comment on column public.meta_ads_gasto_diario.conversations is
+  'Conversas por mensagem iniciadas a partir do anúncio, como a Meta as conta (a coluna do Gerenciador de Anúncios). (migration 0225)';
 
 create index if not exists idx_meta_ads_gasto_org_dia on public.meta_ads_gasto_diario (organization_id, dia);
 
@@ -19481,6 +19484,7 @@ returns table (
   gasto_cents bigint,
   impressoes bigint,
   cliques bigint,
+  conversas bigint,
   moeda text
 )
 language sql
@@ -19516,6 +19520,7 @@ as $$
       sum(g.spend_cents)::bigint as gasto,
       sum(g.impressions)::bigint as impressoes,
       sum(g.clicks)::bigint as cliques,
+      sum(g.conversations)::bigint as conversas,
       max(g.currency) as moeda
     from public.meta_ads_gasto_diario g
     where g.organization_id = p_org
@@ -19537,6 +19542,7 @@ as $$
     coalesce(g.gasto, 0),
     coalesce(g.impressoes, 0),
     coalesce(g.cliques, 0),
+    coalesce(g.conversas, 0),
     g.moeda
   from negocios n
   full outer join gasto g on g.ad_id = n.ad_id

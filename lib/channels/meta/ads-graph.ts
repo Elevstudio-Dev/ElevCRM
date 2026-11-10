@@ -126,7 +126,7 @@ export async function lerGastoPorAnuncio(
   const montar = (comFiltroDeStatus: boolean): string => {
     const q = new URLSearchParams({
       level: "ad",
-      fields: "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,account_currency",
+      fields: "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,actions,account_currency",
       time_range: JSON.stringify({ since: de, until: ate }),
       time_increment: "1",
       limit: String(POR_PAGINA),

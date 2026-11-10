@@ -27,6 +27,7 @@ const linha = (extra: Partial<LinhaDeAnuncio> = {}): LinhaDeAnuncio => ({
   gasto_cents: 20_000,
   impressoes: 1000,
   cliques: 50,
+  conversas: 8,
   moeda: "BRL",
   ...extra,
 });
@@ -60,34 +61,57 @@ describe("TabelaDeAnuncios", () => {
     expect(screen.getByText("Anúncio A")).toBeTruthy();
   });
 
-  it("conectada: mostra gasto, custo por contato, custo por venda e retorno", () => {
+  it("conectada: mostra o que a Meta informa (gasto, impressões, cliques, conversas) e o que o CRM reconheceu", () => {
     render(<TabelaDeAnuncios dados={dados([linha()], CONECTADA)} />);
     const l = screen.getByTestId("linha-de-anuncio");
     const celulas = within(l).getAllByRole("cell").map((c) => c.textContent?.replace(/\s/g, " "));
-    // Anúncio | Gasto | Contatos | Custo por contato | Vendas | Custo por venda | Valor ganho | Retorno
+    // Anúncio | Gasto | Impressões | Cliques | Conversas | Custo por conversa
+    //   | Contatos | Custo por contato | Vendas | Custo por venda | Valor ganho | Retorno
     expect(celulas[0]).toContain("Anúncio A");
     expect(celulas[0]).toContain("Campanha A › Conjunto A");
     expect(celulas[1]).toMatch(/R\$\s?200,00/);
-    expect(celulas[2]).toBe("4");
-    expect(celulas[3]).toMatch(/R\$\s?50,00/);
-    expect(celulas[4]).toBe("1");
-    expect(celulas[5]).toMatch(/R\$\s?200,00/);
-    expect(celulas[6]).toMatch(/R\$\s?500,00/);
-    expect(celulas[7]).toBe("2,50x");
+    expect(celulas[2]).toBe("1.000");
+    expect(celulas[3]).toBe("50");
+    expect(celulas[4]).toBe("8");
+    expect(celulas[5]).toMatch(/R\$\s?25,00/);
+    expect(celulas[6]).toBe("4");
+    expect(celulas[7]).toMatch(/R\$\s?50,00/);
+    expect(celulas[8]).toBe("1");
+    expect(celulas[9]).toMatch(/R\$\s?200,00/);
+    expect(celulas[10]).toMatch(/R\$\s?500,00/);
+    expect(celulas[11]).toBe("2,50x");
+    expect(screen.getByText("Informado pela Meta")).toBeTruthy();
+    expect(screen.getByText("Reconhecido no CRM")).toBeTruthy();
+  });
+
+  it("conversas da Meta sem contato marcado no CRM: mostra as conversas e NÃO diz que ninguém chamou", () => {
+    render(
+      <TabelaDeAnuncios
+        dados={dados(
+          [linha({ ad_id: "3", gasto_cents: 36_000, leads: 0, ganhos: 0, abertos: 0, perdidos: 0, valor_ganho_cents: 0, conversas: 12 })],
+          CONECTADA,
+        )}
+      />,
+    );
+    expect(screen.queryByText("Gastou e ninguém chamou")).toBeNull();
+    const celulas = within(screen.getByTestId("linha-de-anuncio")).getAllByRole("cell").map((c) => c.textContent);
+    expect(celulas[4]).toBe("12");
+    expect(celulas[6]).toBe("0");
   });
 
   it("marca o anúncio que gastou e ninguém chamou, com custo por contato '—'", () => {
     render(
       <TabelaDeAnuncios
         dados={dados(
-          [linha({ ad_id: "2", anuncio: "Caro e vazio", gasto_cents: 90_000, leads: 0, ganhos: 0, abertos: 0, perdidos: 0, valor_ganho_cents: 0 })],
+          [linha({ ad_id: "2", anuncio: "Caro e vazio", gasto_cents: 90_000, leads: 0, conversas: 0, ganhos: 0, abertos: 0, perdidos: 0, valor_ganho_cents: 0 })],
           CONECTADA,
         )}
       />,
     );
     expect(screen.getByText("Gastou e ninguém chamou")).toBeTruthy();
     const celulas = within(screen.getByTestId("linha-de-anuncio")).getAllByRole("cell").map((c) => c.textContent);
-    expect(celulas[3]).toBe("—");
+    expect(celulas[5]).toBe("—");
+    expect(celulas[7]).toBe("—");
   });
 
   it("chave recusada pela Meta: avisa e diz que os números são os da última atualização", () => {
