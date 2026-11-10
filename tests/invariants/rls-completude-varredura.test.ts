@@ -106,6 +106,20 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "tests/invariants/qr-codes-rls.test.ts — mesma policy manager+ das outras duas; só o service role escreve.",
   },
   {
+    tabela: "meta_ads_conexoes",
+    razao:
+      "tests/invariants/meta-ads-rls.test.ts prova que NINGUÉM da sessão (gerente incluso, e anon) lê ou grava a " +
+      "tabela da chave cifrada: RLS ligada, zero policies, grants revogados — só o service role a alcança. Fora de " +
+      "TABLES porque o controle positivo de TABLES (membro lê a PRÓPRIA organização) falharia por acerto aqui.",
+  },
+  {
+    tabela: "meta_ads_gasto_diario",
+    razao:
+      "tests/invariants/meta-ads-rls.test.ts prova isolamento cross-tenant (gerente A lê o da A e nada da B, e " +
+      "vice-versa) E o gate de papel (atendente não lê), e que a sessão não escreve. Fora de TABLES porque a " +
+      "policy exige manager.",
+  },
+  {
     tabela: "meta_templates",
     razao:
       "tests/invariants/meta-templates-rls.test.ts (\"membro da org B NÃO vê " +
