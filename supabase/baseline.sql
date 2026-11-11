@@ -264,6 +264,11 @@ CREATE OR REPLACE FUNCTION "public"."fn_emit_message_event"() RETURNS "trigger"
 declare
   v_event text;
 begin
+  -- Histórico importado (migration 0226): a mensagem já aconteceu antes de o CRM conhecê-la; não é fato novo.
+  if coalesce(new.metadata ->> 'historico_importado', '') = 'true' then
+    return new;
+  end if;
+
   if new.direction = 'inbound' then
     v_event := 'message.received';
   else

@@ -43,6 +43,33 @@ export const str = (v: unknown): string | null =>
   typeof v === "string" && v.trim() !== "" ? v : null;
 
 /**
+ * A marca de anúncio que fica NA MENSAGEM (`messages.metadata.anuncio`), para a bolha dizer "veio de anúncio".
+ *
+ * É um RESUMO: plataforma, título, código e link. O payload bruto fica só no contato (`ad_raw`), onde o relatório o
+ * lê — copiá-lo para cada mensagem seria guardar a mesma prova duas vezes. Título e link são de um terceiro (o
+ * anunciante): quem exibe trata como texto, nunca como HTML.
+ */
+export interface MarcaDeAnuncio {
+  plataforma: PlataformaDeAnuncio;
+  titulo: string | null;
+  codigo: string | null;
+  url: string | null;
+}
+
+export function marcaDeAnuncio(a: AtribuicaoDeAnuncio): MarcaDeAnuncio {
+  return { plataforma: a.plataforma, titulo: a.titulo, codigo: a.sourceId, url: a.sourceUrl };
+}
+
+/** Lê a marca de volta do `metadata` de uma mensagem. `null` quando não há (ou não tem a forma esperada). */
+export function marcaDeAnuncioDaMensagem(metadata: unknown): MarcaDeAnuncio | null {
+  const m = obj(obj(metadata)?.anuncio);
+  if (!m) return null;
+  const plataforma = m.plataforma === "google_ads" ? "google_ads" : m.plataforma === "meta_ads" ? "meta_ads" : null;
+  if (!plataforma) return null;
+  return { plataforma, titulo: str(m.titulo), codigo: str(m.codigo), url: str(m.url) };
+}
+
+/**
  * Grava a atribuição no CONTATO — só na primeira vez.
  *
  * Primeiro toque: uma vez gravada, não muda. A pessoa pode clicar em outro

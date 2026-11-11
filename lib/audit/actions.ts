@@ -289,6 +289,8 @@ export const AUDIT_ACTIONS = [
   // de código próprio para não somar duas grandezas no mesmo relatório.
   "followup.scheduled",
   "followup.cancelled",
+  // Alguém puxou para o CRM as mensagens antigas de um contato (botão "Puxar histórico do WhatsApp").
+  "contact.history_imported",
   "lead.reactivation_proposed",
   // A marca da INSTALAÇÃO (nome, logo, cor, selo) trocada em `platform_branding`
   // — mutação de plataforma, não de tenant, e por isso sem `organization_id`.

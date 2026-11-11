@@ -66,6 +66,20 @@ export const CONVERSAS_IGNORADAS = {
 } as const;
 
 /**
+ * O armazenamento (store) do NOWEB, que é o que permite CONSULTAR o histórico de um chat
+ * (`WahaClient.getChatMessages`). DESLIGADO por padrão: guardar o histórico de todas as conversas do número gasta
+ * disco e memória no contêiner do WAHA e guarda, fora do banco do CRM, conversa de gente que nunca virou contato —
+ * é decisão do dono da instalação, não um padrão que o código toma sozinho. `WAHA_NOWEB_STORE=1` liga.
+ *
+ * `fullSync` pede o passado ao aparelho, mas só na PRIMEIRA conexão da sessão (o pareamento por QR): numa sessão já
+ * pareada, ligar o armazenamento passa a guardar o que vier DALI EM DIANTE; para trazer o que já existia é preciso
+ * desconectar e parear de novo. Está na documentação do WAHA e ainda não foi provado contra uma instalação real.
+ */
+export function configDoArmazenamento(): { noweb?: { store: { enabled: true; fullSync: true } } } {
+  return process.env.WAHA_NOWEB_STORE === "1" ? { noweb: { store: { enabled: true, fullSync: true } } } : {};
+}
+
+/**
  * Teto de relógio das chamadas ao WAHA.
  *
  * 15s não é número escolhido aqui: é o que `docs/specs/03-spec-whatsapp-waha.md`
@@ -144,7 +158,7 @@ export class WahaClient {
     const createRes = await this.fetchComTeto(`${this.baseUrl}/api/sessions`, {
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ name, config: { ignore: CONVERSAS_IGNORADAS } }),
+      body: JSON.stringify({ name, config: { ignore: CONVERSAS_IGNORADAS, ...configDoArmazenamento() } }),
     });
     if (!createRes.ok && createRes.status !== 422 && createRes.status !== 409) {
       const body = await createRes.text().catch(() => "");
@@ -272,7 +286,14 @@ export class WahaClient {
         return;
       }
 
-      const config = { ...sessao.config, ignore: CONVERSAS_IGNORADAS };
+      const armazenamento = configDoArmazenamento();
+      const noweb = (sessao.config.noweb ?? {}) as Record<string, unknown>;
+      const config = {
+        ...sessao.config,
+        ignore: CONVERSAS_IGNORADAS,
+        // Só quando o dono LIGOU o armazenamento (`WAHA_NOWEB_STORE=1`); desligado, a config da sessão não é tocada.
+        ...(armazenamento.noweb ? { noweb: { ...noweb, store: armazenamento.noweb.store } } : {}),
+      };
       // Já está como queremos: não reiniciar a sessão à toa. Este caminho roda
       // em TODA reconexão, e um restart desnecessário por rodada seria pior que
       // o gasto que ele evita.
@@ -280,7 +301,12 @@ export class WahaClient {
       // à ORDEM das chaves, então o dia em que o WAHA devolver o mesmo objeto
       // com as chaves noutra sequência, esta guarda passa a dizer "mudou" e a
       // sessão reinicia a cada reconexão — sem que nada tenha mudado.
+      const store = (noweb.store ?? {}) as Record<string, unknown>;
+      const armazenamentoOk =
+        !armazenamento.noweb ||
+        (store.enabled === armazenamento.noweb.store.enabled && store.fullSync === armazenamento.noweb.store.fullSync);
       const jaConvergida =
+        armazenamentoOk &&
         typeof sessao.config.ignore === "object" &&
         sessao.config.ignore !== null &&
         Object.entries(CONVERSAS_IGNORADAS).every(
@@ -580,6 +606,48 @@ export class WahaClient {
       if (typeof candidato === "string" && candidato.trim()) return candidato.trim();
     }
     return null;
+  }
+
+  /**
+   * UMA PÁGINA das mensagens que um chat tem no armazenamento (store) do WAHA, da mais nova para a mais antiga.
+   *
+   * ⚠️ DEPENDE DO STORE. No engine NOWEB o WAHA só guarda o histórico se a sessão foi iniciada com
+   * `config.noweb.store.enabled=true` (e `full_sync=true` para trazer o passado no pareamento). Sem isso a rota
+   * responde 400 "Enable NOWEB store…" — MEDIDO na instalação da clínica (11/11/2026: `config.noweb` nulo).
+   * Esse desfecho vira o erro `waha_store_desligado`, e NÃO um erro de rede: quem chama precisa distinguir
+   * "ligue o armazenamento" (ação do dono do canal) de "tente de novo" (esperar).
+   *
+   * `downloadMedia=false` de propósito: baixar o arquivo de cada foto/áudio de um histórico de meses torna a
+   * chamada lenta e pesada, e os anexos antigos ficam fora da importação (ver `lib/inbox/importar-historico.ts`).
+   *
+   * Cada item tem a forma do payload do webhook (`id`, `fromMe`, `timestamp` em SEGUNDOS, `body`, `_data`…), por
+   * isso o chamador reaproveita o mesmo schema e os mesmos leitores da ingestão ao vivo.
+   */
+  async getChatMessages(
+    session: string,
+    chatId: string,
+    opts: { limit: number; offset: number },
+  ): Promise<unknown[]> {
+    const url = new URL(
+      `${this.baseUrl}/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages`,
+    );
+    url.searchParams.set("limit", String(opts.limit));
+    url.searchParams.set("offset", String(opts.offset));
+    url.searchParams.set("downloadMedia", "false");
+    url.searchParams.set("sortBy", "timestamp");
+    url.searchParams.set("sortOrder", "desc");
+    const res = await this.fetchComTeto(url, {
+      headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      if (res.status === 400 && /noweb store/i.test(body)) {
+        throw new Error("waha_store_desligado: o WAHA desta sessão não guarda o histórico (store do NOWEB desligado)");
+      }
+      throw new Error(`waha_${res.status}: ${body.slice(0, 200)}`);
+    }
+    const cru: unknown = await res.json().catch(() => null);
+    return Array.isArray(cru) ? cru : [];
   }
 
   /**

@@ -3,7 +3,8 @@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, Check, Checks, Clock, Robot, ShareFat, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, Check, Checks, Clock, Megaphone, Robot, ShareFat, WarningOctagon } from "@/lib/ui/icons";
+import { marcaDeAnuncioDaMensagem } from "@/lib/leads/atribuicao-de-anuncio";
 import { useDeslizarParaResponder } from "@/hooks/inbox/useDeslizarParaResponder";
 import { ficouNaFila, motivoDaFila, type MotivoDaFila } from "@/lib/inbox/fila-do-envio";
 import { foiEncaminhada, podeEncaminhar } from "@/lib/messaging/encaminhar";
@@ -14,6 +15,15 @@ import { nomearMencoesDeEntrada } from "@/lib/mencoes/entrada";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ACK_ERRO_DO_CANAL, type Message } from "@/lib/types/messaging";
+
+/** Como o tipo de anexo aparece na frase "Anexo antigo (…)": só quando o histórico não trouxe o arquivo. */
+const NOME_DO_TIPO: Record<string, string> = {
+  image: "imagem",
+  video: "vídeo",
+  audio: "áudio",
+  document: "documento",
+  sticker: "figurinha",
+};
 import { CitationButton } from "@/components/ai/CitationButton";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
@@ -218,6 +228,10 @@ export function MessageBubble({
   // para tirar do ar.
   const apagada = Boolean(message.revoked_at);
   const editada = Boolean(message.edited_at) && !apagada;
+  // A mensagem carregou o clique de um anúncio (gravado na entrada, ou completado pela importação do histórico).
+  const anuncioDaMensagem = !isOutbound ? marcaDeAnuncioDaMensagem(message.metadata) : null;
+  // Veio do histórico do WhatsApp com anexo cujo arquivo não foi trazido.
+  const midiaNaoImportada = (message.metadata as Record<string, unknown> | null | undefined)?.midia_nao_importada === true;
   const aiGenerated = isAiGeneratedMessage(message.metadata);
   const citations = extractCitations(message.metadata);
   const showCitationButton =
@@ -394,6 +408,19 @@ export function MessageBubble({
             {t("Encaminhada")}
           </span>
         )}
+        {anuncioDaMensagem && (
+          // A mensagem que trouxe o clique de um anúncio. Título e link são do anunciante: entram como TEXTO.
+          <span
+            className="mb-0.5 flex items-center gap-1 text-[11px] font-medium opacity-80"
+            data-testid="mensagem-de-anuncio"
+            title={anuncioDaMensagem.titulo ?? undefined}
+          >
+            <Megaphone size={11} aria-hidden />
+            <span className="truncate">
+              {anuncioDaMensagem.titulo ? `${t("Veio de anúncio")} · ${anuncioDaMensagem.titulo}` : t("Veio de anúncio")}
+            </span>
+          </span>
+        )}
         {citada && (
           // Botão só quando há para onde ir: sem `onIrParaMensagem` a citação é só texto, e um botão
           // que não faz nada é pior que nenhum.
@@ -450,6 +477,13 @@ export function MessageBubble({
               <div className={cn(message.body && isContact && "mb-1")}>
                 <ContactCard message={message} />
               </div>
+            )}
+
+            {midiaNaoImportada && !hasMedia && (
+              // O histórico traz a linha, não o arquivo: sem esta frase a bolha ficaria vazia e pareceria bug.
+              <p className={cn("text-xs italic opacity-70", message.body && "mb-1")} data-testid="midia-nao-importada">
+                {`${t("Anexo antigo")} (${t(NOME_DO_TIPO[message.type] ?? "arquivo")}) — ${t("o arquivo não foi importado")}`}
+              </p>
             )}
 
             {message.body && !isContact && (

@@ -26,6 +26,8 @@ export function getAdapter(provider: ChannelProvider): ChannelAdapter {
 }
 
 export { capabilitiesOf, CHANNEL_CAPABILITIES, DEFAULT_CHANNEL_PROVIDER } from "./capabilities";
+export { HistoricoIndisponivel, LIMITE_DO_HISTORICO } from "./historico";
+export type { MensagemDoHistorico, PedidoDeHistorico } from "./historico";
 export { CHANNEL_SESSION_REF_COLUMNS, resolveSessionRef } from "./session-ref";
 export type { ChannelSessionRef } from "./session-ref";
 export type {

@@ -17,7 +17,7 @@ import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
-import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { estamparAtribuicaoDoContato, marcaDeAnuncio } from "@/lib/leads/atribuicao-de-anuncio";
 import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ACK_ERRO_DO_CANAL } from "@/lib/types/messaging";
@@ -28,6 +28,7 @@ import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
 import { nomearGrupoSeFaltar } from "@/lib/waha/nome-do-grupo";
 import { aplicarReciboDeGrupo } from "@/lib/waha/recibo-de-grupo";
 import { logger } from "@/lib/logger";
+import { bodyOf, mediaMimeOf, mediaUrlOf, notifyNameOf, resolveMessageType } from "./payload";
 
 export type Admin = ReturnType<typeof createAdminClient>;
 
@@ -280,101 +281,8 @@ function previewFromMessage(p: WahaPayload): string {
   return t !== "text" ? `[${t}]` : "";
 }
 
-/** URL da mídia: WAHA novo (payload.media.url) com fallback legado (payload.mediaUrl). */
-export function mediaUrlOf(p: WahaPayload): string | null {
-  return p.mediaUrl ?? p.media?.url ?? null;
-}
-
-/** MIME da mídia: idem (payload.media.mimetype é o campo do NOWEB atual). */
-export function mediaMimeOf(p: WahaPayload): string | null {
-  return p.mimetype ?? p.media?.mimetype ?? null;
-}
-
-/**
- * Mapeia o `type` cru do WAHA NOWEB para o vocabulário de messages.type do CRM
- * (check constraint messages_type_check). WAHA usa `chat` p/ texto, `ptt` p/
- * áudio de voz, `vcard` p/ contato, etc. Sem esse mapa o INSERT viola a
- * constraint e a mensagem some. O type cru fica em metadata.raw_type.
- */
-const WA_TYPE_MAP: Record<string, string> = {
-  chat: "text",
-  text: "text",
-  ptt: "audio",
-  audio: "audio",
-  image: "image",
-  video: "video",
-  document: "document",
-  sticker: "sticker",
-  location: "location",
-  vcard: "contact",
-  contact: "contact",
-  multi_vcard: "contact",
-  reaction: "reaction",
-};
-
-function mapWahaMessageType(raw: string | undefined): string {
-  if (!raw) return "text";
-  // Fallback "text": só chegamos ao insert com body/mídia presente (guarda acima),
-  // então tratar tipo desconhecido como texto não perde a mensagem.
-  return WA_TYPE_MAP[raw.toLowerCase()] ?? "text";
-}
-
-/**
- * NOWEB (WAHA 2026.x) não envia `type` no payload — o tipo real está nas
- * chaves de `_data.message` (imageMessage, stickerMessage, …). Ordem de
- * resolução: `type` explícito → chave do message → prefixo do MIME → text.
- */
-const NOWEB_MESSAGE_KEY_TYPE: Record<string, string> = {
-  stickerMessage: "sticker",
-  imageMessage: "image",
-  videoMessage: "video",
-  ptvMessage: "video", // video note (bolinha)
-  audioMessage: "audio",
-  documentMessage: "document",
-  documentWithCaptionMessage: "document",
-  contactMessage: "contact",
-};
-
-export function resolveMessageType(p: WahaPayload): string {
-  if (p.type) return mapWahaMessageType(p.type);
-  const msg = p._data?.message;
-  if (msg && typeof msg === "object") {
-    for (const [key, mapped] of Object.entries(NOWEB_MESSAGE_KEY_TYPE)) {
-      if (key in msg) return mapped;
-    }
-  }
-  const mime = mediaMimeOf(p);
-  if (mime) {
-    if (mime === "image/webp") return "sticker";
-    if (mime.startsWith("image/")) return "image";
-    if (mime.startsWith("video/")) return "video";
-    if (mime.startsWith("audio/")) return "audio";
-    return "document";
-  }
-  return "text";
-}
-
-function notifyNameOf(p: WahaPayload): string | null {
-  return p._data?.notifyName ?? p._data?.pushName ?? null;
-}
-
-/** Corpo textual: WAHA nem sempre preenche `body` em cartões de contato NOWEB. */
-function bodyOf(p: WahaPayload): string | null {
-  if (p.body) return p.body;
-  const msg = p._data?.message;
-  if (!msg || typeof msg !== "object") return null;
-  // `_data.message` é `unknown` no schema Zod (`lib/waha/envelope.ts`), de
-  // propósito: a forma NOWEB varia por tipo de mensagem e exigi-la aqui só
-  // criaria uma porta nova de descartar a mensagem inteira. O estreitamento é
-  // explícito, no mesmo estilo do `cm as {…}` logo abaixo.
-  const cm = (msg as { contactMessage?: unknown }).contactMessage;
-  if (cm && typeof cm === "object") {
-    const o = cm as { vcard?: string; displayName?: string };
-    if (o.vcard) return o.vcard;
-    if (o.displayName) return o.displayName;
-  }
-  return null;
-}
+// Leitores puros do payload moram em `payload.ts` (a importação de histórico os usa sem puxar este módulo).
+export { bodyOf, mediaMimeOf, mediaUrlOf, notifyNameOf, resolveMessageType };
 
 /**
  * O telefone REAL de quem escreveu, quando o chat chega como `@lid`.
@@ -732,9 +640,14 @@ async function handleInbound(
   // contato já tem atribuição, o UPDATE casa zero linhas.
   // Atribuição de anúncio é sobre a PESSOA que clicou no anúncio; num grupo o
   // dado, se viesse, seria de um participante e ficaria carimbado no grupo.
+  // A mensagem que carregou o anúncio leva a marca no próprio `metadata` (a bolha diz "Veio de anúncio").
+  let anuncioDaMensagem: ReturnType<typeof marcaDeAnuncio> | null = null;
   if (!ehGrupo) {
     const atribuicao = extrairAtribuicaoWaha(p._data?.message);
-    if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+    if (atribuicao) {
+      anuncioDaMensagem = marcaDeAnuncio(atribuicao);
+      await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+    }
   }
 
   const conversationId = ehGrupo
@@ -764,6 +677,7 @@ async function handleInbound(
       metadata: {
         raw_type: p.type,
         ack_name: p.ackName,
+        ...(anuncioDaMensagem ? { anuncio: anuncioDaMensagem } : {}),
         // Em grupo, `contact_id` é o GRUPO — quem escreveu está aqui. Sem isto a
         // tela mostraria dez pessoas falando como se fossem uma só, que é o
         // mesmo que não mostrar grupo nenhum.
