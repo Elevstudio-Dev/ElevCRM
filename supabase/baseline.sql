@@ -19443,6 +19443,11 @@ create table if not exists public.meta_ads_gasto_diario (
   primary key (organization_id, dia, ad_id)
 );
 
+-- (migration 0225) `create table if not exists` acima NÃO acrescenta coluna a uma tabela que já existe — e é assim que o
+-- update.sh entrega migration nova (reaplica este arquivo). Sem este ALTER, quem atualizava ficava sem a coluna.
+alter table public.meta_ads_gasto_diario
+  add column if not exists conversations bigint not null default 0 check (conversations >= 0);
+
 comment on table public.meta_ads_gasto_diario is
   'O que a Meta informou por dia e por anúncio. spend_cents está na MOEDA DA CONTA (coluna currency), não necessariamente em reais.';
 comment on column public.meta_ads_gasto_diario.conversations is
@@ -19467,6 +19472,20 @@ create policy "meta_ads_gasto_manager_read" on public.meta_ads_gasto_diario
 -- que a Meta informou para o mesmo código. FULL JOIN: anúncio que gastou e não trouxe ninguém aparece (é o que mais
 -- interessa ver), e negócio de anúncio sem gasto sincronizado também. Negócios sem código ficam numa linha só, com
 -- `ad_id` nulo. `dia` é o dia no fuso da conta de anúncios, comparado com o período no fuso pedido.
+-- (migration 0225) O retorno ganhou `conversas`: `create or replace` não muda o retorno de uma função que já existe.
+-- Só derruba a versão ANTIGA (sem `conversas`); a atual não é tocada, então reaplicar o baseline não a apaga de novo.
+do $meta_conversas$
+begin
+  if exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'fn_relatorio_de_anuncios'
+      and pg_get_function_result(p.oid) not like '%conversas%'
+  ) then
+    drop function public.fn_relatorio_de_anuncios(uuid, timestamptz, timestamptz, text);
+  end if;
+end
+$meta_conversas$;
+
 create or replace function public.fn_relatorio_de_anuncios(
   p_org uuid, p_de timestamptz, p_ate timestamptz, p_fuso text default 'America/Sao_Paulo'
 )
