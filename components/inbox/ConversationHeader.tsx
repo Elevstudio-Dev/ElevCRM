@@ -36,6 +36,7 @@ import { TransferirParaSetorDialog } from "@/components/setores/TransferirParaSe
 import { useSetores } from "@/hooks/setores/useSetores";
 import { ItensDeLembrete, rotuloDeLembrete } from "@/components/inbox/SnoozeButton";
 import { AgendarFollowupDialog } from "@/components/inbox/FollowupAgendado";
+import { PuxarHistoricoDialog } from "@/components/inbox/PuxarHistorico";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
@@ -85,6 +86,7 @@ export function ConversationHeader({ conversation }: Props) {
   const [reassignOpen, setReassignOpen] = useState(false);
   const [setorOpen, setSetorOpen] = useState(false);
   const [followupOpen, setFollowupOpen] = useState(false);
+  const [historicoOpen, setHistoricoOpen] = useState(false);
   const [foraOpen, setForaOpen] = useState(false);
   // O item "Transferir para setor…" só existe quando a organização tem setor.
   const { data: setoresDaOrg } = useSetores();
@@ -429,6 +431,12 @@ export function ConversationHeader({ conversation }: Props) {
                   {t("Agendar follow-up…")}
                 </DropdownMenuItem>
               )}
+              {c?.id && !c.is_anonymized && !conversation.is_group && (
+                // Fica aqui também (e não só no painel) porque abaixo de 1280px o painel não existe.
+                <DropdownMenuItem data-testid="puxar-historico-menu" onClick={() => setHistoricoOpen(true)}>
+                  {t("Puxar histórico do WhatsApp…")}
+                </DropdownMenuItem>
+              )}
               {c?.id && !c.is_anonymized && (
                 // A pessoa não é cliente (equipe, prestador, parceiro): a IA se cala, nenhum negócio nasce e os que
                 // existem saem do funil e do relatório. Fica no menu — é ocasional —, mas com testid: é contrato.
@@ -480,6 +488,15 @@ export function ConversationHeader({ conversation }: Props) {
           marcar={!c.fora_do_funil_em}
           open
           onOpenChange={(aberto) => !aberto && setForaOpen(false)}
+        />
+      )}
+      {historicoOpen && c?.id && (
+        <PuxarHistoricoDialog
+          contactId={c.id}
+          conversationId={conversation.id}
+          nomeDoContato={displayName}
+          open
+          onOpenChange={(aberto) => !aberto && setHistoricoOpen(false)}
         />
       )}
       {followupOpen && c?.id && (

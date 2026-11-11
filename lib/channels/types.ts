@@ -6,6 +6,7 @@
 import type { SendMessageInput } from "@/lib/schemas";
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 import type { OutboundMedia } from "@/lib/waha/media-send";
+import type { MensagemDoHistorico, PedidoDeHistorico } from "./historico";
 
 export type { OutboundMedia };
 
@@ -259,6 +260,19 @@ export interface ChannelAdapter {
   listGroups?(
     input: ChannelTenantScope & { sessionRef: string },
   ): Promise<Array<{ chatId: string; subject: string | null }>>;
+
+  /**
+   * As mensagens que este chat já tem NO CANAL — para trazer a conversa antiga de um contato para o CRM.
+   *
+   * OPCIONAL pelo mesmo motivo de `listGroups`: nem todo canal deixa consultar o passado (a API oficial só
+   * entrega o que chega dali em diante), e quem chama testa a presença do método em vez de perguntar QUAL
+   * provider é. As mais RECENTES primeiro entram no teto `limite`; a ordem do retorno não é garantida — quem
+   * importa ordena.
+   *
+   * Lança `HistoricoIndisponivel` quando o canal ESTÁ de pé mas não guarda histórico (configuração do
+   * transporte). Qualquer outro erro é falha de transporte e propaga.
+   */
+  fetchChatHistory?(input: PedidoDeHistorico): Promise<MensagemDoHistorico[]>;
 
   /**
    * Quem está num GRUPO — para a atendente escolher quem marcar com `@`.

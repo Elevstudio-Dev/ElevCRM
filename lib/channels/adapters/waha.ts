@@ -13,11 +13,13 @@ import {
   resolveCanonicalCusChatId,
   resolveWhatsappIdForContactCard,
 } from "@/lib/waha/resolve-contact-whatsapp-id";
+import { buscarHistoricoWaha } from "@/lib/waha/historico";
 import { bareWaMessageId, parseWahaMessageId } from "@/lib/waha/message-id";
 import { resolveWahaChatId } from "@/lib/waha/send";
 import { telefoneDoParticipante } from "@/lib/waha/participantes";
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 import { DETALHE_CREDENCIAL_RECUSADA } from "../health";
+import { HistoricoIndisponivel, type MensagemDoHistorico, type PedidoDeHistorico } from "../historico";
 import type {
   ChannelAdapter,
   ChannelHealth,
@@ -109,6 +111,25 @@ export const wahaAdapter: ChannelAdapter = {
     const client = getWahaClient();
     if (!client) return [];
     return client.listGroups(input.sessionRef);
+  },
+
+  /**
+   * As mensagens que o chat já tem no armazenamento do transporte (ver `WahaClient.getChatMessages`).
+   *
+   * `waha_store_desligado` vira `HistoricoIndisponivel`: o transporte está de pé, mas a sessão não foi iniciada
+   * guardando histórico — configuração a ligar, não falha a repetir. Transporte sem configuração propaga erro
+   * (diferente das listas acima, que devolvem `[]`): uma importação que "funcionou" trazendo zero mensagens por
+   * o canal estar fora do ar diria ao atendente que o contato nunca falou, que é falso.
+   */
+  async fetchChatHistory(input: PedidoDeHistorico): Promise<MensagemDoHistorico[]> {
+    const client = getWahaClient();
+    if (!client) throw new Error("waha_not_configured");
+    try {
+      return await buscarHistoricoWaha(client, input.sessionRef, input.recipient, input.limite);
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("waha_store_desligado")) throw new HistoricoIndisponivel();
+      throw err;
+    }
   },
 
   /**

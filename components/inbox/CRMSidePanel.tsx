@@ -29,6 +29,7 @@ import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import type { AnuncioDoContato as Anuncio } from "@/lib/leads/anuncio-do-contato";
 import { AnuncioDoContato } from "./AnuncioDoContato";
 import { FollowupAgendadoSecao } from "./FollowupAgendado";
+import { PuxarHistoricoSecao } from "./PuxarHistorico";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -549,6 +550,11 @@ export function CRMSidePanel({ conversation }: Props) {
       {anuncio && <AnuncioDoContato anuncio={anuncio} locale={localeDaData} />}
 
       {contactId && <FollowupAgendadoSecao contactId={contactId} nomeDoContato={displayName} />}
+
+      {/* Grupo não: mensagem de gente que nunca falou com a empresa é decisão de produto (ver a rota). */}
+      {contactId && !conversation.is_group && (
+        <PuxarHistoricoSecao contactId={contactId} conversationId={conversation.id} nomeDoContato={displayName} />
+      )}
 
       {contactId && defaultPipeline.data && (
         <NewLeadDialog
