@@ -105,6 +105,55 @@ describe("validaInstanteDoRetorno", () => {
   });
 });
 
+describe("agendaRetorno — retorno marcado por uma PESSOA da equipe", () => {
+  it("leva a instrução nas palavras da pessoa, sem inventar uma promessa ao cliente", async () => {
+    const espiao = fakeDb();
+    const r = await agendaRetorno(
+      espiao.db,
+      { agora: AGORA, janela: JANELA },
+      { orgId: ORG, contactId: CONTATO },
+      {
+        motivo: "perguntar se decidiu pelo clareamento",
+        prometidoPara: "2026-08-10T12:00:00Z",
+        instrucao: "perguntar se decidiu pelo clareamento",
+        source: "human",
+      },
+    );
+    expect(r.ok).toBe(true);
+    expect(espiao.inseridos[0]!.payload).toMatchObject({
+      reason: "perguntar se decidiu pelo clareamento",
+      instruction: "perguntar se decidiu pelo clareamento",
+      source: "human",
+      promise: null,
+    });
+  });
+
+  it("sem instrução, o payload não ganha a chave (o retorno do agente não muda)", async () => {
+    const espiao = fakeDb();
+    await agendaRetorno(
+      espiao.db,
+      { agora: AGORA, janela: JANELA },
+      { orgId: ORG, contactId: CONTATO },
+      { motivo: "m", prometidoPara: "2026-08-10T12:00:00Z", promessa: "p" },
+    );
+    expect(espiao.inseridos[0]!.payload).not.toHaveProperty("instruction");
+    expect(espiao.inseridos[0]!.payload.promise).toBe("p");
+  });
+
+  it("a pessoa também esbarra no guard: um retorno vivo por cliente", async () => {
+    const espiao = fakeDb({ buscaRetornoVivo: async () => retornoFake() });
+    const r = await agendaRetorno(
+      espiao.db,
+      { agora: AGORA, janela: JANELA },
+      { orgId: ORG, contactId: CONTATO },
+      { motivo: "m", prometidoPara: "2026-08-10T12:00:00Z", instrucao: "i", source: "human" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.codigo).toBe("ja_existe_retorno");
+    expect(espiao.inseridos).toHaveLength(0);
+  });
+});
+
 describe("agendaRetorno", () => {
   it("cria o retorno e leva motivo, promessa e instante ABSOLUTO no payload", async () => {
     const espiao = fakeDb();

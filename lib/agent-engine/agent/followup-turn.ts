@@ -57,8 +57,11 @@ const HOUR_MS = 3_600_000;
 export const followupTurnPayloadSchema = z
   .object({
     reason: z.string().optional(),
-    promise: z.string().optional(),
+    // `null` quando o retorno foi marcado por uma PESSOA da equipe: ninguém prometeu nada ao cliente.
+    promise: z.string().nullable().optional(),
     promised_at: z.string().optional(),
+    /** O que uma pessoa da equipe pediu que o agente faça neste retorno (as palavras dela). */
+    instruction: z.string().nullable().optional(),
     context_snapshot: z.string().nullable().optional(),
     // F3-04: 'template' = re-entrada DETERMINÍSTICA — envia a variante versionada
     // direto pela cadeia de guardrails, sem LLM (custo $0, blueprint). Ausente/'agent'
@@ -137,8 +140,10 @@ function humanizeElapsed(ms: number): string {
 export function buildTemporalBlock(input: {
   now: Date;
   reason?: string | undefined;
-  promise?: string | undefined;
+  promise?: string | null | undefined;
   promisedAt?: string | undefined;
+  /** A instrução de uma pessoa da equipe para este retorno. */
+  instruction?: string | null | undefined;
   lastInbound: { body: string; sentAt: string } | null;
 }): string {
   const parts: string[] = [];
@@ -164,6 +169,12 @@ export function buildTemporalBlock(input: {
   const reason = input.reason?.trim();
   if (reason) {
     parts.push(`Motivo do follow-up: ${reason}.`);
+  }
+
+  // Uma PESSOA da equipe marcou este retorno e deixou dito o que fazer: é uma ordem, não uma sugestão do modelo.
+  const instruction = input.instruction?.trim();
+  if (instruction) {
+    parts.push(`INSTRUÇÃO DA EQUIPE PARA ESTE RETORNO (siga-a): ${instruction}`);
   }
 
   if (input.lastInbound !== null) {
@@ -287,6 +298,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
           reason: payload.reason,
           promise: payload.promise,
           promisedAt: payload.promised_at,
+          instruction: payload.instruction,
           lastInbound: lastInboundOf(context),
         });
         return buildFollowupOpeningMessage(temporalBlock, previous, leadState, context, notesIndexBlock, projeta);

@@ -62,6 +62,7 @@ function paraRetorno(row: LinhaDeCron): RetornoAgendado {
     promessa: texto(payload.promise),
     canceladoEm: row.cancelled_at,
     motivoDoCancelamento: row.cancel_reason,
+    instrucao: texto(payload.instruction),
   };
 }
 

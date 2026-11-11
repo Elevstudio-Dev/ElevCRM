@@ -47,8 +47,10 @@ export interface PayloadDoRetorno {
   promised_at: string | null;
   /** Contexto curto para o run futuro se reencontrar. */
   context_snapshot?: string | null;
-  /** De onde veio o agendamento (ex.: `reactivation`). */
+  /** De onde veio o agendamento (ex.: `reactivation`, `human`). */
   source?: string;
+  /** O que uma PESSOA da equipe pediu que o agente faça no retorno — as palavras dela, não as do modelo. */
+  instruction?: string | null;
 }
 
 export interface RetornoAgendado {
@@ -63,6 +65,8 @@ export interface RetornoAgendado {
   promessa: string | null;
   canceladoEm: string | null;
   motivoDoCancelamento: string | null;
+  /** A instrução que uma pessoa deixou para o dia do retorno (só nos retornos marcados pela equipe). */
+  instrucao?: string | null;
 }
 
 /**
@@ -149,10 +153,12 @@ export interface AgendaRetornoInput {
   motivo: string;
   /** Instante ABSOLUTO, ISO 8601. Relativo ("amanhã") é lido dias depois e não significa nada. */
   prometidoPara: string;
-  /** O que foi prometido ao cliente. */
-  promessa: string;
+  /** O que foi prometido ao cliente. Ausente no retorno marcado por uma pessoa (ninguém prometeu nada ao cliente). */
+  promessa?: string | null;
   contexto?: string | null;
   source?: string;
+  /** O que a pessoa da equipe quer que o agente faça quando o dia chegar. */
+  instrucao?: string | null;
 }
 
 export type ResultadoDoAgendamento =
@@ -202,10 +208,11 @@ export async function agendaRetorno(
     quando,
     payload: {
       reason: input.motivo,
-      promise: input.promessa,
+      promise: input.promessa ?? null,
       promised_at: input.prometidoPara,
       context_snapshot: input.contexto ?? null,
       ...(input.source ? { source: input.source } : {}),
+      ...(input.instrucao ? { instruction: input.instrucao } : {}),
     },
   });
 
