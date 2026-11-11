@@ -8,6 +8,16 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.29.0] — 2026-11-11
+
+### Adicionado
+
+- **Botão para agendar um follow-up: a pessoa escolhe o dia e diz o que fazer, e a IA retoma a conversa nesse dia** Na conversa (menu Opções e painel do contato) há um novo botão, "Agendar follow-up". A pessoa escolhe o dia e a hora e escreve o que a IA deve fazer — por exemplo, perguntar se o cliente decidiu pelo clareamento e oferecer o horário de sábado. No dia marcado a IA retoma a conversa com o cliente seguindo essa instrução, que chega a ela como ordem da equipe. Cada cliente tem um follow-up marcado por vez; dá para ver o que está marcado e desmarcar na própria conversa. Quem atende (atendente em diante) pode marcar e desmarcar; antes só o gestor podia desmarcar um retorno.
+
+### Corrigido
+
+- **Atualizar uma instalação existente para a 1.28.0 agora cria a coluna das conversas da Meta** A 1.28.0 acrescentou a coluna `conversations` ao gasto da Meta e mudou o retorno da função do relatório de anúncios, mas o arquivo que o `update.sh` reaplica só criava a coluna em instalações novas — quem já tinha a tabela ficava sem ela, e a sincronização da Meta falharia ao gravar. O baseline agora acrescenta a coluna e troca a versão antiga da função. O teste de banco também ganhou uma prova de atualização (`BASELINE_ANTERIOR`), que parte do baseline da versão anterior, como faz o `update.sh`.
+
 ## [1.28.0] — 2026-11-11
 
 ### Adicionado
@@ -3199,7 +3209,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.28.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.29.0...HEAD
+[1.29.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.28.0...v1.29.0
 [1.28.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.1...v1.28.0
 [1.27.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.26.0...v1.27.0
