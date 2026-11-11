@@ -8,6 +8,16 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.28.0] — 2026-11-11
+
+### Adicionado
+
+- **Relatório de anúncios mostra os números completos da Meta: conversas iniciadas, impressões e cliques** A tabela "Anúncios: gasto, custo e retorno" agora separa o que a Meta informa (gasto, impressões, cliques, conversas iniciadas e custo por conversa — o mesmo número do Gerenciador de Anúncios) do que o CRM reconheceu (contatos, vendas, valor ganho e retorno). Antes só aparecia o que o CRM sabia: quem clicou antes de o CRM existir, ou cuja mensagem chegou sem a marca do anúncio, ficava de fora. As conversas dos dias já sincronizados passam a aparecer na próxima atualização da Meta.
+
+### Corrigido
+
+- **Anúncios da Meta cujo clique chega sem o cartão do anúncio agora também entram como lead de campanha** Parte dos cliques em anúncios "Clique para o WhatsApp" chega com os sinais da Meta (`FB_Ads`) mas sem o cartão do anúncio (título e código). Esses contatos nasciam como "whatsapp" e ficavam de fora do relatório de campanhas. Agora eles são reconhecidos como anúncio da Meta; como a mensagem não diz qual anúncio foi, entram no relatório como "anúncio sem código".
+
 ## [1.27.1] — 2026-11-10
 
 ### Corrigido
@@ -3189,7 +3199,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.1...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.28.0...HEAD
+[1.28.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.1...v1.28.0
 [1.27.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.26.0...v1.27.0
 [1.26.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.25.1...v1.26.0
