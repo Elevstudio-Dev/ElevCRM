@@ -8,6 +8,8 @@
  *  - Retorno = valor ganho ÷ gasto. O valor ganho do CRM é em reais; então o retorno só existe quando o gasto
  *    também está em reais. Conta de anúncios em outra moeda mostra o gasto na moeda dela e deixa o retorno em "—":
  *    dividir reais por dólares seria um número bonito e errado.
+ *  - Custo por conversa = gasto ÷ conversas iniciadas que a Meta informa (não os contatos do CRM). Mesma regra: sem
+ *    conversa ou sem gasto é `null`.
  *  - O gasto TOTAL só soma quando todas as linhas estão na mesma moeda.
  */
 
@@ -26,11 +28,20 @@ export interface LinhaDeAnuncio {
   gasto_cents: number;
   impressoes: number;
   cliques: number;
+  /** Conversas iniciadas, como a Meta as conta (o número do Gerenciador de Anúncios). */
+  conversas: number;
   moeda: string | null;
 }
 
 export interface Desempenho {
+  /** Contatos que o CRM reconheceu como vindos do anúncio. */
   leads: number;
+  /** Conversas iniciadas que a PRÓPRIA Meta informa — pode ser maior que `leads` (o CRM só conta o que reconheceu). */
+  conversas: number;
+  /** gasto ÷ conversas da Meta, em centavos da moeda da conta. */
+  custoPorConversaCents: number | null;
+  impressoes: number;
+  cliques: number;
   ganhos: number;
   valorGanhoCents: number;
   gastoCents: number;
@@ -51,8 +62,6 @@ export interface AnuncioDoRelatorio extends Desempenho {
   conjunto: string | null;
   abertos: number;
   perdidos: number;
-  impressoes: number;
-  cliques: number;
   /** Gastou e ninguém chamou: o achado mais útil da tabela. */
   gastouSemContato: boolean;
 }
@@ -74,14 +83,22 @@ export function formatarRetorno(retorno: number | null): string {
 
 export function desempenho(d: {
   leads: number;
+  conversas?: number;
+  impressoes?: number;
+  cliques?: number;
   ganhos: number;
   valorGanhoCents: number;
   gastoCents: number;
   moeda: string | null;
 }): Desempenho {
   const temGasto = d.gastoCents > 0;
+  const conversas = d.conversas ?? 0;
   return {
     ...d,
+    conversas,
+    impressoes: d.impressoes ?? 0,
+    cliques: d.cliques ?? 0,
+    custoPorConversaCents: temGasto && conversas > 0 ? Math.round(d.gastoCents / conversas) : null,
     custoPorContatoCents: temGasto && d.leads > 0 ? Math.round(d.gastoCents / d.leads) : null,
     custoPorVendaCents: temGasto && d.ganhos > 0 ? Math.round(d.gastoCents / d.ganhos) : null,
     retorno: temGasto && d.moeda === "BRL" ? d.valorGanhoCents / d.gastoCents : null,
@@ -92,6 +109,9 @@ export function montarAnuncios(linhas: LinhaDeAnuncio[]): { anuncios: AnuncioDoR
   const anuncios: AnuncioDoRelatorio[] = linhas.map((l) => {
     const d = desempenho({
       leads: l.leads,
+      conversas: l.conversas,
+      impressoes: l.impressoes,
+      cliques: l.cliques,
       ganhos: l.ganhos,
       valorGanhoCents: l.valor_ganho_cents,
       gastoCents: l.gasto_cents,
@@ -105,9 +125,8 @@ export function montarAnuncios(linhas: LinhaDeAnuncio[]): { anuncios: AnuncioDoR
       conjunto: l.conjunto,
       abertos: l.abertos,
       perdidos: l.perdidos,
-      impressoes: l.impressoes,
-      cliques: l.cliques,
-      gastouSemContato: l.gasto_cents > 0 && l.leads === 0,
+      // Só "ninguém chamou" quando nem a Meta registrou conversa: se ela contou conversas, alguém chamou.
+      gastouSemContato: l.gasto_cents > 0 && l.leads === 0 && l.conversas === 0,
     };
   });
 
@@ -121,11 +140,14 @@ export function montarAnuncios(linhas: LinhaDeAnuncio[]): { anuncios: AnuncioDoR
   const soma = anuncios.reduce(
     (acc, a) => ({
       leads: acc.leads + a.leads,
+      conversas: acc.conversas + a.conversas,
+      impressoes: acc.impressoes + a.impressoes,
+      cliques: acc.cliques + a.cliques,
       ganhos: acc.ganhos + a.ganhos,
       valorGanhoCents: acc.valorGanhoCents + a.valorGanhoCents,
       gastoCents: acc.gastoCents + a.gastoCents,
     }),
-    { leads: 0, ganhos: 0, valorGanhoCents: 0, gastoCents: 0 },
+    { leads: 0, conversas: 0, impressoes: 0, cliques: 0, ganhos: 0, valorGanhoCents: 0, gastoCents: 0 },
   );
 
   return {

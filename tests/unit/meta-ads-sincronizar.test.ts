@@ -72,6 +72,13 @@ describe("sincronizarOrganizacao", () => {
     expect(estado.atualizacoes.at(-1)).toMatchObject({ status: "conectada", last_error: null, last_synced_at: agora.toISOString() });
   });
 
+  it("grava as conversas iniciadas que a Meta informou junto com o gasto", async () => {
+    const actions = [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "9" }];
+    const f = vi.fn().mockResolvedValue(resposta({ data: [linha({ actions })] }));
+    await sincronizarOrganizacao(adminFalso(estado), ORG, { fetcher: f as never, agora: new Date("2026-11-09T12:00:00Z") });
+    expect(estado.upserts[0]!.linhas[0]).toMatchObject({ conversations: 9, spend_cents: 1000 });
+  });
+
   it("a PRIMEIRA vez lê 90 dias; as seguintes, 35", async () => {
     const f = vi.fn().mockResolvedValue(resposta({ data: [] }));
     const agora = new Date("2026-11-09T12:00:00Z");

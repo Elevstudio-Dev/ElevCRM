@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { centavos, contador, linhaDeGasto } from "@/lib/meta-ads/gasto";
+import { ACAO_CONVERSA_INICIADA, centavos, contador, conversasIniciadas, linhaDeGasto } from "@/lib/meta-ads/gasto";
 import { classificarErro, lerConta, lerGastoPorAnuncio, MetaAdsError } from "@/lib/channels/meta/ads-graph";
 
 describe("centavos — dinheiro da Meta sem ponto flutuante", () => {
@@ -63,8 +63,25 @@ describe("linhaDeGasto", () => {
       spend_cents: 1234,
       impressions: 1500,
       clicks: 40,
+      conversations: 0,
       currency: "BRL",
     });
+  });
+
+  it("lê as conversas iniciadas que a Meta informa dentro de `actions` (o número do Gerenciador)", () => {
+    const actions = [
+      { action_type: "link_click", value: "40" },
+      { action_type: "onsite_conversion.messaging_conversation_started_7d", value: "12" },
+      { action_type: "post_engagement", value: "55" },
+    ];
+    expect(linhaDeGasto(bruta({ actions }), null)?.conversations).toBe(12);
+  });
+
+  it("anúncio que não é de mensagem, ou `actions` torta, vale 0 conversas — nunca derruba a linha", () => {
+    expect(linhaDeGasto(bruta({ actions: [{ action_type: "link_click", value: "40" }] }), null)?.conversations).toBe(0);
+    expect(linhaDeGasto(bruta({ actions: "texto" }), null)?.conversations).toBe(0);
+    expect(linhaDeGasto(bruta({ actions: [null, 3, { action_type: ACAO_CONVERSA_INICIADA, value: "-2" }] }), null)?.conversations).toBe(0);
+    expect(conversasIniciadas(undefined)).toBe(0);
   });
 
   it("usa a moeda da conta quando a linha não traz", () => {
@@ -96,6 +113,8 @@ describe("lerGastoPorAnuncio", () => {
     expect(String(url)).toContain("/act_1234567/insights");
     expect(String(url)).toContain("level=ad");
     expect(String(url)).toContain("time_increment=1");
+    // `actions` é onde a Meta informa as conversas iniciadas; sem pedi-lo o relatório não teria o número do Gerenciador.
+    expect(new URL(String(url)).searchParams.get("fields")).toContain("actions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer SEGREDO-123");
     expect(init.redirect).toBe("error");
   });

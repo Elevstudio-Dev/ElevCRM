@@ -10,6 +10,39 @@ import type { AtribuicaoDeAnuncio, Bruto } from "@/lib/leads/atribuicao-de-anunc
 import { obj, str } from "@/lib/leads/atribuicao-de-anuncio";
 
 /**
+ * `conversionSource` é o campo em que a própria Meta declara a origem do clique ("FB_Ads" no webhook real).
+ * Só os valores de anúncio pago contam; vazio ou qualquer outro valor não carimba — carimbar errado é
+ * irreversível pela guarda de primeiro toque.
+ */
+const ORIGEM_DE_ANUNCIO = /^(fb|ig|facebook|instagram|meta)[_\s-]?ads?$/i;
+
+/**
+ * O clique que chegou sem `externalAdReply`: não há título, código do anúncio nem link — só a prova de que
+ * veio de um anúncio. `bruto` guarda só os sinais (nunca o texto da mensagem). Sem `sourceId`, o relatório
+ * conta o lead como "anúncio sem código" em vez de atribuí-lo a um anúncio específico.
+ */
+function atribuicaoSemCartao(contextos: (Bruto | null)[]): AtribuicaoDeAnuncio | null {
+  const c = contextos.find((x) => {
+    const origem = str(x?.conversionSource);
+    return origem !== null && ORIGEM_DE_ANUNCIO.test(origem);
+  });
+  if (!c) return null;
+
+  const bruto: Bruto = {};
+  for (const chave of [
+    "conversionSource",
+    "ctwaSignals",
+    "ctwaPayload",
+    "entryPointConversionSource",
+    "entryPointConversionApp",
+  ]) {
+    const valor = str(c[chave]);
+    if (valor) bruto[chave] = valor;
+  }
+  return { plataforma: "meta_ads", sourceId: null, titulo: null, corpo: null, sourceUrl: null, bruto };
+}
+
+/**
  * `contextInfo.externalAdReply` do Baileys — o mesmo dado do anúncio,
  * embutido na PRÓPRIA mensagem que o app do cliente manda ao clicar num
  * anúncio "Clique para o WhatsApp". `messageRaw` é `_data.message` do payload
@@ -26,6 +59,9 @@ import { obj, str } from "@/lib/leads/atribuicao-de-anuncio";
  * (o clique manda texto na maioria dos casos, daí `extendedTextMessage` vir
  * primeiro na lista de candidatos), então a busca varre os tipos comuns em
  * vez de assumir um só.
+ *
+ * Se o clique chegar SEM o cartão (só com os sinais `conversionSource`/`ctwaPayload`),
+ * ainda é um lead de anúncio: ver `atribuicaoSemCartao`.
  */
 export function extrairAtribuicaoWaha(messageRaw: unknown): AtribuicaoDeAnuncio | null {
   const m = obj(messageRaw);
@@ -43,11 +79,13 @@ export function extrairAtribuicaoWaha(messageRaw: unknown): AtribuicaoDeAnuncio 
   ];
   // O primeiro `contextInfo` que de fato carrega o anúncio — um `contextInfo`
   // de resposta/menção que vem antes não pode esconder o que está num irmão.
-  const ad = candidatos
-    .map(obj)
+  const contextos = candidatos.map(obj);
+  const ad = contextos
     .map((c) => obj(c?.externalAdReply) ?? obj(c?.externalAdReplyInfo))
     .find((a): a is Bruto => a !== null);
-  if (!ad) return null;
+  // Sem o cartão: o WhatsApp às vezes entrega o clique SÓ com os sinais da Meta (visto na clínica em
+  // 10/11/2026). Quem clicou continua sendo um lead de anúncio — só não sabemos qual anúncio.
+  if (!ad) return atribuicaoSemCartao(contextos);
 
   // O mesmo filtro que o irmão da API oficial aplica, e que aqui faltava: post
   // ORGÂNICO compartilhado não é anúncio pago. Sem esta linha, o primeiro

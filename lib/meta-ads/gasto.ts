@@ -20,7 +20,27 @@ export interface LinhaDeGasto {
   spend_cents: number;
   impressions: number;
   clicks: number;
+  /** Conversas iniciadas no WhatsApp a partir do anúncio, como a Meta as conta (o número do Gerenciador). */
+  conversations: number;
   currency: string | null;
+}
+
+/**
+ * O tipo de ação em que a Meta conta "Conversas por mensagem iniciadas" — a coluna que o Gerenciador de Anúncios
+ * mostra para campanhas de mensagem (clique para o WhatsApp). Em `actions` ela vem como
+ * `{ action_type, value: "3" }`, com o valor em texto.
+ */
+export const ACAO_CONVERSA_INICIADA = "onsite_conversion.messaging_conversation_started_7d";
+
+/** As conversas iniciadas dentro de `actions` (0 quando o anúncio não é de mensagem ou a lista não existe). */
+export function conversasIniciadas(actions: unknown): number {
+  if (!Array.isArray(actions)) return 0;
+  for (const a of actions) {
+    if (!a || typeof a !== "object") continue;
+    const { action_type: tipo, value } = a as Record<string, unknown>;
+    if (tipo === ACAO_CONVERSA_INICIADA) return contador(value) ?? 0;
+  }
+  return 0;
 }
 
 /** "123.45" → 12345. `null` para qualquer coisa que não seja dinheiro bem formado. */
@@ -81,6 +101,7 @@ export function linhaDeGasto(bruta: unknown, moedaDaConta: string | null): Linha
     spend_cents: gasto,
     impressions: contador(r.impressions) ?? 0,
     clicks: contador(r.clicks) ?? 0,
+    conversations: conversasIniciadas(r.actions),
     currency: moeda && /^[A-Z]{3}$/.test(moeda) ? moeda : null,
   };
 }

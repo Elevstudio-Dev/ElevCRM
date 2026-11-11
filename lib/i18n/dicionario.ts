@@ -4226,6 +4226,17 @@ export const DICIONARIO: Traducoes = {
   "Nenhum anúncio com contato ou gasto neste período.": { es: "Ningún anuncio con contacto o gasto en este período." },
   "Gasto": { es: "Gasto" },
   "Custo por contato": { es: "Costo por contacto" },
+  "Informado pela Meta": { es: "Informado por Meta" },
+  "Reconhecido no CRM": { es: "Reconocido en el CRM" },
+  "Impressões": { es: "Impresiones" },
+  "Cliques": { es: "Clics" },
+  "Custo por conversa": { es: "Costo por conversación" },
+  "Conversas por mensagem iniciadas, como a Meta conta (o número do Gerenciador de Anúncios).": {
+    es: "Conversaciones por mensaje iniciadas, como las cuenta Meta (el número del Administrador de Anuncios).",
+  },
+  "Pessoas que o CRM reconheceu como vindas deste anúncio. Pode ser menos que as conversas da Meta.": {
+    es: "Personas que el CRM reconoció como llegadas de este anuncio. Pueden ser menos que las conversaciones de Meta.",
+  },
   "Custo por venda": { es: "Costo por venta" },
   "Valor ganho ÷ gasto. 4,20x = R$ 4,20 para cada R$ 1 gasto.": { es: "Valor ganado ÷ gasto. 4,20x = R$ 4,20 por cada R$ 1 gastado." },
   "Gastou e ninguém chamou": { es: "Gastó y nadie escribió" },
