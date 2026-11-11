@@ -1,5 +1,5 @@
 /**
- * POST /api/v1/ai/followups/promises/:id/cancel (manager+) — a pessoa desmarca
+ * POST /api/v1/ai/followups/promises/:id/cancel (agent+) — a pessoa desmarca
  * um RETORNO agendado (a promessa avulsa, `cron_jobs`), não um enrollment do
  * motor de fluxos.
  *
@@ -10,6 +10,9 @@
  * prometia voltar, a pessoa via na tela que o retorno estava marcado, discordava,
  * e não tinha o que fazer. Sem esta porta, o invariante 2 da doutrina
  * (continuidade nas duas direções) valia só no sentido IA→humano.
+ *
+ * ⚠️ AGENT+, e não mais manager+: quem marca um retorno pelo botão da conversa (agent+) precisa poder desmarcá-lo.
+ * Marcar sem poder voltar atrás trocaria um clique errado por um pedido ao gestor.
  *
  * A regra é a MESMA que a capacidade da IA usa (`lib/followup/retorno.ts`), e o
  * cancelamento emite atividade na timeline — é por ela que o agente descobre, ao
@@ -37,7 +40,7 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     return fail("invalid_request", "id inválido.", 400, { requestId });
   }
 
-  const authz = await requireRole("manager", { requestId, resource: "followup_promises" });
+  const authz = await requireRole("agent", { requestId, resource: "followup_promises" });
   if (!authz.ok) return authz.response;
   const { user, org } = authz;
 

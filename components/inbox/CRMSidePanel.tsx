@@ -28,6 +28,7 @@ import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import type { AnuncioDoContato as Anuncio } from "@/lib/leads/anuncio-do-contato";
 import { AnuncioDoContato } from "./AnuncioDoContato";
+import { FollowupAgendadoSecao } from "./FollowupAgendado";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -546,6 +547,8 @@ export function CRMSidePanel({ conversation }: Props) {
       </section>
 
       {anuncio && <AnuncioDoContato anuncio={anuncio} locale={localeDaData} />}
+
+      {contactId && <FollowupAgendadoSecao contactId={contactId} nomeDoContato={displayName} />}
 
       {contactId && defaultPipeline.data && (
         <NewLeadDialog

@@ -35,6 +35,7 @@ import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
 import { TransferirParaSetorDialog } from "@/components/setores/TransferirParaSetorDialog";
 import { useSetores } from "@/hooks/setores/useSetores";
 import { ItensDeLembrete, rotuloDeLembrete } from "@/components/inbox/SnoozeButton";
+import { AgendarFollowupDialog } from "@/components/inbox/FollowupAgendado";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
@@ -83,6 +84,7 @@ export function ConversationHeader({ conversation }: Props) {
   const automaticoDaOrg = useAutomaticoAtivo();
   const [reassignOpen, setReassignOpen] = useState(false);
   const [setorOpen, setSetorOpen] = useState(false);
+  const [followupOpen, setFollowupOpen] = useState(false);
   const [foraOpen, setForaOpen] = useState(false);
   // O item "Transferir para setor…" só existe quando a organização tem setor.
   const { data: setoresDaOrg } = useSetores();
@@ -421,6 +423,13 @@ export function ConversationHeader({ conversation }: Props) {
                 </DropdownMenuSub>
               )}
               {c?.id && !c.is_anonymized && (
+                // Marcar um dia para a IA voltar a falar com o cliente. Fica aqui também (e não só no painel) porque
+                // abaixo de 1280px o painel não existe. É do CONTATO, não da conversa: por isso não depende de `estaViva`.
+                <DropdownMenuItem data-testid="agendar-followup-menu" onClick={() => setFollowupOpen(true)}>
+                  {t("Agendar follow-up…")}
+                </DropdownMenuItem>
+              )}
+              {c?.id && !c.is_anonymized && (
                 // A pessoa não é cliente (equipe, prestador, parceiro): a IA se cala, nenhum negócio nasce e os que
                 // existem saem do funil e do relatório. Fica no menu — é ocasional —, mas com testid: é contrato.
                 <DropdownMenuItem data-testid="fora-do-funil-na-conversa" onClick={() => setForaOpen(true)}>
@@ -471,6 +480,14 @@ export function ConversationHeader({ conversation }: Props) {
           marcar={!c.fora_do_funil_em}
           open
           onOpenChange={(aberto) => !aberto && setForaOpen(false)}
+        />
+      )}
+      {followupOpen && c?.id && (
+        <AgendarFollowupDialog
+          contactId={c.id}
+          nomeDoContato={displayName}
+          open
+          onOpenChange={(aberto) => !aberto && setFollowupOpen(false)}
         />
       )}
       <ReassignDialog
