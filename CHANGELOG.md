@@ -8,6 +8,12 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.30.0] — 2026-11-11
+
+### Adicionado
+
+- **Puxar o histórico do WhatsApp de um contato e identificar o que veio de anúncio** Novo botão **Puxar histórico do WhatsApp** (menu Opções da conversa e painel do contato). Ele busca no WhatsApp as mensagens antigas daquele contato, grava as que o CRM ainda não tem e marca com *Veio de anúncio* a mensagem que carregava o clique do anúncio — a mais antiga também marca o contato como vindo de anúncio. Nada é enviado ao cliente, a IA e as automações não reagem a mensagens antigas (migration 0226), as não lidas não mudam e rodar de novo não duplica. Anexos antigos entram sem o arquivo. As mensagens que chegam daqui em diante de um clique de anúncio também passam a ser marcadas na conversa. Exige que o armazenamento de histórico do WAHA esteja ligado (`WAHA_NOWEB_STORE=1`, desligado por padrão): ver `docs/runbooks/historico-do-whatsapp.md`.
+
 ## [1.29.0] — 2026-11-11
 
 ### Adicionado
@@ -3209,7 +3215,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.29.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.30.0...HEAD
+[1.30.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.28.0...v1.29.0
 [1.28.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.1...v1.28.0
 [1.27.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.27.0...v1.27.1
