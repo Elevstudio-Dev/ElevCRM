@@ -321,6 +321,20 @@ if [ "$fidelidade" != "t" ]; then
 fi
 echo "    ✓ definer nova nasce com grant direto a anon (armadilha do produto reproduzida)"
 
+# PROVA DE ATUALIZAÇÃO (opcional): `BASELINE_ANTERIOR=<arquivo>` aplica PRIMEIRO o baseline da versão que já está em
+# produção e só depois o atual — o que o `update.sh` faz numa instalação existente. O modo "update" abaixo reaplica o
+# MESMO baseline sobre si mesmo e não prova isto: `create table if not exists` não acrescenta coluna e `create or replace`
+# não muda o retorno de uma função, e nenhum dos dois erra quando o objeto já existe. Foi assim que a 0225 (coluna nova
+# de `meta_ads_gasto_diario`) passou no gate e não chegou à VPS. Uso:
+#   git show v<ultima-versao>:supabase/baseline.sql > /tmp/baseline-anterior.sql
+#   BASELINE_ANTERIOR=/tmp/baseline-anterior.sql pnpm test:db
+if [ -n "${BASELINE_ANTERIOR:-}" ]; then
+  [ -f "$BASELINE_ANTERIOR" ] || { echo "FATAL: BASELINE_ANTERIOR=$BASELINE_ANTERIOR não existe" >&2; exit 1; }
+  echo "==> ponto de partida: o baseline ANTERIOR ($BASELINE_ANTERIOR), como numa instalação que será atualizada"
+  psql_install < "$BASELINE_ANTERIOR"
+  echo "    ✓ baseline anterior aplicado"
+fi
+
 echo "==> modo INSTALL: aplicando baseline.sql com ON_ERROR_STOP=1"
 psql_install < "$BASELINE"
 echo "    ✓ install ok"
