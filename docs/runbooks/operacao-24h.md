@@ -86,6 +86,15 @@ disco, memória, certificado, reinício pendente e a idade do backup. Tudo bem �
 **Problema → pinga `<URL>/fail`** com o resumo no corpo. **Silêncio** → o monitor externo
 alerta por conta própria (VPS morta, cron parado, rede fora).
 
+Duas checagens que olham o que o cliente só sente depois:
+
+- **Backup local velho.** O `backup.sh` roda todo dia às 03:02 UTC (o `install.sh`/`update.sh` liga o cron; a
+  saída vai para `.backup.log`) e fica 14 dias no disco da VPS. Se o dump mais novo passa de 30 h, é *problema*.
+  Isto **não** protege da perda do servidor — para isso é o §5 —, mas devolve o banco de ontem.
+- **Cron que falha.** Cada cron do `scheduler` que falha escreve `scheduler: cron <rota> falhou` no log do
+  contêiner (`docker logs elevcrm-scheduler-1`, com rotação de 10 MB × 3). Três ou mais falhas da mesma rota em
+  10 minutos é *problema*; uma ou duas (uma atualização reinicia o app por um minuto) é só *aviso*.
+
 Dois níveis: *problema* (o cliente já sente, ou vai sentir hoje) derruba o pinga; *aviso*
 (vai virar problema se ninguém olhar) só vai no corpo. "Sem backup fora da VPS" é aviso
 permanente até você configurar o §5 — de propósito, para não virar alarme que toca todo dia.

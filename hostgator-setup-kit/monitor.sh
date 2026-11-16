@@ -126,6 +126,45 @@ checar_backup() {
   conferir_marcador "${MONITOR_BACKUP_MARCADOR:-${PROJECT_DIR:-.}/.backup-fora.ok}" "backup fora da VPS"
 }
 
+# O backup LOCAL (`backup.sh`, no disco da VPS) é o que sobra quando o de fora ainda não foi configurado — e foi
+# o único que a clínica real teve durante semanas, com 100 horas de idade, sem ninguém saber. A idade vem do ARQUIVO
+# mais novo da pasta, não de um marcador: o `backup.sh` só tem o dump para mostrar, e dump que existe e é recente
+# é a prova que importa. Mesma régua de 30 h dos outros backups.
+checar_backup_local() {
+  local pasta="${MONITOR_BACKUP_LOCAL:-${PROJECT_DIR:-.}/backups}" limite_h="${MONITOR_BACKUP_MAX_HORAS:-30}"
+  local mais_novo mtime idade_h
+  mais_novo="$(ls -1t "$pasta"/db-*.sql.gz 2>/dev/null | head -1 || true)"
+  if [ -z "$mais_novo" ]; then
+    aviso "nenhum backup local do banco em $pasta"
+    return 0
+  fi
+  mtime="$(stat -c %Y "$mais_novo" 2>/dev/null || stat -f %m "$mais_novo" 2>/dev/null || true)"
+  case "$mtime" in ''|*[!0-9]*) aviso "não consegui ler a data do último backup local"; return 0;; esac
+  idade_h=$(( ( $(agora) - mtime ) / 3600 ))
+  if [ "$idade_h" -gt "$limite_h" ]; then
+    problema "o último backup local do banco tem ${idade_h}h (o limite é ${limite_h}h)"
+  fi
+}
+
+# Os crons do scheduler mandavam a falha para /dev/null; agora cada falha escreve "scheduler: cron <rota> falhou"
+# no log do contêiner (ver docker/scheduler/entrypoint.sh). Aqui se conta isso na janela recente. Uma ou duas falhas
+# são o normal de uma atualização (o app reinicia por um minuto); três ou mais na janela é cron quebrado de
+# verdade — e vira PROBLEMA, com o nome da rota, antes de o cliente sentir o que parou de acontecer.
+checar_crons() {
+  local janela="${MONITOR_CRON_JANELA:-10m}" limite="${MONITOR_CRON_LIMITE:-3}" saida qtd rota
+  saida="$(dc logs --since "$janela" --no-log-prefix scheduler 2>&1 \
+    | grep -oE 'scheduler: cron [A-Za-z0-9/_-]+ falhou' | sort | uniq -c || true)"
+  [ -n "$saida" ] || return 0
+  while read -r qtd _ _ rota _; do
+    [ -n "$rota" ] || continue
+    if [ "$qtd" -ge "$limite" ]; then
+      problema "o cron $rota falhou ${qtd} vezes nos últimos ${janela}"
+    else
+      aviso "o cron $rota falhou ${qtd} vez(es) nos últimos ${janela}"
+    fi
+  done <<<"$saida"
+}
+
 # A mídia (fotos e áudios dos pacientes) é backup à parte: o do banco não a leva. Mesmo
 # critério — marcador que só nasce depois de copiar E conferir — e mesma régua de 30 h.
 checar_backup_midia() {
@@ -229,9 +268,11 @@ main() {
   if checar_docker; then
     checar_servicos
     checar_app
+    checar_crons
   fi
   checar_disco
   checar_memoria
+  checar_backup_local
   checar_backup
   checar_backup_midia
   checar_reinicio

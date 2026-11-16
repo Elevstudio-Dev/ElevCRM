@@ -99,12 +99,25 @@ CRONS="
 # exatamente o achado da revisão adversarial.
 DESTINO="${CRONTAB_PATH:-/etc/crontabs/root}"
 
+# ── A FALHA DE UM CRON DEIXA RASTRO ──────────────────────────────────────────
+# Cada linha mandava tudo para /dev/null: com a rota devolvendo 500 (ou o app fora do ar, ou o segredo errado),
+# o cron "rodava" todo minuto e nada acontecia, sem sintoma — o cliente descobria pelo que parou. Agora o corpo da
+# resposta continua descartado (não há o que ler dele), mas o ERRO do curl e uma linha com o NOME da rota vão para o
+# stderr do contêiner (`/proc/1/fd/2`), que o Docker guarda com rotação (`docker logs`) e que o monitor do kit lê
+# (`checar_crons`). Rodada que dá certo continua em silêncio: o log só tem o que importa.
+#
+# O segredo nunca entra no que vai para o log: o `curl -S` imprime só o código e a causa ("returned error: 500",
+# "Operation timed out"), e a linha de rastro repete apenas o nome da rota.
+#
+# LOG_DESTINO é ponto de injeção do teste, como CRONTAB_PATH: o teste redireciona para um arquivo.
+LOG_DESTINO="${CRON_LOG_PATH:-/proc/1/fd/2}"
+
 umask 077
 : > "$DESTINO"
 echo "$CRONS" | while IFS='|' read -r quando timeout rota; do
   [ -n "$rota" ] || continue
-  printf '%s curl -fsS -m%s -H '"'"'Authorization: Bearer %s'"'"' "%s/%s" >/dev/null 2>&1\n' \
-    "$quando" "$timeout" "$SEGREDO_SEGURO" "$APP_ORIGIN" "$rota" >> "$DESTINO"
+  printf '%s curl -fsS -m%s -H '"'"'Authorization: Bearer %s'"'"' "%s/%s" >/dev/null 2>>%s || echo "scheduler: cron %s falhou (curl saiu com $?)" >>%s\n' \
+    "$quando" "$timeout" "$SEGREDO_SEGURO" "$APP_ORIGIN" "$rota" "$LOG_DESTINO" "${rota%%\?*}" "$LOG_DESTINO" >> "$DESTINO"
 done
 
 exec crond -f -l 2

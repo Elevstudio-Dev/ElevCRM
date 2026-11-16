@@ -732,7 +732,7 @@ owner_id_by_email() {
 # primeira (o filtro remove tudo que casa com o marcador, e as duas linhas
 # casavam). Medido na VPS: depois de instalar, sobrava só o agente e o CRM ficava
 # SEM o drain de eventos — a automação inteira parada, em silêncio.
-cron_tag() { printf '# elevcrm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent|monitor|backup-fora|backup-midia)}"; }
+cron_tag() { printf '# elevcrm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent|monitor|backup-local|backup-fora|backup-midia)}"; }
 
 # O crontab ATUAL, ou nada. `crontab -l` sai 1 quando a conta ainda não tem crontab nenhum —
 # o estado de TODO servidor recém-criado — e com `set -o pipefail` esse 1 derruba o script
@@ -879,6 +879,25 @@ setup_monitor_cron() {
   local cron_line="*/5 * * * * ${legado} >/dev/null 2>&1 ${marcador}"
   ( crontab_atual | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
   c_grn "✓ monitor do servidor ativo (a cada 5 minutos)"
+}
+
+# Ativa (idempotente) o backup LOCAL diário (`backup.sh`: dump do banco + sessões do WhatsApp, no disco da VPS).
+#
+# SEMPRE ligado, com ou sem backup fora da VPS. Antes só existia se o dono lembrasse de pôr a linha no crontab à
+# mão (o cabeçalho do backup.sh pedia isso); na clínica real o crontab não tinha nenhuma e o único backup era o
+# que a atualização faz — 100 horas velho, no mesmo disco. Local NÃO protege da perda do servidor (para isso há o
+# backup fora), mas é o que devolve o banco de ontem quando a falha é do banco, de uma migração ou de uma mão
+# escorregando — e cobre o intervalo até o backup fora ser configurado.
+#
+# 03:02 UTC, 15 minutos ANTES do backup fora (03:17): os dois dumps não disputam o banco ao mesmo tempo. A saída vai
+# para um arquivo (`.backup.log`): se falha, a causa precisa estar em algum lugar quando alguém for procurar.
+setup_backup_local_cron() {
+  command -v crontab >/dev/null 2>&1 || { c_ylw "⚠ 'crontab' não encontrado — o backup local diário não foi ativado."; return 0; }
+  local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/backup.sh"
+  local marcador; marcador="$(cron_tag backup-local)"
+  local cron_line="2 3 * * * ${legado} >> ${PROJECT_DIR}/.backup.log 2>&1 ${marcador}"
+  ( crontab_atual | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  c_grn "✓ backup local diário ativo (todo dia às 03:02 UTC, fica 14 dias no disco da VPS)"
 }
 
 # Ativa (idempotente) o backup diário para fora da VPS. Só com destino E chave
