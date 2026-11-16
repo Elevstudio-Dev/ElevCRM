@@ -92,6 +92,41 @@ fi
 check "a crase NÃO foi executada (está literal no arquivo)" \
   grep -q 'whoami' "$TMP/crontab"
 
+echo "scheduler: cron que falha deixa rastro legível, sem vazar o segredo"
+# A linha INTEIRA, com a redireção, é executada por um `sh` de verdade — como o crond. O `curl` é dublado para
+# falhar como o de verdade falha (`-fsS`: mensagem no stderr, código 22). O destino do log é um arquivo, no lugar
+# de /proc/1/fd/2, pela injeção CRON_LOG_PATH.
+SEGREDO_DO_TESTE='segredo-que-nao-pode-vazar-9f3a'
+: > "$TMP/crontab"
+env INTERNAL_SECRET="$SEGREDO_DO_TESTE" PATH="$TMP/bin:$PATH" CRONTAB_PATH="$TMP/crontab" CRON_LOG_PATH="$TMP/cron.log" \
+  sh "$ENTRYPOINT" >"$TMP/saida" 2>&1
+check "cada linha do crontab leva o rastro de falha" \
+  test "$(grep -c 'falhou (curl saiu com' "$TMP/crontab")" -eq "$(grep -c . "$TMP/crontab")"
+check "o rastro vai para o stderr do contêiner (o que o Docker guarda com rotação)" \
+  grep -q '/proc/1/fd/2' "$ENTRYPOINT"
+check "o corpo da resposta continua descartado (stdout em /dev/null)" \
+  grep -q '>/dev/null 2>>' "$TMP/crontab"
+
+LINHA_CRU="$(grep 'agent-dispatcher' "$TMP/crontab" | head -1)"
+LINHA_CMD="${LINHA_CRU#* * * * * }"
+printf '#!/bin/sh\necho "curl: (22) The requested URL returned error: 500" >&2\nexit 22\n' > "$TMP/bin/curl"
+chmod +x "$TMP/bin/curl"
+: > "$TMP/cron.log"
+PATH="$TMP/bin:$PATH" sh -c "$LINHA_CMD"
+check "curl falhando: o log nomeia a rota que falhou" grep -q 'cron api/v1/cron/agent-dispatcher falhou' "$TMP/cron.log"
+check "  e o código de saída do curl" grep -q 'curl saiu com 22' "$TMP/cron.log"
+check "  e a causa que o curl deu" grep -q 'returned error: 500' "$TMP/cron.log"
+check "  e NADA do segredo chegou ao log" test "$(grep -c "$SEGREDO_DO_TESTE" "$TMP/cron.log")" -eq 0
+
+printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/curl"
+: > "$TMP/cron.log"
+PATH="$TMP/bin:$PATH" sh -c "$LINHA_CMD"
+check "curl OK: o log fica vazio (só o que importa é escrito)" test ! -s "$TMP/cron.log"
+
+# Rota com query string (`?limit=50`): o nome no rastro é o da rota, sem o parâmetro.
+LINHA_Q="$(grep 'storage-redaction' "$TMP/crontab" | head -1)"
+check "rota com query string: o rastro nomeia só a rota" grep -q 'cron api/v1/cron/storage-redaction falhou' <<<"$LINHA_Q"
+
 echo "scheduler: sem INTERNAL_SECRET, recusa em vez de subir mudo"
 RC="$(rodar '')"
 check "sai com código 1" test "$RC" -eq 1

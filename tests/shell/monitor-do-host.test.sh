@@ -42,6 +42,7 @@ case "${1:-}" in
       *" ps "*)   if [[ " $* " == *" -a "* ]]; then printf '%s' "${STUB_PS:-}"
                   else printf '%s' "${STUB_PS:-}" | awk -F'|' '$2 == "running"'; fi ;;
       *" exec "*) printf '%s' "${STUB_HEALTH:-}" ;;
+      *" logs "*) printf '%s' "${STUB_LOGS:-}" ;;
     esac ;;
 esac
 exit 0
@@ -315,6 +316,46 @@ for i in $(seq 1 300); do echo "linha $i" >> "$PROJ/.monitor.log"; done
 STUB_PS="$BOM" STUB_HEALTH="$HEALTHY" STUB_DF_PCT=30 rodar_main
 check "o log é cortado em ~200 linhas" test "$(wc -l < "$PROJ/.monitor.log")" -le 201
 
+# ══ Backup local e crons que falham ══════════════════════════════════════════
+echo "backup local do banco"
+BK="$WORK/backups"; mkdir -p "$BK"
+export MONITOR_BACKUP_LOCAL="$BK"
+saida="$(rodar checar_backup_local)"
+check "sem nenhum dump na pasta: AVISO (não some em silêncio)" tem "$saida" "nenhum backup local do banco"
+check "  e não é problema" tem "$saida" "P=0 A=1"
+
+: > "$BK/db-fresco.sql.gz"; touch -d "@$((AGORA - 3 * 3600))" "$BK/db-fresco.sql.gz"
+saida="$(rodar checar_backup_local)"
+check "dump de 3 h: calado" tem "$saida" "P=0 A=0"
+
+: > "$BK/db-velho.sql.gz"; touch -d "@$((AGORA - 100 * 3600))" "$BK/db-velho.sql.gz"
+saida="$(rodar checar_backup_local)"
+check "o mais NOVO é que conta: um dump velho ao lado de um fresco não acusa" tem "$saida" "P=0 A=0"
+
+rm -f "$BK/db-fresco.sql.gz"
+saida="$(rodar checar_backup_local)"
+check "só dump de 100 h: PROBLEMA (o caso da clínica real)" tem "$saida" "P=1"
+check "  e a mensagem diz a idade e o limite" tem "$saida" "tem 100h (o limite é 30h)"
+
+echo "crons do scheduler que falham"
+saida="$(STUB_LOGS='' rodar checar_crons)"
+check "sem nenhuma falha no log: calado" tem "$saida" "P=0 A=0"
+
+saida="$(STUB_LOGS=$'scheduler: cron api/v1/cron/agent-dispatcher falhou (curl saiu com 22)\nscheduler: cron api/v1/cron/agent-dispatcher falhou (curl saiu com 22)\n' rodar checar_crons)"
+check "2 falhas na janela (uma atualização): só AVISO" tem "$saida" "P=0 A=1"
+
+LOGS3=$'scheduler: cron api/v1/cron/agent-dispatcher falhou (curl saiu com 22)\nscheduler: cron api/v1/cron/agent-dispatcher falhou (curl saiu com 28)\nscheduler: cron api/v1/cron/agent-dispatcher falhou (curl saiu com 22)\n'
+saida="$(STUB_LOGS="$LOGS3" rodar checar_crons)"
+check "3 falhas da MESMA rota: PROBLEMA" tem "$saida" "P=1"
+check "  que diz qual rota e quantas vezes" tem "$saida" "o cron api/v1/cron/agent-dispatcher falhou 3 vezes"
+
+LOGS_MIX=$'scheduler: cron api/v1/cron/a falhou (curl saiu com 22)\nscheduler: cron api/v1/cron/b falhou (curl saiu com 22)\nscheduler: cron api/v1/cron/a falhou (curl saiu com 22)\nscheduler: cron api/v1/cron/b falhou (curl saiu com 22)\nscheduler: cron api/v1/cron/a falhou (curl saiu com 22)\n'
+saida="$(STUB_LOGS="$LOGS_MIX" rodar checar_crons)"
+check "rotas diferentes não se somam: 3 de uma é problema, 2 de outra é aviso" tem "$saida" "P=1 A=1"
+
+saida="$(STUB_LOGS=$'uma linha qualquer do log\ncurl: (22) The requested URL returned error: 500\n' rodar checar_crons)"
+check "o erro solto do curl, sem a linha de rastro, não conta como falha de cron" tem "$saida" "P=0 A=0"
+
 # ══ Os ligadores de cron ═════════════════════════════════════════════════════
 echo "ligadores de cron"
 cron_rodar() {  # cron_rodar <função> [VAR=valor...]  (numa subshell, com o crontab de mentira)
@@ -347,6 +388,20 @@ check "backup-fora: liga às 03:17" grep -q '^17 3 \* \* \* cd /srv/a && bash ho
 check "  e guarda a saída num arquivo (falha precisa deixar a causa)" grep -qF -- '>> /srv/a/.backup-fora.log 2>&1' "$CRON_FILE"
 cron_rodar setup_backup_fora_cron PROJECT_DIR=/srv/a BACKUP_FORA_DESTINO=fora:b/x BACKUP_AGE_RECIPIENT=age1abc
 check "backup-fora: rodar de novo NÃO duplica" test "$(linhas 'backup-fora.sh')" -eq 1
+
+: > "$CRON_FILE"
+cron_rodar setup_backup_local_cron PROJECT_DIR=/srv/a
+check "backup-local: liga às 03:02, antes do backup fora" grep -q '^2 3 \* \* \* cd /srv/a && bash hostgator-setup-kit/backup.sh' "$CRON_FILE"
+check "  e guarda a saída num arquivo (falha precisa deixar a causa)" grep -qF -- '>> /srv/a/.backup.log 2>&1' "$CRON_FILE"
+cron_rodar setup_backup_local_cron PROJECT_DIR=/srv/a
+check "backup-local: rodar de novo NÃO duplica" test "$(linhas 'backup.sh')" -eq 1
+cron_rodar setup_backup_fora_cron PROJECT_DIR=/srv/a BACKUP_FORA_DESTINO=fora:b/x BACKUP_AGE_RECIPIENT=age1abc
+check "backup-local e backup-fora coexistem (um não apaga o outro)" test "$(linhas 'backup.sh')" -eq 1 -a "$(linhas 'backup-fora.sh')" -eq 1
+cron_rodar setup_backup_local_cron PROJECT_DIR=/srv/b
+check "backup-local: uma segunda instalação não apaga a primeira" test "$(linhas 'backup.sh')" -eq 2
+printf '*/5 * * * * cd /srv/a && bash hostgator-setup-kit/agent.sh >/dev/null 2>&1 # elevcrm:/srv/a:agent\n' > "$CRON_FILE"
+cron_rodar setup_backup_local_cron PROJECT_DIR=/srv/a
+check "backup-local: preserva a linha do agente de atualização" grep -q 'agent.sh' "$CRON_FILE"
 
 : > "$CRON_FILE"
 cron_rodar setup_backup_midia_cron PROJECT_DIR=/srv/a BACKUP_MIDIA_ORIGEM=supamidia: BACKUP_MIDIA_DESTINO=fora:b/m BACKUP_MIDIA_SENHA=uma-senha-longa
