@@ -45,6 +45,8 @@ import {
   type FollowupQueueRow,
 } from "@/hooks/followup/useFollowupQueue";
 
+import { ProximosDaFila } from "./ProximosDaFila";
+
 interface Props {
   canWrite: boolean;
 }
@@ -135,6 +137,7 @@ export function QueueTab({ canWrite }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
+      <ProximosDaFila />
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-56">
           <MagnifyingGlass

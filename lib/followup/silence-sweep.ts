@@ -41,6 +41,12 @@ import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
+import {
+  decidirEntrada,
+  previsaoDeEntrada,
+  type EstadoDoRitmo,
+  type RitmoDeEntrada,
+} from "./ritmo-de-entrada";
 
 export interface SilencePointer {
   id: string;
@@ -48,6 +54,16 @@ export interface SilencePointer {
   active_version_id: string;
   threshold_minutes: number;
   segments: string[];
+  /** `null` = sem ritmo: todos os parados entram de uma vez (comportamento original). */
+  ritmo: RitmoDeEntrada | null;
+}
+
+/** As inscrições deste fluxo que ainda contam no limite das 24h, da mais antiga para a mais nova. */
+export interface InscricoesRecentes {
+  /** Instante de criação de cada inscrição na janela, ordem crescente. */
+  criadasEm: Date[];
+  /** A mais nova (mesmo fora da janela de 24h) — é dela que vem o intervalo. */
+  ultima: { id: string; criadaEm: Date } | null;
 }
 
 /** DB surface o sweep precisa — narrow por consumidor (mesma doutrina de `AdminClient`/`ReactivityAdminClient`/`FollowupGateDb`). */
@@ -56,6 +72,10 @@ export interface SilenceSweepDb {
   loadActiveSilencePointers(): Promise<SilencePointer[]>;
   /** Contact ids da org sem inbound desde `cutoffIso` (inclusive); `segments` vazio = todos. */
   loadSilentContactIds(orgId: string, cutoffIso: string, segments: string[]): Promise<string[]>;
+  /** Contatos da org com follow-up VIVO (active / waiting_reply / paused_handoff) em qualquer fluxo. */
+  loadLiveContactIds(orgId: string): Promise<Set<string>>;
+  /** Inscrições deste fluxo desde `sinceIso` + a mais recente de todas. Só é chamada quando o fluxo tem ritmo. */
+  loadInscricoesRecentes(pointerId: string, sinceIso: string): Promise<InscricoesRecentes>;
   /** id do nó `trigger` do grafo pinado da version; `null` se version/nó não existir (defensivo — não deveria acontecer, validate-publish garante 1 trigger). */
   loadTriggerNodeId(orgId: string, versionId: string): Promise<string | null>;
   /** Insere o enrollment nascendo no nó trigger; `inserted:false` = 23505 (já vivo nesse pointer) → skip. */
@@ -75,6 +95,8 @@ export interface SilenceSweepSummary {
   pointers_gated_out: number;
   enrolled: number;
   skipped_existing: number;
+  /** Fluxos com ritmo em que esta varredura não inscreveu ninguém (intervalo ou limite do dia). */
+  deferred_by_pacing: number;
 }
 
 export interface SilenceSweepDeps {
@@ -90,6 +112,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     pointers_gated_out: 0,
     enrolled: 0,
     skipped_existing: 0,
+    deferred_by_pacing: 0,
   };
 
   const pointers = await db.loadActiveSilencePointers();
@@ -125,6 +148,50 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     const contactIds = await db.loadSilentContactIds(pointer.organization_id, cutoffIso, pointer.segments);
     const nextEvalAt = clock().toISOString();
 
+    // Fluxo COM ritmo: entra no máximo UM por varredura, e só se o intervalo
+    // desde a última inscrição venceu e o limite das 24h não foi atingido. A
+    // varredura roda a cada minuto e o intervalo mínimo é de 1, então "um por
+    // rodada" é o que faz o espaçamento valer sem guardar estado novo.
+    if (pointer.ritmo) {
+      const agora = clock();
+      const recentes = await db.loadInscricoesRecentes(
+        pointer.id,
+        new Date(agora.getTime() - 24 * 60 * 60_000).toISOString(),
+      );
+      const estado: EstadoDoRitmo = {
+        ultimaEm: recentes.ultima?.criadaEm ?? null,
+        ultimaId: recentes.ultima?.id ?? null,
+        nasUltimas24h: recentes.criadasEm.length,
+      };
+      const decisao = decidirEntrada(agora, pointer.ritmo, estado, recentes.criadasEm[0] ?? null);
+      if (!decisao.pode) {
+        summary.deferred_by_pacing++;
+        continue;
+      }
+      const vivos = await db.loadLiveContactIds(pointer.organization_id);
+      for (const contactId of contactIds) {
+        if (vivos.has(contactId)) {
+          summary.skipped_existing++;
+          continue;
+        }
+        const { inserted } = await db.insertEnrollment({
+          organization_id: pointer.organization_id,
+          pointer_id: pointer.id,
+          version_id: pointer.active_version_id,
+          contact_id: contactId,
+          current_node_id: triggerNodeId,
+          next_eval_at: nextEvalAt,
+          agent_id: agentId,
+        });
+        if (inserted) {
+          summary.enrolled++;
+          break;
+        }
+        summary.skipped_existing++;
+      }
+      continue;
+    }
+
     for (const contactId of contactIds) {
       const { inserted } = await db.insertEnrollment({
         organization_id: pointer.organization_id,
@@ -141,6 +208,55 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
   }
 
   return summary;
+}
+
+export interface ProximoDaFila {
+  contactId: string;
+  /** 1 = o próximo a entrar. */
+  posicao: number;
+  /** Quando deve entrar (previsão, não promessa). */
+  entraEm: Date;
+}
+
+/**
+ * A fila ANTES da inscrição: quem são os próximos contatos parados que o gatilho
+ * vai inscrever e quando, por ordem. Só existe para fluxo COM ritmo — sem ritmo
+ * todo mundo entra de uma vez e não há fila a mostrar.
+ *
+ * Usa as mesmas funções da varredura (o corte de silêncio, o filtro de segmento,
+ * a ordem do mais antigo, o ritmo) para que a tela e o motor não possam divergir.
+ */
+export async function proximosDaFila(
+  db: SilenceSweepDb,
+  pointer: SilencePointer,
+  clock: () => Date,
+  quantos: number,
+): Promise<ProximoDaFila[]> {
+  if (!pointer.ritmo) return [];
+  const agora = clock();
+  const cutoffIso = new Date(agora.getTime() - pointer.threshold_minutes * 60_000).toISOString();
+  const [silentes, vivos, recentes] = await Promise.all([
+    db.loadSilentContactIds(pointer.organization_id, cutoffIso, pointer.segments),
+    db.loadLiveContactIds(pointer.organization_id),
+    db.loadInscricoesRecentes(pointer.id, new Date(agora.getTime() - 24 * 60 * 60_000).toISOString()),
+  ]);
+  const candidatos = silentes.filter((id) => !vivos.has(id)).slice(0, quantos);
+  const previsoes = previsaoDeEntrada(
+    agora,
+    pointer.ritmo,
+    {
+      ultimaEm: recentes.ultima?.criadaEm ?? null,
+      ultimaId: recentes.ultima?.id ?? null,
+      nasUltimas24h: recentes.criadasEm.length,
+    },
+    recentes.criadasEm,
+    candidatos.length,
+  );
+  return candidatos.map((contactId, i) => ({
+    contactId,
+    posicao: i + 1,
+    entraEm: previsoes[i]!,
+  }));
 }
 
 type ContactEmbed =
@@ -174,6 +290,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           active_version_id: row.active_version_id,
           threshold_minutes: parsed.data.params.threshold_minutes,
           segments: parsed.data.params.segments ?? [],
+          ritmo: parsed.data.params.ritmo ?? null,
         });
       }
       return pointers;
@@ -226,7 +343,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         }
       }
 
-      const silentIds: string[] = [];
+      const silentes: Array<{ id: string; at: number }> = [];
       for (const [contactId, v] of latest) {
         if (v.blocked) continue;
         // Gate `allowlist`: o follow-up automático também respeita a
@@ -234,9 +351,41 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         if (v.gateAllowlist && !v.autorizado) continue;
         if (v.at > cutoff) continue; // conversou depois do corte — não é silêncio
         if (segments.length > 0 && !segments.some((s) => v.tags.includes(s))) continue;
-        silentIds.push(contactId);
+        silentes.push({ id: contactId, at: v.at });
       }
-      return silentIds;
+      // O parado HÁ MAIS TEMPO primeiro: é a ordem da fila (e do ritmo de
+      // entrada). Empate decidido pelo id, para a ordem não mudar de uma
+      // varredura para a outra.
+      silentes.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
+      return silentes.map((s) => s.id);
+    },
+
+    async loadLiveContactIds(orgId) {
+      const { data, error } = await admin
+        .from("followup_enrollments")
+        .select("contact_id")
+        .eq("organization_id", orgId)
+        .in("status", ["active", "waiting_reply", "paused_handoff"]);
+      if (error) throw new Error(error.message);
+      return new Set(((data ?? []) as Array<{ contact_id: string }>).map((r) => r.contact_id));
+    },
+
+    async loadInscricoesRecentes(pointerId, sinceIso) {
+      const { data, error } = await admin
+        .from("followup_enrollments")
+        .select("id, created_at")
+        .eq("pointer_id", pointerId)
+        .gte("created_at", sinceIso)
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as Array<{ id: string; created_at: string }>;
+      // A mais recente pode estar FORA das 24h (fluxo parado há dias): nesse
+      // caso o intervalo dela já venceu, e basta não haver nenhuma `ultima`.
+      const ultimaRow = rows[rows.length - 1];
+      return {
+        criadasEm: rows.map((r) => new Date(r.created_at)),
+        ultima: ultimaRow ? { id: ultimaRow.id, criadaEm: new Date(ultimaRow.created_at) } : null,
+      };
     },
 
     async loadTriggerNodeId(orgId, versionId) {

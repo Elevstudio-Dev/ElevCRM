@@ -100,7 +100,10 @@ function silenceSweepDb(): SilenceSweepDb {
         id: string;
         organization_id: string;
         active_version_id: string | null;
-        trigger_config: { kind: string; params?: { threshold_minutes: number; segments?: string[] } };
+        trigger_config: {
+          kind: string;
+          params?: { threshold_minutes: number; segments?: string[]; ritmo?: SilencePointer["ritmo"] };
+        };
       }>(
         `select id, organization_id, active_version_id, trigger_config
          from followup_flow_pointers
@@ -115,6 +118,7 @@ function silenceSweepDb(): SilenceSweepDb {
           active_version_id: row.active_version_id,
           threshold_minutes: row.trigger_config.params!.threshold_minutes,
           segments: row.trigger_config.params!.segments ?? [],
+          ritmo: row.trigger_config.params!.ritmo ?? null,
         });
       }
       return pointers;
@@ -136,6 +140,26 @@ function silenceSweepDb(): SilenceSweepDb {
         .filter((r) => new Date(r.last_inbound_at).getTime() <= cutoff)
         .filter((r) => segments.length === 0 || segments.some((s) => r.tags.includes(s)))
         .map((r) => r.contact_id);
+    },
+    async loadLiveContactIds(orgId) {
+      const { rows } = await pool.query<{ contact_id: string }>(
+        `select contact_id from followup_enrollments
+         where organization_id = $1 and status in ('active', 'waiting_reply', 'paused_handoff')`,
+        [orgId],
+      );
+      return new Set(rows.map((r) => r.contact_id));
+    },
+    async loadInscricoesRecentes(pointerId, sinceIso) {
+      const { rows } = await pool.query<{ id: string; created_at: Date }>(
+        `select id, created_at from followup_enrollments
+         where pointer_id = $1 and created_at >= $2 order by created_at asc`,
+        [pointerId, sinceIso],
+      );
+      const ultima = rows[rows.length - 1];
+      return {
+        criadasEm: rows.map((r) => new Date(r.created_at)),
+        ultima: ultima ? { id: ultima.id, criadaEm: new Date(ultima.created_at) } : null,
+      };
     },
     async loadTriggerNodeId(orgId, versionId) {
       const { rows } = await pool.query<{ graph: FlowGraph }>(

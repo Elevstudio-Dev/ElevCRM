@@ -1171,6 +1171,13 @@ export const DICIONARIO: Traducoes = {
   "Filtrar por fluxo": { es: "Filtrar por flujo" },
   "Todos os fluxos": { es: "Todos los flujos" },
   "Nenhum item na fila": { es: "Ningún elemento en la cola" },
+  "Próximos a entrar na fila": { es: "Próximos en entrar a la cola" },
+  "Intervalo entre pacientes": { es: "Intervalo entre pacientes" },
+  "Entraram nas últimas 24h": { es: "Entraron en las últimas 24 h" },
+  "Ninguém esperando para entrar: todos os pacientes parados já estão na fila.": {
+    es: "Nadie esperando para entrar: todos los pacientes inactivos ya están en la cola.",
+  },
+  "entra por volta de": { es: "entra alrededor de" },
   "Enrollments ativos e promessas de retorno agendadas pela IA aparecem aqui.": {
     es: "Las inscripciones activas y las promesas de retorno agendadas por la IA aparecen aquí.",
   },

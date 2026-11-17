@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 import { flowGraphSchema } from "./graph-schema";
+import { ritmoDeEntradaSchema } from "./ritmo-de-entrada";
 
 /** Vocabulário da coluna `surface` (0167). A UI não recorta mais por ela. */
 export const FOLLOWUP_FLOW_SURFACES = ["followup", "crm_automation"] as const;
@@ -36,6 +37,9 @@ export const triggerConfigSchema = z.discriminatedUnion("kind", [
     params: z.strictObject({
       threshold_minutes: z.number().int().min(5).max(10_080),
       segments: z.array(z.string()).optional(),
+      // Ritmo de entrada na fila (intervalo entre pacientes + limite por dia).
+      // Ausente = comportamento antigo: todos os parados entram de uma vez.
+      ritmo: ritmoDeEntradaSchema.optional(),
     }),
     ...CANCEL_ON_REPLY,
   }),
