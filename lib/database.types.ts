@@ -2580,6 +2580,7 @@ export type Database = {
           fora_do_funil_em: string | null
           fora_do_funil_por: string | null
           fora_do_funil_tipo_id: string | null
+          papel_interno: string | null
           force_human: boolean
           id: string
           is_anonymized: boolean
@@ -2619,6 +2620,7 @@ export type Database = {
           fora_do_funil_em?: string | null
           fora_do_funil_por?: string | null
           fora_do_funil_tipo_id?: string | null
+          papel_interno?: string | null
           force_human?: boolean
           id?: string
           is_anonymized?: boolean
@@ -2658,6 +2660,7 @@ export type Database = {
           fora_do_funil_em?: string | null
           fora_do_funil_por?: string | null
           fora_do_funil_tipo_id?: string | null
+          papel_interno?: string | null
           force_human?: boolean
           id?: string
           is_anonymized?: boolean

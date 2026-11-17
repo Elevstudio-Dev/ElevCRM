@@ -45,6 +45,26 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (!tipo) return fail("validation_failed", "Esse tipo não existe mais. Escolha outro.", 422, { requestId });
   }
 
+  // Quem tem papel (secretaria, marketing) TEM de ficar fora do funil: o banco recusa devolvê-lo (0227). Dizer isso
+  // antes, com a razão em português, em vez de deixar o erro do banco virar um 500.
+  if (!marcar) {
+    const { data: comPapel } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("organization_id", orgId)
+      .in("id", contact_ids)
+      .not("papel_interno", "is", null)
+      .limit(1);
+    if ((comPapel ?? []).length > 0) {
+      return fail(
+        "validation_failed",
+        "Quem tem papel na equipe (secretaria ou marketing) fica fora do funil. Tire o papel antes de devolver ao funil.",
+        422,
+        { requestId },
+      );
+    }
+  }
+
   try {
     const r = await aplicarMarcador(supabase, {
       organizationId: orgId,
