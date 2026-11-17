@@ -8,4 +8,6 @@ A mensagem de um contato marcado como **Secretaria** (ficha do contato, "Papel n
 
 Salvaguardas: só um "sim" inequívoco confirma ("sim, mas a Ana é às 15h" é uma correção, não uma confirmação); um resumo esperando há mais de 12 horas não vale mais; datas relativas ("amanhã", "quinta") são resolvidas com o relógio e o fuso da agenda, e a leitura recusa dias que já passaram; todas as respostas à secretaria são texto fixo e saem pela mesma cadeia de proteções de qualquer mensagem, que só libera o contato da equipe para esse tipo de mensagem. Nada muda para quem não ligar a agenda da secretaria (`settings.secretaria.ativa`, desligada por padrão).
 
+A conversa com a equipe **não conta no limite diário** do número: as mensagens da secretaria (e, adiante, do marketing) não são barradas pelo teto de aquecimento nem pelo limite diário e não gastam a cota do atendimento e do follow-up de vendas. A janela de horário e o espaçamento entre envios continuam valendo.
+
 A mensagem de quem tem papel de Marketing continua sem resposta nesta versão. As perguntas diárias à secretaria e a reserva de horário com confirmação chegam nas próximas versões.

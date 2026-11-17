@@ -605,6 +605,8 @@ export const pacingGate: Gate = {
       state: ctx.pacing.state,
       crmDailyLimit: ctx.pacing.crmDailyLimit,
       banRisk,
+      // O bastidor (equipe) fica fora dos tetos de warm-up e diário: ver `PacingInput.ignoreDailyCaps`.
+      ignoreDailyCaps: ctx.bastidor !== undefined,
       rng: ctx.pacing.rng,
     });
     if (!decision.allow) {
@@ -1044,7 +1046,11 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     // já foram (ou serão) contabilizados na tentativa original — o ledger F2-06 faz as
     // repetições curto-circuitarem, então re-registrar aqui inflaria o cap.
     if (outcome.kind === 'sent') {
-      await recordSend(client, args.tenantId, args.channelSessionId, args.now);
+      // O bastidor não entra na contagem do dia: a conversa com a equipe não gasta a cota das vendas
+      // (decisão do dono, 17/11). O espaçamento entre envios continua medido só sobre o que conta.
+      if (args.bastidor === undefined) {
+        await recordSend(client, args.tenantId, args.channelSessionId, args.now);
+      }
       // Simetria com o gate desarmado: quem não é julgado pela janela não entra
       // nela. Ver `GateContext.spinningEnforced`.
       if (args.enforceSpinning !== false) {

@@ -279,7 +279,9 @@ interface EnvioDoBastidor {
  *
  * `enforceSpinning: false`: o gate de repetição existe para barrar rajada de texto quase igual a MUITOS contatos
  * (blast). Aqui é uma pessoa só da equipe, e as respostas são fixas por desenho ("Sem problema! O que está
- * diferente?" duas vezes no mesmo dia é o comportamento certo, não spam). O teto diário do número continua valendo.
+ * diferente?" duas vezes no mesmo dia é o comportamento certo, não spam). O bastidor também fica FORA do limite diário: a cadeia não aplica o
+ * teto de warm-up/diário a ele e `recordSend` não o conta, então a equipe não gasta a cota das vendas (janela
+ * horária e espaçamento continuam valendo).
  *
  * Veto da cadeia NÃO é erro do job: registra e segue. Retentar não muda o veredito (janela, opt-out), e o job
  * morto geraria alerta crítico por algo que é decisão de negócio.
