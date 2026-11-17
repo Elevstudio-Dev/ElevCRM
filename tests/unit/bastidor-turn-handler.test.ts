@@ -9,6 +9,29 @@ const registrarRelato = vi.fn();
 const marcarRelatoCorrigido = vi.fn();
 const descartarRelato = vi.fn();
 
+const reservaEmPerguntaAberta = vi.fn();
+const tratarRespostaDaReserva = vi.fn();
+const executarTrabalhoDaReserva = vi.fn();
+vi.mock("@/lib/agenda/secretaria/reservas", () => ({
+  reservaEmPerguntaAberta: (...a: unknown[]) => reservaEmPerguntaAberta(...a),
+}));
+vi.mock("@/lib/agent-engine/agent/bastidor-reserva", async () => {
+  const { z } = await import("zod");
+  return {
+    // O mesmo contrato do schema real: o trabalho de reserva traz `acao` e `reserva_id`.
+    trabalhoDaReservaPayloadSchema: z
+      .object({
+        conversation_id: z.string().uuid(),
+        contact_id: z.string().uuid(),
+        channel_session_id: z.string().uuid(),
+        acao: z.enum(["perguntar_reserva", "avisar_paciente_reserva"]),
+        reserva_id: z.string().uuid(),
+      })
+      .passthrough(),
+    tratarRespostaDaReserva: (...a: unknown[]) => tratarRespostaDaReserva(...a),
+    executarTrabalhoDaReserva: (...a: unknown[]) => executarTrabalhoDaReserva(...a),
+  };
+});
 vi.mock("@/lib/agent-engine/guardrails/before-send", () => ({ runBeforeSend: (a: unknown) => runBeforeSend(a) }));
 vi.mock("@/lib/agent-engine/edge/llm/run-model-call", () => ({ runModelCall: (...a: unknown[]) => runModelCall(...a) }));
 vi.mock("@/lib/agenda/secretaria/relatos", () => ({
@@ -117,6 +140,9 @@ beforeEach(() => {
     trace: [],
   }));
   runModelCall.mockResolvedValue({ result: { text: RESPOSTA_DO_MODELO } });
+  reservaEmPerguntaAberta.mockResolvedValue(null);
+  tratarRespostaDaReserva.mockResolvedValue(undefined);
+  executarTrabalhoDaReserva.mockResolvedValue(undefined);
   registrarRelato.mockResolvedValue({ id: "novo", duplicado: false });
   conferirEAplicarRelato.mockResolvedValue({ relatoId: "pend", jaConferido: false, criados: 1, mantidos: 0, cancelados: 0, diasFechados: 0, diasReabertos: 0 });
   marcarRelatoCorrigido.mockResolvedValue(undefined);
@@ -259,6 +285,92 @@ describe("bastidor_turn — o 'sim' e a correção", () => {
     expect(runModelCall).not.toHaveBeenCalled();
     expect(registrarRelato).not.toHaveBeenCalled();
     expect(runBeforeSend).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("bastidor_turn — o 'sim'/'não' de uma RESERVA de horário", () => {
+  const RESERVA = { id: "res-1", perguntadaEm: new Date(AGORA.getTime() - 2 * 60_000) };
+  const PENDENTE = {
+    id: "pend",
+    lido: { janela: { de: "2026-11-18", ate: "2026-11-18" }, marcados: [], dias_fechados: [], duvidas: [] },
+    created_at: new Date(AGORA.getTime() - 5 * 60_000),
+  };
+
+  it("'sim' com pergunta de reserva em aberto vai para a RESERVA — não confere o resumo da agenda nem chama o modelo", async () => {
+    reservaEmPerguntaAberta.mockResolvedValue(RESERVA);
+    await rodar({ mensagens: [{ body: "sim", media_derived_text: null }] });
+    expect(tratarRespostaDaReserva).toHaveBeenCalledTimes(1);
+    expect(tratarRespostaDaReserva.mock.calls[0]?.[1]).toBe(RESERVA);
+    expect(tratarRespostaDaReserva.mock.calls[0]?.[2]).toBe("sim");
+    expect(conferirEAplicarRelato).not.toHaveBeenCalled();
+    expect(runModelCall).not.toHaveBeenCalled();
+  });
+
+  it("'não' também vai para a reserva", async () => {
+    reservaEmPerguntaAberta.mockResolvedValue(RESERVA);
+    await rodar({ mensagens: [{ body: "não", media_derived_text: null }] });
+    expect(tratarRespostaDaReserva.mock.calls[0]?.[2]).toBe("nao");
+  });
+
+  it("o resumo da agenda foi perguntado DEPOIS da reserva: o 'sim' é do resumo (o mais recente manda)", async () => {
+    reservaEmPerguntaAberta.mockResolvedValue({ ...RESERVA, perguntadaEm: new Date(AGORA.getTime() - 10 * 60_000) });
+    await rodar({ mensagens: [{ body: "sim", media_derived_text: null }], pendente: PENDENTE });
+    expect(tratarRespostaDaReserva).not.toHaveBeenCalled();
+    expect(conferirEAplicarRelato).toHaveBeenCalledTimes(1);
+  });
+
+  it("a reserva foi perguntada DEPOIS do resumo: o 'sim' é da reserva", async () => {
+    reservaEmPerguntaAberta.mockResolvedValue(RESERVA);
+    await rodar({ mensagens: [{ body: "sim", media_derived_text: null }], pendente: PENDENTE });
+    expect(tratarRespostaDaReserva).toHaveBeenCalledTimes(1);
+    expect(conferirEAplicarRelato).not.toHaveBeenCalled();
+  });
+
+  it("resposta que NÃO é um 'sim'/'não' seco ('sim, mas…') não marca nada: segue o caminho de sempre", async () => {
+    reservaEmPerguntaAberta.mockResolvedValue(RESERVA);
+    await rodar({ mensagens: [{ body: "sim, mas só às 15h", media_derived_text: null }] });
+    expect(tratarRespostaDaReserva).not.toHaveBeenCalled();
+    expect(runModelCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem pergunta de reserva em aberto, 'sim' segue o caminho de sempre", async () => {
+    await rodar({ mensagens: [{ body: "sim", media_derived_text: null }] });
+    expect(tratarRespostaDaReserva).not.toHaveBeenCalled();
+  });
+
+  it("job de TRABALHO da reserva (cron/ferramenta) vai para o executor, sem ler mensagem nem chamar o modelo", async () => {
+    const trabalho = {
+      ...job,
+      payload: {
+        conversation_id: CONVERSA,
+        contact_id: CONTATO,
+        channel_session_id: SESSAO,
+        acao: "perguntar_reserva",
+        reserva_id: "0be7a70a-0000-4000-8000-000000000009",
+      },
+    } as unknown as JobRow;
+    const { pool } = poolFalso();
+    await createBastidorTurnHandler(deps())(trabalho, pool, { workerId: "w" });
+    expect(executarTrabalhoDaReserva).toHaveBeenCalledTimes(1);
+    expect(executarTrabalhoDaReserva.mock.calls[0]?.[1]).toMatchObject({ acao: "perguntar_reserva" });
+    expect(runModelCall).not.toHaveBeenCalled();
+    expect(reservaEmPerguntaAberta).not.toHaveBeenCalled();
+  });
+
+  it("secretaria desligada: o trabalho da reserva também não faz nada", async () => {
+    const trabalho = {
+      ...job,
+      payload: {
+        conversation_id: CONVERSA,
+        contact_id: CONTATO,
+        channel_session_id: SESSAO,
+        acao: "avisar_paciente_reserva",
+        reserva_id: "0be7a70a-0000-4000-8000-000000000009",
+      },
+    } as unknown as JobRow;
+    const { pool } = poolFalso({ settings: {} });
+    await createBastidorTurnHandler(deps())(trabalho, pool, { workerId: "w" });
+    expect(executarTrabalhoDaReserva).not.toHaveBeenCalled();
   });
 });
 

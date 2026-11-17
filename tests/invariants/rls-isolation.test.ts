@@ -264,6 +264,25 @@ beforeAll(() => {
               from public.contacts c where c.organization_id = v_org limit 1;
         end if;
 
+        -- agenda_reservas_pendentes (migration 0231): o pedido de horário que espera a secretaria
+        -- (traz o nome do paciente). Leitura org-scoped com gate de papel agent; escrita só service-role.
+        if not exists (select 1 from public.agenda_reservas_pendentes where organization_id = v_org) then
+          if not exists (select 1 from public.calendar_event_types where organization_id = v_org) then
+            insert into public.calendar_event_types (organization_id, name, slug)
+              values (v_org, 'Tipo de invariante', 'tipo-de-invariante');
+          end if;
+          insert into public.agenda_reservas_pendentes
+            (organization_id, contact_id, event_type_id, owner_user_id, starts_at, ends_at, nome_paciente, status, expira_em)
+            select v_org, c.id, t.id,
+                   case when v_org = '${ORG_A}'::uuid then '${USER_A}'::uuid else '${USER_B}'::uuid end,
+                   now() + interval '3 days', now() + interval '3 days 30 minutes',
+                   'Paciente de invariante', 'cancelada', now()
+              from public.contacts c
+              join public.calendar_event_types t on t.organization_id = v_org
+             where c.organization_id = v_org
+             limit 1;
+        end if;
+
         if not exists (select 1 from public.push_subscriptions where organization_id = v_org) then
           insert into public.push_subscriptions
             (organization_id, user_id, endpoint, p256dh, auth)
@@ -339,6 +358,8 @@ export const TABLES = [
   "agenda_relatos",
   // migration 0230 — o controle das perguntas diárias à secretaria. Leitura org-scoped com gate agent.
   "agenda_perguntas",
+  // migration 0231 — o pedido de horário que espera a secretaria (traz o nome do paciente). Leitura org-scoped com gate agent.
+  "agenda_reservas_pendentes",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"

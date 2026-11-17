@@ -34,17 +34,24 @@ import {
   registrarRelato,
 } from '@/lib/agenda/secretaria/relatos';
 import { relatoLidoSchema } from '@/lib/agenda/secretaria/relato';
+import { reservaEmPerguntaAberta } from '@/lib/agenda/secretaria/reservas';
 import { TOLERANCIA_DA_PERGUNTA_MIN } from '@/lib/bastidor/secretaria/perguntas';
+import { interpretarRespostaDeConferencia } from '@/lib/bastidor/secretaria/resposta';
 import { TEXTO_DO_LEMBRETE_DA_PERGUNTA, textoDaPergunta } from '@/lib/bastidor/secretaria/textos';
 import { executarTurnoDaSecretaria, type Portas } from '@/lib/bastidor/secretaria/turno';
-import type { TipoDeMensagemDoBastidor } from '@/lib/bastidor/papeis';
 
 import type { ChannelAdapter } from '../channel-adapter';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 import { runModelCall } from '../edge/llm/run-model-call';
-import { runBeforeSend } from '../guardrails/before-send';
 import { withFields } from '../obs/logger';
 import type { JobRow } from '../queue/queue';
+import { enviarAoBastidor, fusoDaAgenda } from './bastidor-envio';
+import {
+  executarTrabalhoDaReserva,
+  tratarRespostaDaReserva,
+  trabalhoDaReservaPayloadSchema,
+  type ContextoDaReserva,
+} from './bastidor-reserva';
 import type { InboundTurnDeps } from './inbound-turn';
 
 export const bastidorTurnPayloadSchema = z
@@ -74,16 +81,8 @@ export const perguntaDaAgendaPayloadSchema = z
 /** Pergunta que esperou na fila mais que isto (worker parado) não vale mais: "bom dia" às 15h é fora de propósito. */
 const VALIDADE_DO_PEDIDO_DE_PERGUNTA_MS = TOLERANCIA_DA_PERGUNTA_MIN * 60_000;
 
-/** Fuso padrão quando nem a jornada do dono nem a organização dizem qual é. */
-const FUSO_PADRAO = 'America/Sao_Paulo';
 /** Quantas mensagens em rajada entram num turno. Mais que isso é conversa, não rajada. */
 const MAXIMO_DE_MENSAGENS_POR_TURNO = 15;
-
-/**
- * Uma resposta por turno: `seq 1`. O ledger deduplica por (job, seq), então o replay de um job que caiu depois de
- * enviar não manda a mesma resposta duas vezes.
- */
-const SEQ_DA_RESPOSTA = 1;
 
 interface LinhaDoContato {
   papel_interno: string | null;
@@ -102,9 +101,13 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
     if (leadId === null) {
       throw new Error('bastidor_turn sem contact_id — o CHECK da fila deveria impedir');
     }
-    // Dois formatos de job: o que nasce de uma mensagem dela e o que nasce do cron das perguntas diárias.
+    // Três formatos de job: o que nasce de uma mensagem dela, o do cron das perguntas diárias e o da reserva de horário.
     const pedidoDePergunta = perguntaDaAgendaPayloadSchema.safeParse(job.payload);
-    const payloadDeMensagem = pedidoDePergunta.success ? null : bastidorTurnPayloadSchema.parse(job.payload);
+    const trabalhoDeReserva = pedidoDePergunta.success ? null : trabalhoDaReservaPayloadSchema.safeParse(job.payload);
+    const payloadDeMensagem =
+      pedidoDePergunta.success || trabalhoDeReserva?.success === true
+        ? null
+        : bastidorTurnPayloadSchema.parse(job.payload);
     const log = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, contact_id: leadId });
     const agora = (deps.clock ?? (() => new Date()))();
 
@@ -147,15 +150,55 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
+    // Contexto da reserva de horário: o mesmo para o trabalho enfileirado e para a resposta dela.
+    const contextoDaReserva = (conversationId: string, channelSessionId: string): ContextoDaReserva => ({
+      pool,
+      deps,
+      log,
+      tenantId,
+      secretariaId: leadId,
+      conversationId,
+      channelSessionId,
+      jobId: job.id,
+      fusoDaOrg: orgRows[0]?.timezone ?? null,
+      agora,
+    });
+
+    if (trabalhoDeReserva?.success === true) {
+      await executarTrabalhoDaReserva(
+        contextoDaReserva(trabalhoDeReserva.data.conversation_id, trabalhoDeReserva.data.channel_session_id),
+        trabalhoDeReserva.data,
+      );
+      return;
+    }
+
     const payload = payloadDeMensagem;
     if (payload === null) throw new Error('bastidor_turn: payload nem de pergunta nem de mensagem — inalcançável');
 
     const fuso = await fusoDaAgenda(pool, tenantId, config.dono_da_agenda_user_id, orgRows[0]?.timezone ?? null);
-    const texto =await lerMensagensDesdeAUltimaResposta(pool, tenantId, payload.conversation_id);
+    const texto = await lerMensagensDesdeAUltimaResposta(pool, tenantId, payload.conversation_id);
     const pendente = await lerResumoPendente(pool, tenantId, leadId);
     const jaRegistrado = await lerRelatoDestaMensagem(pool, tenantId, payload.inbound_message_id);
 
     const admin = deps.crmCfg.supabase;
+
+    // Uma pergunta de RESERVA em aberto tem prioridade sobre o resumo da agenda quando o "sim"/"não" dela veio DEPOIS
+    // da pergunta de reserva — o mais recente é a que ela está respondendo. Qualquer outra coisa (inclusive "sim, mas…")
+    // segue o caminho de sempre e a reserva continua esperando até vencer: só o "sim" inequívoco marca um horário.
+    const reservaAberta = await reservaEmPerguntaAberta(admin, tenantId);
+    if (reservaAberta?.perguntadaEm != null) {
+      const resposta = interpretarRespostaDeConferencia(texto);
+      const reservaEhAMaisRecente =
+        pendente === null || reservaAberta.perguntadaEm.getTime() > pendente.criadoEm.getTime();
+      if ((resposta === 'sim' || resposta === 'nao') && reservaEhAMaisRecente) {
+        await tratarRespostaDaReserva(
+          contextoDaReserva(payload.conversation_id, payload.channel_session_id),
+          reservaAberta,
+          resposta,
+        );
+        return;
+      }
+    }
     const channel: ChannelAdapter = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool);
 
     const portas: Portas = {
@@ -191,8 +234,9 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
       conferir: (relatoId) => conferirEAplicarRelato(admin, { organizationId: tenantId, relatoId, agora }),
       marcarCorrigido: (relatoId) => marcarRelatoCorrigido(admin, { organizationId: tenantId, relatoId }),
       descartar: (relatoId) => descartarRelato(admin, { organizationId: tenantId, relatoId }),
-      enviar: (corpo) =>
-        enviarAoBastidor({
+      // Veto da cadeia não é erro (ver `enviarAoBastidor`): o desfecho do envio não muda o roteiro do turno.
+      enviar: async (corpo) => {
+        await enviarAoBastidor({
           pool,
           channel,
           deps,
@@ -205,7 +249,8 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
           corpo,
           tipo: 'agenda_conferencia',
           agora,
-        }),
+        });
+      },
     };
 
     const desfecho = await executarTurnoDaSecretaria(portas);
@@ -276,24 +321,6 @@ async function tratarPerguntaDaAgenda(a: PerguntaDaAgenda): Promise<void> {
   });
 }
 
-/** O fuso da agenda: o da jornada do dono; senão o da organização; senão o padrão. */
-async function fusoDaAgenda(
-  pool: pg.Pool,
-  tenantId: string,
-  donoUserId: string | null,
-  fusoDaOrg: string | null,
-): Promise<string> {
-  if (donoUserId !== null) {
-    const { rows } = await pool.query<{ tz: string | null }>(
-      `select schedule->>'timezone' as tz from attendant_availability where organization_id = $1 and user_id = $2`,
-      [tenantId, donoUserId],
-    );
-    const tz = rows[0]?.tz;
-    if (typeof tz === 'string' && tz.trim() !== '') return tz;
-  }
-  return fusoDaOrg ?? FUSO_PADRAO;
-}
-
 /**
  * O que ela escreveu desde a última coisa que NÓS enviamos nesta conversa, em ordem. É o que faz duas mensagens
  * seguidas ("terça 14h Maria" / "e 15h João") serem lidas juntas: o drain pula o evento superado e o turno da
@@ -359,65 +386,4 @@ async function lerRelatoDestaMensagem(
   if (r === undefined) return null;
   const lido = relatoLidoSchema.safeParse(r.lido);
   return lido.success ? { id: r.id, estado: r.estado, lido: lido.data } : null;
-}
-
-interface EnvioDoBastidor {
-  pool: pg.Pool;
-  channel: ChannelAdapter;
-  deps: InboundTurnDeps;
-  log: ReturnType<typeof withFields>;
-  tenantId: string;
-  leadId: string;
-  jobId: string;
-  conversationId: string;
-  channelSessionId: string;
-  corpo: string;
-  tipo: TipoDeMensagemDoBastidor;
-  agora: Date;
-}
-
-/**
- * Envia pela cadeia de guardrails, declarando `bastidor` (a única porta para um contato fora do funil).
- *
- * `enforceSpinning: false`: o gate de repetição existe para barrar rajada de texto quase igual a MUITOS contatos
- * (blast). Aqui é uma pessoa só da equipe, e as respostas são fixas por desenho ("Sem problema! O que está
- * diferente?" duas vezes no mesmo dia é o comportamento certo, não spam). O bastidor também fica FORA do limite diário: a cadeia não aplica o
- * teto de warm-up/diário a ele e `recordSend` não o conta, então a equipe não gasta a cota das vendas (janela
- * horária e espaçamento continuam valendo).
- *
- * Veto da cadeia NÃO é erro do job: registra e segue. Retentar não muda o veredito (janela, opt-out), e o job
- * morto geraria alerta crítico por algo que é decisão de negócio.
- */
-async function enviarAoBastidor(e: EnvioDoBastidor): Promise<void> {
-  const chain = await runBeforeSend({
-    pool: e.pool,
-    log: e.log,
-    tenantId: e.tenantId,
-    leadId: e.leadId,
-    jobId: e.jobId,
-    channelSessionId: e.channelSessionId,
-    body: e.corpo,
-    optedOutThisTurn: false,
-    bastidor: { tipo: e.tipo },
-    enforceSpinning: false,
-    // Mesmo débito declarado nos outros caminhos: o limite diário do CRM ainda não é lido no runtime.
-    crmDailyLimit: null,
-    now: e.agora,
-    ...(e.deps.sleep !== undefined ? { sleep: e.deps.sleep } : {}),
-    send: (finalBody) =>
-      e.channel.send({
-        tenantId: e.tenantId,
-        leadId: e.leadId,
-        jobId: e.jobId,
-        seq: SEQ_DA_RESPOSTA,
-        conversationId: e.conversationId,
-        body: finalBody,
-      }),
-  });
-
-  if (chain.status === 'vetoed') {
-    e.log.warn('bastidor: resposta à secretaria vetada pela cadeia', { gate: chain.gate, code: chain.code });
-    return;
-  }
-  e.log.info('bastidor: resposta enviada', { resultado: chain.outcome.kind });
 }

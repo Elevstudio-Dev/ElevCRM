@@ -33,6 +33,10 @@ vi.mock("@/lib/agenda/consulta", async (original) => {
   return { ...real, horariosLivresDaOrg: vi.fn(), listaAgendamentos: vi.fn(), idDoTipoPorSlug: vi.fn() };
 });
 
+// Organização SEM a agenda da secretaria: `pedirReserva` devolve null e a ferramenta marca como sempre. A conversa da
+// reserva (secretaria ligada) tem teste próprio em `reservar-pedido.test.ts` e `mcp-agendamento-reserva.test.ts`.
+vi.mock("@/lib/agenda/secretaria/reservar", () => ({ pedirReserva: vi.fn(async () => null) }));
+
 const { horariosLivresDaOrg, listaAgendamentos, idDoTipoPorSlug } = await import("@/lib/agenda/consulta");
 const {
   crmFindFreeSlots,

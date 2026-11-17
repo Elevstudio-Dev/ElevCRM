@@ -27,6 +27,7 @@ import {
   MAXIMO_DE_DIAS,
 } from "@/lib/agenda/consulta";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
+import { pedirReserva } from "@/lib/agenda/secretaria/reservar";
 import { rotuloLocal } from "@/lib/tempo/agora";
 import {
   alterarAgendamentoHandler,
@@ -426,6 +427,15 @@ const marcarShape = {
   owner_user_id: z.string().uuid().optional(),
   title: z.string().min(1).max(200).optional(),
   notes: z.string().max(2000).optional(),
+  nome_completo: z
+    .string()
+    .min(3)
+    .max(200)
+    .optional()
+    .describe(
+      "o NOME COMPLETO do paciente (nome e sobrenome), como ele disse. Obrigatório quando a recepção confirma os " +
+        "horários (a ferramenta avisa); pergunte ao paciente se ainda não tiver.",
+    ),
 };
 
 export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
@@ -441,7 +451,11 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
     "não está livre é recusado, e a recusa manda você consultar de novo. " +
     "O resultado traz `lembrete`: só diga ao cliente que ele receberá um aviso antes da consulta se " +
     "`lembrete.sera_enviado` for true — e então diga só isso. Se for false, não prometa aviso nenhum; " +
-    "`lembrete.instrucao` diz o que fazer no lugar.",
+    "`lembrete.instrucao` diz o que fazer no lugar. " +
+    "QUANDO A RECEPÇÃO CONFIRMA OS HORÁRIOS, a resposta vem com `aguardando_confirmacao: true` e `marcado: false`: o " +
+    "horário ficou SEGURADO e a recepção está confirmando. Diga ao paciente que está confirmando com a recepção " +
+    "e que ele recebe a resposta em instantes — NUNCA diga que está marcado ou confirmado, e não chame esta " +
+    "ferramenta de novo para o mesmo horário. Nesse caso informe sempre `nome_completo`.",
   inputSchema: marcarShape,
   category: "write",
   requiresRole: "ai_operator",
@@ -456,6 +470,31 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
           mensagem: `não existe atendimento chamado "${input.event_type_slug}". Pergunte que tipo de atendimento a pessoa quer.`,
         };
       }
+      // Com a agenda da secretaria ligada a IA não marca: segura o horário e a recepção confirma (`reservar.ts`).
+      const pedido = await pedirReserva(ctx.supabase, {
+        organizationId: ctx.organizationId,
+        eventTypeId: tipo.id,
+        contactId: input.contact_id,
+        inicio: new Date(input.starts_at),
+        ownerUserId: input.owner_user_id ?? null,
+        nomeCompleto: input.nome_completo ?? null,
+        notas: input.notes ?? null,
+        agora: new Date(),
+      });
+      if (pedido !== null) {
+        if (pedido.tipo === "recusa") return { marcado: false, motivo: pedido.motivo, mensagem: pedido.mensagem };
+        return {
+          marcado: false,
+          aguardando_confirmacao: true,
+          reserva_id: pedido.reservaId,
+          validade_min: pedido.validadeMin,
+          mensagem:
+            `o horário ficou SEGURADO por ${pedido.validadeMin} minutos e a recepção está confirmando. Diga ao ` +
+            "paciente que está confirmando com a recepção e que ele recebe a resposta em instantes. NÃO diga que está " +
+            "marcado nem confirmado, e não ofereça outro horário agora.",
+        };
+      }
+
       const r = await marcarAgendamentoHandler(
         ctx.supabase,
         { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
