@@ -71,6 +71,8 @@ import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-int
 import { capabilitiesOf, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
 import { isWindowOpen } from './messaging-window';
 import type { ChannelProvider } from '@/lib/channels/capabilities';
+import { papelPermiteTipo } from '@/lib/bastidor/papeis';
+import type { PapelInterno, TipoDeMensagemDoBastidor } from '@/lib/bastidor/papeis';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
@@ -89,6 +91,17 @@ export interface GateContext {
    * pode dizer que um prestador "optou por sair". Ausente = falso.
    */
   foraDoFunil?: boolean;
+  /**
+   * `contacts.papel_interno` (secretaria | marketing), lido da fonte sob o lock. Quem tem papel está sempre fora do
+   * funil (o banco exige). Ausente/nulo = contato sem papel.
+   */
+  papelInterno?: PapelInterno | null;
+  /**
+   * Presente SÓ quando quem envia é o agente de BASTIDOR (nunca o de vendas), dizendo que tipo de mensagem é.
+   * É a única porta para um contato fora do funil: exige que o destinatário tenha papel e que o papel comporte o
+   * tipo. O agente de vendas nunca preenche isto.
+   */
+  bastidor?: { tipo: TipoDeMensagemDoBastidor };
   /**
    * Canal desta tentativa. Nenhum gate pergunta QUEM é o provider (invariante 1
    * de `docs/doctrine/restricao-de-canal.md`) — só o entrega a `capabilitiesOf`
@@ -283,7 +296,22 @@ const stopGate: Gate = {
           'possível enviar nada a ele; encerre o turno sem tentar de novo.',
       };
     }
+    // O bastidor só fala com quem tem papel: um contato comum (paciente, lead) nunca recebe mensagem de bastidor,
+    // mesmo que o código chamador erre o destinatário.
+    if (ctx.bastidor !== undefined && (ctx.papelInterno === null || ctx.papelInterno === undefined)) {
+      return {
+        pass: false,
+        code: 'bastidor_destinatario_invalido',
+        reason:
+          'o agente de bastidor só escreve para a equipe com papel definido (secretaria ou marketing) — ' +
+          'este contato não tem papel; encerre o turno sem tentar de novo.',
+      };
+    }
     if (ctx.foraDoFunil === true) {
+      // A única porta: o bastidor, para quem tem papel, com um tipo de mensagem que o papel comporta.
+      if (ctx.bastidor !== undefined && papelPermiteTipo(ctx.papelInterno, ctx.bastidor.tipo)) {
+        return { pass: true };
+      }
       return {
         pass: false,
         code: 'contato_fora_do_funil',
@@ -752,6 +780,12 @@ export interface RunBeforeSendArgs {
   /** `contacts.is_blocked` lido no get_lead_context deste turno; OR com a leitura direta da fonte no gate stop. */
   optedOutThisTurn: boolean;
   /**
+   * SÓ o agente de bastidor preenche (nunca o de vendas, o follow-up ou o aviso de escalação): diz que tipo de
+   * mensagem é, para o gate `stop` abrir a porta a um contato da equipe com papel. Sem isto, contato fora do funil
+   * continua vetado.
+   */
+  bastidor?: { tipo: TipoDeMensagemDoBastidor };
+  /**
    * Agente do turno (`ai_agents.id`), quando o chamador o conhece. Sem ele a
    * atividade de veto entra como 'system' — com o lastro do trace, mas sem
    * afirmar QUAL agente decidiu calar. Opcional de propósito: nem todo caminho
@@ -852,6 +886,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     const stopFlags = await readStopFlags(client, args.tenantId, args.leadId);
     const optedOut = args.optedOutThisTurn || stopFlags.optedOut;
     const foraDoFunil = stopFlags.foraDoFunil;
+    const papelInterno = stopFlags.papelInterno;
     const pacingCfg = await loadChannelKnobs(client, args.tenantId, args.channelSessionId, args.log);
     const pacingState = await loadPacingState(client, args.tenantId, args.channelSessionId, {
       now: args.now,
@@ -887,6 +922,8 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       body: args.body,
       optedOut,
       foraDoFunil,
+      papelInterno,
+      ...(args.bastidor !== undefined ? { bastidor: args.bastidor } : {}),
       provider,
       messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
       pacing: { knobs: pacingCfg.knobs, state: pacingState, crmDailyLimit: args.crmDailyLimit, rng: args.rng },
@@ -1059,13 +1096,18 @@ async function readStopFlags(
   db: Queryable,
   organizationId: string,
   contactId: string,
-): Promise<{ optedOut: boolean; foraDoFunil: boolean }> {
-  const { rows } = await db.query<{ stopped: boolean; fora: boolean }>(
-    'select (is_blocked or force_human) as stopped, (fora_do_funil_em is not null) as fora ' +
-      'from contacts where organization_id = $1 and id = $2',
+): Promise<{ optedOut: boolean; foraDoFunil: boolean; papelInterno: PapelInterno | null }> {
+  const { rows } = await db.query<{ stopped: boolean; fora: boolean; papel: string | null }>(
+    'select (is_blocked or force_human) as stopped, (fora_do_funil_em is not null) as fora, ' +
+      'papel_interno as papel from contacts where organization_id = $1 and id = $2',
     [organizationId, contactId],
   );
-  return { optedOut: rows[0]?.stopped === true, foraDoFunil: rows[0]?.fora === true };
+  const papel = rows[0]?.papel;
+  return {
+    optedOut: rows[0]?.stopped === true,
+    foraDoFunil: rows[0]?.fora === true,
+    papelInterno: papel === 'secretaria' || papel === 'marketing' ? papel : null,
+  };
 }
 
 /**

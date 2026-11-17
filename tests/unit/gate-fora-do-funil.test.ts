@@ -67,3 +67,72 @@ describe("o gate 'stop' e o contato fora do funil", () => {
     expect(fonte).toMatch(/foraDoFunil[,:]/);
   });
 });
+
+/**
+ * O PAPEL ABRE UMA PORTA ESTREITA: só o agente de BASTIDOR, só para quem tem papel, só com um tipo que o papel
+ * comporta. O agente de vendas, o follow-up e o aviso de escalação não preenchem `bastidor` e continuam vetados.
+ */
+describe("o gate 'stop' e os papéis de contato (secretaria, marketing)", () => {
+  it("vendas (sem `bastidor`) NÃO fala com a secretaria: o veto de fora do funil vale", () => {
+    const v = stop.evaluate(ctx({ foraDoFunil: true, papelInterno: "secretaria" }));
+    expect(v.pass).toBe(false);
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.code).toBe("contato_fora_do_funil");
+  });
+
+  it("bastidor, para a secretaria, com tipo de agenda: passa", () => {
+    const v = stop.evaluate(
+      ctx({ foraDoFunil: true, papelInterno: "secretaria", bastidor: { tipo: "agenda_pergunta" } }),
+    );
+    expect(v.pass).toBe(true);
+  });
+
+  it("bastidor, para o marketing, com tipo de campanha: passa", () => {
+    const v = stop.evaluate(
+      ctx({ foraDoFunil: true, papelInterno: "marketing", bastidor: { tipo: "campanha_previa" } }),
+    );
+    expect(v.pass).toBe(true);
+  });
+
+  it("tipo do papel errado (pergunta de agenda ao marketing) é vetado", () => {
+    const v = stop.evaluate(
+      ctx({ foraDoFunil: true, papelInterno: "marketing", bastidor: { tipo: "agenda_pergunta" } }),
+    );
+    expect(v.pass).toBe(false);
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.code).toBe("contato_fora_do_funil");
+  });
+
+  it("bastidor para contato SEM papel (um paciente, um prestador) é vetado com código próprio", () => {
+    for (const papelInterno of [null, undefined] as const) {
+      const v = stop.evaluate(ctx({ foraDoFunil: false, papelInterno, bastidor: { tipo: "agenda_pergunta" } }));
+      expect(v.pass).toBe(false);
+      if (v.pass) throw new Error("inalcançável");
+      expect(v.code).toBe("bastidor_destinatario_invalido");
+    }
+    const prestador = stop.evaluate(ctx({ foraDoFunil: true, papelInterno: null, bastidor: { tipo: "agenda_pergunta" } }));
+    expect(prestador.pass).toBe(false);
+    if (prestador.pass) throw new Error("inalcançável");
+    expect(prestador.code).toBe("bastidor_destinatario_invalido");
+  });
+
+  it("opt-out vence o papel: quem pediu para parar não recebe nem do bastidor", () => {
+    const v = stop.evaluate(
+      ctx({
+        optedOut: true,
+        foraDoFunil: true,
+        papelInterno: "secretaria",
+        bastidor: { tipo: "agenda_pergunta" },
+      }),
+    );
+    expect(v.pass).toBe(false);
+    if (v.pass) throw new Error("inalcançável");
+    expect(v.code).toBe("contato_bloqueado");
+  });
+
+  it("o runner LÊ o papel do banco e só repassa `bastidor` de quem o pediu", () => {
+    const fonte = readFileSync("lib/agent-engine/guardrails/before-send.ts", "utf8");
+    expect(fonte).toContain("papel_interno as papel");
+    expect(fonte).toMatch(/args\.bastidor !== undefined \? \{ bastidor: args\.bastidor \}/);
+  });
+});

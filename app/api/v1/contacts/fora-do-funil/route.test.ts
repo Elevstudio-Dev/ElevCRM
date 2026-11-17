@@ -36,6 +36,10 @@ vi.mock("@/lib/supabase/server", () => ({
           return b;
         },
         is: () => b,
+        in: () => b,
+        not: () => b,
+        // A consulta "este contato tem papel?" (0227): por padrão ninguém tem.
+        limit: async () => ({ data: [], error: null }),
         maybeSingle: async () => ({ data: tipoExiste ? { id: TIPO } : null, error: null }),
       });
       return b;

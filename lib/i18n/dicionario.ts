@@ -172,6 +172,15 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Contato "Fora do funil" (equipe, prestador, parceiro) ───
   "Fora do funil": { es: "Fuera del embudo" },
+  "Papel na equipe": { es: "Rol en el equipo" },
+  "Nenhum papel": { es: "Ningún rol" },
+  "Secretaria": { es: "Secretaría" },
+  "Marketing": { es: "Marketing" },
+  "Papel removido.": { es: "Rol eliminado." },
+  "A pessoa fica fora do funil: não vira cliente nem entra nos relatórios de vendas.": { es: "La persona queda fuera del embudo: no se vuelve cliente ni entra en los informes de ventas." },
+  "A IA de vendas nunca escreve para ela. Quem escreve é o assistente de bastidor, só sobre o papel dela.": { es: "La IA de ventas nunca le escribe. Quien escribe es el asistente de trastienda, solo sobre su rol." },
+  "A IA pergunta a ela como está a agenda, confirma horários antes de marcar e avisa o que foi agendado.": { es: "La IA le pregunta cómo está la agenda, confirma horarios antes de agendar y avisa lo que se agendó." },
+  "Ela manda a ideia e as fotos de uma campanha; a IA cria as variações, mostra a prévia e envia aos poucos.": { es: "Ella envía la idea y las fotos de una campaña; la IA crea las variaciones, muestra la vista previa y envía poco a poco." },
   Clientes: { es: "Clientes" },
   "Selecionar todos desta página": { es: "Seleccionar todos de esta página" },
   Selecionar: { es: "Seleccionar" },

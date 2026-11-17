@@ -453,6 +453,7 @@ export const AUDIT_ACTIONS = [
   // IA, do funil e do relatório precisa ter autor — e os tipos que o dono cadastra.
   "contact.fora_do_funil_marcado",
   "contact.fora_do_funil_desmarcado",
+  "contact.papel_interno_alterado",
   "tipo_fora_do_funil.criado",
   "tipo_fora_do_funil.renomeado",
   "tipo_fora_do_funil.arquivado",

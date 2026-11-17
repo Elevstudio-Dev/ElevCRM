@@ -33,7 +33,7 @@ type SB = SupabaseClient;
 // `/api/v1/contacts/<id>/avatar`, que autentica); o que a tela precisa saber é
 // apenas SE existe arquivo, para não pedir a rota de quem não tem foto.
 const SELECT_COLS =
-  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, fora_do_funil_em, fora_do_funil_tipo_id, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at, avatar_storage_path";
+  "id, organization_id, name, display_name, email, email_normalized, phone_number, cpf_hash, birthdate, is_blocked, blocked_reason, fora_do_funil_em, fora_do_funil_tipo_id, papel_interno, is_anonymized, anonymized_at, is_merged_into, merged_at, consent, tags, source, source_metadata, created_at, updated_at, last_activity_at, avatar_storage_path";
 
 interface CursorPayload {
   sort: string | null;

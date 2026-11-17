@@ -21,6 +21,8 @@ export interface Contact {
   fora_do_funil_em?: string | null;
   /** O tipo cadastrado pelo dono (Equipe, Contador…), quando há. */
   fora_do_funil_tipo_id?: string | null;
+  /** Papel na equipe (secretaria, marketing); nulo = contato comum. Ver `lib/bastidor/papeis.ts`. */
+  papel_interno?: string | null;
   is_anonymized: boolean;
   anonymized_at: string | null;
   is_merged_into: string | null;

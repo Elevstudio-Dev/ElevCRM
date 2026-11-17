@@ -19575,6 +19575,54 @@ $$;
 revoke execute on function public.fn_relatorio_de_anuncios(uuid, timestamptz, timestamptz, text) from public, anon;
 grant execute on function public.fn_relatorio_de_anuncios(uuid, timestamptz, timestamptz, text) to authenticated, service_role;
 
+-- ---- papel interno do contato: secretaria e marketing (migration 0227) ----
+alter table public.contacts
+  add column if not exists papel_interno text;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'contacts_papel_interno_valido') then
+    alter table public.contacts
+      add constraint contacts_papel_interno_valido
+      check (papel_interno is null or papel_interno in ('secretaria', 'marketing'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'contacts_papel_interno_fora_do_funil') then
+    alter table public.contacts
+      add constraint contacts_papel_interno_fora_do_funil
+      check (papel_interno is null or fora_do_funil_em is not null);
+  end if;
+end $$;
+
+create index if not exists contacts_papel_interno_idx
+  on public.contacts (organization_id, papel_interno) where papel_interno is not null;
+
+create or replace function public.fn_contacts_papel_interno_guarda() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.papel_interno is null then
+      return new;
+    end if;
+  elsif new.papel_interno is not distinct from old.papel_interno then
+    return new;
+  end if;
+
+  -- Sessão de usuário (há `auth.uid()`): precisa ser gerente ou admin da organização do contato. Sem sessão é o
+  -- backend com service role, que já passou pela checagem de papel da rota.
+  if auth.uid() is not null and not public.fn_role_at_least(new.organization_id, 'manager') then
+    raise exception 'papel_interno: só gerente ou admin define o papel de um contato'
+      using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+revoke all on function public.fn_contacts_papel_interno_guarda() from public, anon, authenticated;
+
+drop trigger if exists trg_contacts_papel_interno_guarda on public.contacts;
+create trigger trg_contacts_papel_interno_guarda
+  before insert or update of papel_interno on public.contacts
+  for each row execute function public.fn_contacts_papel_interno_guarda();
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
