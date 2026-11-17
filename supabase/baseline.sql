@@ -10116,6 +10116,9 @@ alter table public.agent_inbox_items
     -- lembrete nem existia — e quando existir, falhar em silêncio é o mesmo que
     -- prometer um aviso que o paciente nunca recebe.
     'appointment_reminder_failed',
+    -- (migration 0230) A secretaria não respondeu à pergunta da agenda (ou nem tem conversa para receber a
+    -- pergunta). Sem este aviso o administrador só descobriria pela IA que parou de oferecer horário.
+    'agenda_sem_resposta',
     'other'
   ));
 
@@ -19678,6 +19681,52 @@ alter table public.calendar_appointments
 
 create index if not exists calendar_appointments_origem_relato_idx
   on public.calendar_appointments (origem_relato_id) where origem_relato_id is not null;
+
+-- ---- as perguntas diárias à secretaria sobre a agenda (migration 0230) ----
+-- (o valor 'agenda_sem_resposta' de agent_inbox_items_kind_check está no bloco único da constraint, mais acima.)
+create table if not exists public.agenda_perguntas (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  -- A secretaria perguntada. Apagar o contato apaga o histórico de perguntas dele (é só controle do cron).
+  contact_id uuid not null references public.contacts(id) on delete cascade,
+  -- O dia (no fuso da agenda) e o horário da pergunta, como escritos em `settings.secretaria.perguntas`.
+  dia date not null,
+  horario text not null,
+  -- pedida = a IA mandou (ou vai mandar) a pergunta; dispensada = a agenda acabara de ser conferida, não precisou
+  -- perguntar; sem_conversa = não há conversa com ela para perguntar (o administrador foi avisado).
+  estado text not null default 'pedida',
+  pedida_em timestamptz not null default now(),
+  lembrete_pedido_em timestamptz,
+  respondida_em timestamptz,
+  admin_avisado_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint agenda_perguntas_estado_check check (estado in ('pedida', 'dispensada', 'sem_conversa')),
+  constraint agenda_perguntas_horario_check check (horario ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$')
+);
+
+-- A mesma pergunta não sai duas vezes (o INSERT ... ON CONFLICT DO NOTHING do cron é o par disto no código).
+create unique index if not exists agenda_perguntas_slot_key
+  on public.agenda_perguntas (organization_id, contact_id, dia, horario);
+create index if not exists agenda_perguntas_org_dia_idx
+  on public.agenda_perguntas (organization_id, dia desc);
+
+drop trigger if exists trg_agenda_perguntas_updated_at on public.agenda_perguntas;
+create trigger trg_agenda_perguntas_updated_at before update on public.agenda_perguntas
+  for each row execute function public.fn_set_updated_at();
+
+alter table public.agenda_perguntas enable row level security;
+
+drop policy if exists "agenda_perguntas_agent_read" on public.agenda_perguntas;
+create policy "agenda_perguntas_agent_read" on public.agenda_perguntas
+  for select to authenticated using (
+    public.fn_is_platform_admin()
+    or (
+      organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'agent')
+    )
+  );
+-- Sem policy de INSERT/UPDATE/DELETE: quem grava é o cron (service role).
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
