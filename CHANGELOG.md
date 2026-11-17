@@ -8,6 +8,24 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.33.0] — 2026-11-17
+
+### Adicionado
+
+- **Reserva de horário que a secretaria confirma pelo WhatsApp** Com a agenda da secretaria ligada, a IA deixa de marcar a consulta sozinha. Quando o paciente escolhe um horário, a IA pede o **nome completo** dele, **segura o horário por 15 minutos** (nenhum outro paciente o recebe como livre) e pergunta à secretaria, pelo WhatsApp: "Esse horário está livre? Responda SIM ou NÃO".
+
+  - **"Sim"**: o sistema marca o compromisso de verdade e avisa o paciente com uma mensagem fixa de confirmação. A secretaria recebe um aviso de que ficou anotado.
+  - **"Não"**: o paciente recebe uma mensagem fixa com até dois horários livres parecidos (um no mesmo dia, outro em outro dia), escolhidos pelo servidor. O horário recusado não é oferecido de novo até a agenda ser conferida outra vez.
+  - **Sem resposta em 15 minutos**: o horário volta a ficar livre, o paciente recebe horários parecidos e a equipe é avisada na Central de avisos. Se não houver horário parecido, a equipe é chamada para combinar à mão.
+
+  Só um "sim" ou "não" seco vale; "sim, mas só às 15h" não marca nada. A secretaria só recebe **uma pergunta de reserva por vez**, para o "sim" ter um único significado. Se o paciente não puder ser avisado (janela fechada, sem conversa), a equipe recebe o texto na Central de avisos em vez de o paciente ficar no escuro. Nada muda para organizações que não ligaram a agenda da secretaria: a IA continua marcando direto.
+
+- **Tela para ligar a agenda da secretaria, em Configurações** Nova tela **Configurações → Agenda da secretaria** (gerente ou mais). Liga e desliga a agenda da secretaria, escolhe de quem é a agenda (o profissional que faz a avaliação), a duração da avaliação, os horários em que a IA pergunta como está a agenda (até seis) e os dias da semana. Antes disso, a única forma de ligar era editar o banco à mão.
+
+  A tela também mostra **quem é a secretaria** (os contatos marcados com o papel "Secretaria") e se a IA consegue falar com ela: a IA só pergunta a quem já tem uma conversa com o número da clínica, então quem nunca mandou mensagem aparece como "Ainda sem conversa com o número", com a orientação de pedir que ela mande um "oi".
+
+  As validades da agenda conferida (por quanto tempo a IA continua oferecendo horário depois que a secretaria confirmou) ficam fora da tela de propósito e são preservadas quando a tela salva. O dono da agenda precisa ser da equipe, com papel de atendente ou mais.
+
 ## [1.32.0] — 2026-11-17
 
 ### Adicionado
@@ -3251,7 +3269,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.32.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.33.0...HEAD
+[1.33.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.30.0...v1.31.0
 [1.30.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.29.0...v1.30.0
