@@ -64,6 +64,8 @@ export type InboxKind =
   // canal oficial, canal fora do ar ou três tentativas recusadas. O aviso é o que
   // impede "o sistema acha que avisou" de se repetir.
   | 'appointment_reminder_failed'
+  // (migration 0230) A secretaria não respondeu à pergunta da agenda, ou nem tem conversa para recebê-la.
+  | 'agenda_sem_resposta'
   | 'other';
 
 export interface InboxItemRow {

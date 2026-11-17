@@ -407,6 +407,9 @@ export const AUDIT_ACTIONS = [
   // audita quando FEZ algo (enviou, descartou ou desistiu de um lembrete), e a
   // metadata carrega só contagens — nunca o nome nem o telefone de quem foi avisado.
   "agenda.lembretes_executados",
+  // A rodada das PERGUNTAS à secretaria sobre a agenda (migration 0230). Só audita quando perguntou, lembrou, avisou
+  // o administrador ou dispensou uma pergunta; a metadata carrega só contagens, nunca o nome de ninguém.
+  "agenda.secretaria_perguntas_executadas",
 
   // ── O compromisso em si (frentes 1 e 5 do Calendário Vivo) ──────────────
   // Marcar, remarcar e cancelar são mutações de um compromisso com hora e

@@ -23,6 +23,27 @@ export const TEXTO_SEM_NADA_PARA_CONFERIR =
 export const TEXTO_FALTA_CONFIGURAR =
   "Não consegui salvar a agenda agora: falta uma configuração no sistema. Peça à equipe do CRM para conferir.";
 
+const EXEMPLO_DA_AGENDA = "Por exemplo: hoje 14h Maria, 15h João; sexta fechado.";
+
+/**
+ * A pergunta diária. O cumprimento acompanha o horário em que a pergunta foi MARCADA (não o instante do envio):
+ * de manhã pergunta de hoje, à tarde de hoje e dos próximos dias, ao fim do dia do dia seguinte.
+ */
+export function textoDaPergunta(horario: string): string {
+  const hora = Number(horario.split(":")[0] ?? "0");
+  if (hora < 12) {
+    return `Bom dia! Como está a agenda de hoje? Me conta quem está marcado e se algum dia está fechado, que eu atualizo por aqui. ${EXEMPLO_DA_AGENDA}`;
+  }
+  if (hora < 18) {
+    return `Boa tarde! Mudou alguma coisa na agenda de hoje ou dos próximos dias? Me conta quem está marcado e eu atualizo. ${EXEMPLO_DA_AGENDA}`;
+  }
+  return `Antes de encerrar o dia: como ficou a agenda de amanhã e dos próximos dias? Me conta quem está marcado e se algum dia está fechado. ${EXEMPLO_DA_AGENDA}`;
+}
+
+/** O lembrete (uma vez só). Diz por que importa, sem cobrar. */
+export const TEXTO_DO_LEMBRETE_DA_PERGUNTA =
+  "Só relembrando a agenda: quando puder, me conta quem está marcado. Assim consigo oferecer horários certos aos pacientes.";
+
 /** Perguntas de volta, uma por linha. Nunca grava nada. */
 export function textoDeDuvida(perguntas: readonly string[]): string {
   if (perguntas.length === 1) return `Para não errar a agenda, preciso confirmar uma coisa:\n${perguntas[0]}`;

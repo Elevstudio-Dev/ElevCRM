@@ -34,6 +34,8 @@ import {
   registrarRelato,
 } from '@/lib/agenda/secretaria/relatos';
 import { relatoLidoSchema } from '@/lib/agenda/secretaria/relato';
+import { TOLERANCIA_DA_PERGUNTA_MIN } from '@/lib/bastidor/secretaria/perguntas';
+import { TEXTO_DO_LEMBRETE_DA_PERGUNTA, textoDaPergunta } from '@/lib/bastidor/secretaria/textos';
 import { executarTurnoDaSecretaria, type Portas } from '@/lib/bastidor/secretaria/turno';
 import type { TipoDeMensagemDoBastidor } from '@/lib/bastidor/papeis';
 
@@ -53,6 +55,24 @@ export const bastidorTurnPayloadSchema = z
     inbound_message_id: z.string().uuid(),
   })
   .passthrough();
+
+/**
+ * O job que NÃO nasce de uma mensagem dela: o cron das perguntas diárias (`secretaria-agenda`) pede à IA que PERGUNTE
+ * a agenda num horário, ou LEMBRE (uma vez) da pergunta que ficou sem resposta. Não há `inbound_message_id`.
+ */
+export const perguntaDaAgendaPayloadSchema = z
+  .object({
+    conversation_id: z.string().uuid(),
+    contact_id: z.string().uuid(),
+    channel_session_id: z.string().uuid(),
+    acao: z.enum(['perguntar', 'lembrar']),
+    dia: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    horario: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  })
+  .passthrough();
+
+/** Pergunta que esperou na fila mais que isto (worker parado) não vale mais: "bom dia" às 15h é fora de propósito. */
+const VALIDADE_DO_PEDIDO_DE_PERGUNTA_MS = TOLERANCIA_DA_PERGUNTA_MIN * 60_000;
 
 /** Fuso padrão quando nem a jornada do dono nem a organização dizem qual é. */
 const FUSO_PADRAO = 'America/Sao_Paulo';
@@ -82,7 +102,9 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
     if (leadId === null) {
       throw new Error('bastidor_turn sem contact_id — o CHECK da fila deveria impedir');
     }
-    const payload = bastidorTurnPayloadSchema.parse(job.payload);
+    // Dois formatos de job: o que nasce de uma mensagem dela e o que nasce do cron das perguntas diárias.
+    const pedidoDePergunta = perguntaDaAgendaPayloadSchema.safeParse(job.payload);
+    const payloadDeMensagem = pedidoDePergunta.success ? null : bastidorTurnPayloadSchema.parse(job.payload);
     const log = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, contact_id: leadId });
     const agora = (deps.clock ?? (() => new Date()))();
 
@@ -111,8 +133,25 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
       return;
     }
 
+    if (pedidoDePergunta.success) {
+      await tratarPerguntaDaAgenda({
+        pool,
+        deps,
+        log,
+        tenantId,
+        leadId,
+        jobId: job.id,
+        jobCriadoEm: new Date(job.created_at),
+        pedido: pedidoDePergunta.data,
+        agora,
+      });
+      return;
+    }
+    const payload = payloadDeMensagem;
+    if (payload === null) throw new Error('bastidor_turn: payload nem de pergunta nem de mensagem — inalcançável');
+
     const fuso = await fusoDaAgenda(pool, tenantId, config.dono_da_agenda_user_id, orgRows[0]?.timezone ?? null);
-    const texto = await lerMensagensDesdeAUltimaResposta(pool, tenantId, payload.conversation_id);
+    const texto =await lerMensagensDesdeAUltimaResposta(pool, tenantId, payload.conversation_id);
     const pendente = await lerResumoPendente(pool, tenantId, leadId);
     const jaRegistrado = await lerRelatoDestaMensagem(pool, tenantId, payload.inbound_message_id);
 
@@ -172,6 +211,69 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
     const desfecho = await executarTurnoDaSecretaria(portas);
     log.info('bastidor: turno da secretaria concluído', { acao: desfecho.acao });
   };
+}
+
+interface PerguntaDaAgenda {
+  pool: pg.Pool;
+  deps: InboundTurnDeps;
+  log: ReturnType<typeof withFields>;
+  tenantId: string;
+  leadId: string;
+  jobId: string;
+  jobCriadoEm: Date;
+  pedido: z.infer<typeof perguntaDaAgendaPayloadSchema>;
+  agora: Date;
+}
+
+/**
+ * PERGUNTAR ou LEMBRAR a agenda (job criado pelo cron `secretaria-agenda`). Texto fixo (`textos.ts`), enviado pela
+ * mesma cadeia de proteções, com o tipo `agenda_pergunta` ou `agenda_lembrete` — os únicos que a cadeia abre à
+ * secretaria para uma mensagem que ELA não puxou.
+ *
+ * Duas guardas antes de enviar, porque o job pode ter esperado na fila:
+ *  - pergunta velha demais (worker parado) não sai: "bom dia" às 15h seria fora de propósito;
+ *  - lembrete de pergunta que ela já respondeu (carimbo, ou mensagem dela depois da pergunta) não sai.
+ */
+async function tratarPerguntaDaAgenda(a: PerguntaDaAgenda): Promise<void> {
+  const { pool, deps, log, tenantId, leadId, pedido, agora } = a;
+
+  if (agora.getTime() - a.jobCriadoEm.getTime() > VALIDADE_DO_PEDIDO_DE_PERGUNTA_MS) {
+    log.info('bastidor: pedido de pergunta velho demais — não enviado', { acao: pedido.acao, horario: pedido.horario });
+    return;
+  }
+
+  if (pedido.acao === 'lembrar') {
+    const { rows } = await pool.query<{ respondeu: boolean }>(
+      `select (p.respondida_em is not null) or exists (
+                select 1 from messages m join conversations c on c.id = m.conversation_id
+                 where c.organization_id = p.organization_id and c.contact_id = p.contact_id
+                   and m.direction = 'inbound' and m.created_at >= p.pedida_em
+              ) as respondeu
+         from agenda_perguntas p
+        where p.organization_id = $1 and p.contact_id = $2 and p.dia = $3 and p.horario = $4`,
+      [tenantId, leadId, pedido.dia, pedido.horario],
+    );
+    if (rows[0] === undefined || rows[0].respondeu) {
+      log.info('bastidor: lembrete dispensado — a pergunta já foi respondida ou não existe', { horario: pedido.horario });
+      return;
+    }
+  }
+
+  const channel: ChannelAdapter = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool);
+  await enviarAoBastidor({
+    pool,
+    channel,
+    deps,
+    log,
+    tenantId,
+    leadId,
+    jobId: a.jobId,
+    conversationId: pedido.conversation_id,
+    channelSessionId: pedido.channel_session_id,
+    corpo: pedido.acao === 'perguntar' ? textoDaPergunta(pedido.horario) : TEXTO_DO_LEMBRETE_DA_PERGUNTA,
+    tipo: pedido.acao === 'perguntar' ? 'agenda_pergunta' : 'agenda_lembrete',
+    agora,
+  });
 }
 
 /** O fuso da agenda: o da jornada do dono; senão o da organização; senão o padrão. */

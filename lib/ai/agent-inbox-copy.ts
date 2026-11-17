@@ -65,6 +65,8 @@ export const KIND_LABEL = {
   // Diz o que o PACIENTE não recebeu. O motivo (sem modelo aprovado, canal fora do
   // ar, três recusas) e o que fazer vão no corpo do aviso, que já é específico.
   appointment_reminder_failed: "Um lembrete de consulta não chegou ao paciente",
+  // Diz o efeito: sem a agenda conferida, a IA para de oferecer horário aos pacientes.
+  agenda_sem_resposta: "A secretaria não respondeu sobre a agenda — a IA vai parar de oferecer horários",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

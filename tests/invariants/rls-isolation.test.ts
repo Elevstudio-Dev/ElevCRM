@@ -256,6 +256,14 @@ beforeAll(() => {
             );
         end if;
 
+        -- agenda_perguntas (migration 0230): o controle das perguntas diárias à secretaria.
+        -- Leitura org-scoped com gate de papel agent; a escrita é só service-role.
+        if not exists (select 1 from public.agenda_perguntas where organization_id = v_org) then
+          insert into public.agenda_perguntas (organization_id, contact_id, dia, horario)
+            select v_org, c.id, current_date, '08:30'
+              from public.contacts c where c.organization_id = v_org limit 1;
+        end if;
+
         if not exists (select 1 from public.push_subscriptions where organization_id = v_org) then
           insert into public.push_subscriptions
             (organization_id, user_id, endpoint, p256dh, auth)
@@ -329,6 +337,8 @@ export const TABLES = [
   // migration 0228 — o relato da secretaria sobre a agenda (traz nome de paciente).
   // Leitura org-scoped com gate `agent`; escrita só service-role.
   "agenda_relatos",
+  // migration 0230 — o controle das perguntas diárias à secretaria. Leitura org-scoped com gate agent.
+  "agenda_perguntas",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"
