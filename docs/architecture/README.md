@@ -16,7 +16,7 @@ ser fonte sem ninguém decidir isso.
 
 | arquivo | escopo |
 |---|---|
-| `agent-turn.workflow.json` | os **dois** turnos do agente — Conversador (fala, 2 chamadas de modelo) e Operador (opera, sem canal). 24 peças, 33 arestas, 13 faixas. **É o único mapa que o archify renderiza** — ver o aviso abaixo |
+| `agent-turn.workflow.json` | os **três** turnos do runtime — Conversador (fala, 2 chamadas de modelo), Operador (opera, sem canal) e Bastidor (a IA conversando com a equipe, hoje a secretaria da agenda). 25 peças, 35 arestas, 13 faixas. **O  ainda mostra 24/33: regenerar com o archify quando ele estiver disponível (o JSON é a fonte).** **É o único mapa que o archify renderiza** — ver o aviso abaixo |
 | `crm-vivo.architecture.json` | subsistema **CRM Vivo** — 24 peças, 44 arestas, 6 faixas |
 | `atualizacao-self-service.architecture.json` | botão de atualizar pela UI — `agent.sh`/`update.sh` (host) ↔ rota do agente ↔ tabelas de instância ↔ rodapé/tela |
 | `gestao-funis.architecture.json` | gestão de funis pela tela do Kanban — 18 peças, 30 arestas; as três dependências do funil e por que só uma o banco defende |

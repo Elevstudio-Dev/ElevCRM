@@ -238,6 +238,18 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     registraEm: "llm_calls",
   },
   {
+    id: "bastidor_leitura",
+    rotulo: "Ler a agenda que a secretaria conta",
+    oQueFaz:
+      "Lê o que a secretaria escreveu sobre a agenda (quem está marcado, que dia está fechado) e transforma em dados para ela conferir. Não escreve a resposta: ela é sempre texto fixo.",
+    papel: "entender",
+    exige: {},
+    emissor: "lib/agent-engine/agent/bastidor-turn.ts",
+    sintomaDeFalha:
+      "A secretaria manda a agenda e a IA não devolve o resumo para conferir, então a agenda do CRM fica desatualizada e a IA para de oferecer horários.",
+    registraEm: "llm_calls",
+  },
+  {
     id: "stage_classifier",
     rotulo: "Identificar a etapa do lead",
     oQueFaz:
