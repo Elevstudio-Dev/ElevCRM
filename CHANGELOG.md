@@ -8,6 +8,36 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.32.0] — 2026-11-17
+
+### Adicionado
+
+- **Agenda pela secretaria: o relato vira agenda, e a IA só oferece horário de agenda conferida** A agenda real de uma clínica pode viver num sistema que o CRM ainda não integra. Agora a secretaria pode contar como está o dia por mensagem, e a IA transforma o relato em compromissos e dias fechados no CRM, depois que a secretaria confere o resumo ("Entendi assim: ter 18/11, 14h Maria…"). O relato novo substitui o anterior só dentro dos dias que cobre e só no que um relato criou: compromissos marcados à mão ou pela IA de vendas nunca são tocados, e o que já passou fica como histórico. Os compromissos do relato nascem sem contato e não vão para o Google Agenda.
+
+  Com a agenda da secretaria ativada (`settings.secretaria.ativa`), a ferramenta de horários livres da IA passa a exigir que a agenda tenha sido conferida há pouco: depois de 6 horas ela deixa de oferecer horários de hoje, depois de 24 horas deixa de oferecer qualquer horário e a IA avisa que a equipe confirma. A tela do operador não é afetada. Organizações que não ligam a secretaria não mudam em nada.
+
+  Esta mudança entrega os dados e as regras (tabela de relatos, sincronização, atualidade da agenda). A conversa com a secretaria pelo WhatsApp chega na próxima versão.
+
+- **A secretaria conta a agenda pelo WhatsApp e a IA a leva para o CRM, depois que ela confere** A mensagem de um contato marcado como **Secretaria** (ficha do contato, "Papel na equipe") deixa de cair no vazio e passa a ser tratada por uma conversa própria, separada do agente de vendas, que nunca atende a equipe. A secretaria escreve como a agenda está ("terça 14h Maria, 15h João; quarta fechado"), a IA lê o texto e devolve um resumo para conferir ("Entendi assim: ter 18/11: 14h Maria · 15h João…"). A agenda do CRM só muda quando ela responde **sim**; se ela corrigir, a IA relê e manda um resumo novo; se houver qualquer dúvida (hora sem dia, nome sem horário, dia fechado e marcado ao mesmo tempo), a IA pergunta em vez de adivinhar.
+
+  Salvaguardas: só um "sim" inequívoco confirma ("sim, mas a Ana é às 15h" é uma correção, não uma confirmação); um resumo esperando há mais de 12 horas não vale mais; datas relativas ("amanhã", "quinta") são resolvidas com o relógio e o fuso da agenda, e a leitura recusa dias que já passaram; todas as respostas à secretaria são texto fixo e saem pela mesma cadeia de proteções de qualquer mensagem, que só libera o contato da equipe para esse tipo de mensagem. Nada muda para quem não ligar a agenda da secretaria (`settings.secretaria.ativa`, desligada por padrão).
+
+  A conversa com a equipe **não conta no limite diário** do número: as mensagens da secretaria (e, adiante, do marketing) não são barradas pelo teto de aquecimento nem pelo limite diário e não gastam a cota do atendimento e do follow-up de vendas. A janela de horário e o espaçamento entre envios continuam valendo.
+
+  A mensagem de quem tem papel de Marketing continua sem resposta nesta versão. As perguntas diárias à secretaria e a reserva de horário com confirmação chegam nas próximas versões.
+
+- **Papel de contato: Secretaria e Marketing (a base para a IA conversar com a equipe)** Um contato da equipe agora pode ter um papel: **Secretaria** ou **Marketing**. Gerente e administrador definem pela ficha do contato (botão "Papel na equipe"). Quem tem papel fica "fora do funil" (não vira cliente, não entra em relatório de vendas), e a IA de vendas continua sem escrever para essa pessoa. A porta que se abre é só para o agente de bastidor, que fala com ela apenas sobre o papel (agenda para a secretaria, campanhas para o marketing), sempre passando pelos mesmos vetos de envio, inclusive opt-out.
+
+  O banco garante as regras (não só a tela): papel só dos dois valores, quem tem papel tem de estar fora do funil, e só gerente ou administrador define o papel, mesmo numa chamada direta à API do banco. Esta mudança entrega a base; a agenda pela secretaria e as campanhas chegam nas próximas versões.
+
+- **A IA pergunta à secretaria, três vezes por dia, como está a agenda** Com a agenda da secretaria ligada (`settings.secretaria.ativa`), a IA passa a **perguntar** à secretaria como está a agenda nos horários combinados — por padrão 08:30, 14:00 e 18:15, de segunda a sexta, no fuso da agenda (todos configuráveis pelo CRM em `settings.secretaria.perguntas` e `.dias`). A pergunta é um texto fixo, com o cumprimento do período e um exemplo de como contar a agenda, e vai pelo WhatsApp da clínica pela mesma cadeia de proteções de qualquer mensagem.
+
+  Se ela não responde em 30 minutos, a IA **lembra uma vez**; se continua sem responder, o administrador recebe um aviso na **Central de avisos** ("A secretaria não respondeu à pergunta da agenda das 14:00"), com o efeito explicado: enquanto a agenda não for conferida, a IA deixa de oferecer horários aos pacientes. Se a secretaria ainda não tem nenhuma conversa com o número da clínica, o aviso diz exatamente isso e o que fazer.
+
+  Salvaguardas: a mesma pergunta nunca sai duas vezes (nem com duas instâncias do agendador rodando juntas); se a agenda acabou de ser conferida, a pergunta é dispensada em vez de repetida; pergunta que ficou esperando na fila mais de duas horas (serviço parado) não é enviada depois — "bom dia" às 15h seria fora de propósito; o lembrete de uma pergunta que ela já respondeu não sai. O número de mensagens à secretaria não conta no limite diário do número da clínica.
+
+  Nada muda para quem não ligar a agenda da secretaria. A reserva de horário com confirmação dela chega na próxima versão.
+
 ## [1.31.0] — 2026-11-16
 
 ### Adicionado
@@ -3221,7 +3251,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.31.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.32.0...HEAD
+[1.32.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.30.0...v1.31.0
 [1.30.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.29.0...v1.30.0
 [1.29.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.28.0...v1.29.0
