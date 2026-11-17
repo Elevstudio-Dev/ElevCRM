@@ -38,6 +38,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
 import { lerJornadaDoBanco } from "./jornada";
 import { situacaoDaAgendaDaSecretaria, type EstadoDaAgenda } from "./secretaria/atualidade";
+import { reservasQueOcupam } from "./secretaria/reservas";
 import { diaLocalISO } from "./fuso";
 import {
   agendaExternaNuncaLida,
@@ -84,6 +85,11 @@ export interface ParametrosDaConsulta {
    * no humano. Ver `lib/agenda/secretaria/atualidade.ts`.
    */
   exigirAgendaConferida?: boolean;
+  /**
+   * A reserva que está sendo CONFIRMADA agora. Ela segura o horário enquanto espera a secretaria; sem ignorá-la, o
+   * servidor não conseguiria marcar o compromisso que a própria reserva guarda.
+   */
+  ignorarReservaId?: string | null;
 }
 
 export type ResultadoDaConsulta =
@@ -313,8 +319,29 @@ export async function horariosLivresDaOrg(
     fimMinuto: linha.end_minute,
   }));
 
+  // Horário SEGURADO por um paciente que espera a secretaria (ou recusado por ela e ainda não conferido) não é livre
+  // para ninguém — nem para a IA, nem para a tela. Só a reserva que está sendo confirmada é ignorada.
+  let seguradas: LinhaDeAgendamento[];
+  try {
+    seguradas = await reservasQueOcupam(
+      supabase,
+      organizationId,
+      donoId,
+      { de: params.de, ate: params.ate },
+      params.agora,
+      params.ignorarReservaId ?? null,
+    );
+  } catch (e) {
+    return {
+      ok: false,
+      codigo: "erro_interno",
+      motivoParaOperador: e instanceof Error ? e.message : "falha ao ler as reservas de horário",
+      motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
+    };
+  }
+
   const { ocupados, fontesDefasadas } = ocupadosDoDono(
-    (agendaRaw ?? []) as LinhaDeAgendamento[],
+    [...((agendaRaw ?? []) as LinhaDeAgendamento[]), ...seguradas],
     (externosRaw ?? []).map((linha) => {
       const conexao = linha.calendar_connections as unknown as { status?: string } | null;
       return {

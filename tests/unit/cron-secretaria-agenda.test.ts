@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *   4. só audita quando FEZ algo, e a auditoria leva contagens, nunca nome nem telefone.
  */
 const executar = vi.fn();
+const executarReservas = vi.fn();
 const audit = vi.fn();
 const portasDoTick = vi.fn();
 const erroDeLog = vi.fn();
@@ -19,6 +20,10 @@ const erroDeLog = vi.fn();
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ admin: true }) }));
 vi.mock("@/lib/bastidor/secretaria/perguntas-supabase", () => ({ portasDoTickNoSupabase: (...a: unknown[]) => portasDoTick(...a) }));
 vi.mock("@/lib/bastidor/secretaria/perguntas-tick", () => ({ executarTickDasPerguntas: (...a: unknown[]) => executar(...a) }));
+vi.mock("@/lib/bastidor/secretaria/reservas-supabase", () => ({ portasDoTickDeReservasNoSupabase: () => ({ reservas: true }) }));
+vi.mock("@/lib/bastidor/secretaria/reservas-tick", () => ({
+  executarTickDasReservas: (...a: unknown[]) => executarReservas(...a),
+}));
 vi.mock("@/lib/audit", () => ({ audit }));
 vi.mock("@/lib/env", () => ({ env: { INTERNAL_SECRET: "s3cr3t", INTERNAL_CRON_SECRET: "" } }));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: erroDeLog } }));
@@ -32,13 +37,17 @@ const requisicao = (segredo: string | null = "s3cr3t") =>
 
 const VAZIO = { secretarias: 1, perguntadas: 0, dispensadas: 0, lembradas: 0, avisos: 0, respondidas: 0, erros: 0 };
 
+const RESERVAS_VAZIAS = { expiradas: 0, perguntasPedidas: 0, semCompromisso: 0 };
+
 beforeEach(() => {
   executar.mockReset();
+  executarReservas.mockReset();
   audit.mockReset();
   portasDoTick.mockReset();
   erroDeLog.mockReset();
   portasDoTick.mockReturnValue({ portas: true });
   executar.mockResolvedValue(VAZIO);
+  executarReservas.mockResolvedValue(RESERVAS_VAZIAS);
 });
 
 describe("auth — fail-closed", () => {
@@ -99,5 +108,39 @@ describe("auditoria", () => {
     executar.mockResolvedValue({ ...VAZIO, respondidas: 2, erros: 1 });
     await GET(requisicao());
     expect(audit).not.toHaveBeenCalled();
+  });
+});
+
+describe("as reservas de horário no mesmo cron", () => {
+  it("roda o tick das reservas com as portas do banco e devolve a contagem junto", async () => {
+    executarReservas.mockResolvedValue({ ...RESERVAS_VAZIAS, expiradas: 2 });
+    const r = await GET(requisicao());
+    expect(executarReservas).toHaveBeenCalledWith({ reservas: true });
+    const corpo = await r.json();
+    expect(JSON.stringify(corpo)).toContain('"expiradas":2');
+  });
+
+  it("reserva que venceu conta como mutação: audita, com contagens e sem organização", async () => {
+    executarReservas.mockResolvedValue({ ...RESERVAS_VAZIAS, expiradas: 1 });
+    await GET(requisicao());
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(audit.mock.calls[0]![0].metadata).toMatchObject({ reservas: { expiradas: 1 } });
+    expect(audit.mock.calls[0]![0].organizationId).toBeNull();
+  });
+
+  it("o tick das reservas que quebra NÃO derruba as perguntas diárias: 200, erro no log sem vazar", async () => {
+    executar.mockResolvedValue({ ...VAZIO, perguntadas: 1 });
+    executarReservas.mockRejectedValue(new Error("senha do banco: abc"));
+    const r = await GET(requisicao());
+    expect(r.status).toBe(200);
+    expect(JSON.stringify(await r.json())).not.toContain("senha do banco");
+    expect(erroDeLog).toHaveBeenCalled();
+    expect(audit).toHaveBeenCalledTimes(1);
+  });
+
+  it("o tick das perguntas que quebra continua sendo 500 (e as reservas nem rodam)", async () => {
+    executar.mockRejectedValue(new Error("x"));
+    expect((await GET(requisicao())).status).toBe(500);
+    expect(executarReservas).not.toHaveBeenCalled();
   });
 });

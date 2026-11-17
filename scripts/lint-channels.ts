@@ -140,6 +140,7 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       "abstração paralela à de `lib/channels/`. Unificar as duas é decisão de " +
       "arquitetura com superfície própria, não passo de um lint.",
     files: [
+      "lib/agent-engine/agent/bastidor-reserva.ts",
       "lib/agent-engine/agent/bastidor-turn.ts",
       "lib/agent-engine/agent/followup-turn.ts",
       "lib/agent-engine/agent/inbound-turn.ts",

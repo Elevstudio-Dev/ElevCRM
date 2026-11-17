@@ -60,6 +60,11 @@ export interface MarcarInput {
   contact_id?: string;
   title?: string;
   notes?: string;
+  /**
+   * A reserva de horário que está sendo confirmada pela secretaria. Ela segura o próprio horário enquanto espera; sem
+   * ignorá-la a marcação seria recusada por "horário indisponível". Só o servidor passa isto, nunca o modelo.
+   */
+  ignorar_reserva_id?: string;
 }
 
 export interface AlterarInput {
@@ -147,6 +152,7 @@ export async function marcarAgendamentoHandler(
     donoId,
     inicio,
     fim,
+    ...(input.ignorar_reserva_id ? { ignorarReservaId: input.ignorar_reserva_id } : {}),
   });
 
   const { data: criado, error: erroInsert } = await supabase
@@ -474,7 +480,7 @@ async function exigeAgendamento(
 async function exigeHorarioLivre(
   supabase: SB,
   ctx: HandlerCtx,
-  args: { eventTypeId: string; donoId: string; inicio: Date; fim: Date },
+  args: { eventTypeId: string; donoId: string; inicio: Date; fim: Date; ignorarReservaId?: string },
 ): Promise<{ fusoDaRegra: string }> {
   const consulta = await horariosLivresDaOrg(supabase, ctx.organization_id, {
     eventTypeId: args.eventTypeId,
@@ -482,6 +488,7 @@ async function exigeHorarioLivre(
     de: args.inicio,
     ate: args.fim,
     agora: new Date(),
+    ...(args.ignorarReservaId ? { ignorarReservaId: args.ignorarReservaId } : {}),
   });
 
   if (!consulta.ok) {
