@@ -173,6 +173,39 @@ export const versionCreateSchema = versionShapeSchema;
 /** Edits permitted only on draft versions. All fields optional. */
 export const versionPatchSchema = versionShapeSchema.partial();
 
+/**
+ * Lê o corpo de um PATCH de rascunho de versão e devolve SÓ o que foi enviado.
+ *
+ * ⚠️ Por que existe, em vez de usar `versionPatchSchema.safeParse` direto: no
+ * Zod 4, `.partial()` NÃO desliga os `.default(...)` do schema de criação. Um
+ * corpo só com `system_prompt` volta do parse com `tool_ids: []`, `max_steps: 10`,
+ * `followup` desligado e todo o resto no valor padrão, e quem grava o resultado
+ * apaga o que o rascunho tinha — as ferramentas do agente somem sem aviso. Aqui
+ * a validação continua a do schema (limites, `.strict()`, ferramentas válidas),
+ * mas o resultado é filtrado pelas chaves que o corpo realmente trazia. Campo
+ * enviado vazio de propósito (`tool_ids: []`) continua valendo: esvaziar é
+ * escolha de quem chamou, não efeito colateral.
+ */
+export function interpretarPatchDeVersao(
+  raw: unknown,
+):
+  | { success: true; data: Partial<VersionInput> }
+  | { success: false; error: z.ZodError } {
+  const parsed = versionPatchSchema.safeParse(raw);
+  if (!parsed.success) return { success: false, error: parsed.error };
+  const enviadas = new Set(
+    raw !== null && typeof raw === "object" && !Array.isArray(raw)
+      ? Object.keys(raw as Record<string, unknown>).filter(
+          (k) => (raw as Record<string, unknown>)[k] !== undefined,
+        )
+      : [],
+  );
+  const data = Object.fromEntries(
+    Object.entries(parsed.data).filter(([k]) => enviadas.has(k)),
+  ) as Partial<VersionInput>;
+  return { success: true, data };
+}
+
 export const agentMcpCreateSchema = z
   .object({
     name: z.string().trim().min(1).max(120),

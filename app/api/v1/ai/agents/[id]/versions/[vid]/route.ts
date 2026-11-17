@@ -12,7 +12,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { versionPatchSchema } from "@/lib/ai/agents/validation";
+import { interpretarPatchDeVersao } from "@/lib/ai/agents/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +65,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   } catch {
     return fail("invalid_request", "Body JSON inválido.", 400, { requestId });
   }
-  const parsed = versionPatchSchema.safeParse(raw);
+  // Só o que o corpo trouxe: ver o porquê em `interpretarPatchDeVersao`.
+  const parsed = interpretarPatchDeVersao(raw);
   if (!parsed.success) {
     return fail("validation_failed", "Campos inválidos.", 422, {
       requestId,
@@ -116,6 +117,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   if (patch.split_messages !== undefined) update.split_messages = patch.split_messages;
   if (patch.split_max_chars !== undefined) update.split_max_chars = patch.split_max_chars;
   if (patch.followup !== undefined) update.followup = patch.followup;
+
+  // Campos que o schema aceita mas esta rota não grava (papel Operador, funis,
+  // materiais) não podem virar um UPDATE vazio, que o banco devolveria como 500.
+  if (Object.keys(update).length === 0) {
+    return fail(
+      "invalid_request",
+      "Nenhum dos campos enviados pode ser editado por este PATCH.",
+      400,
+      { requestId },
+    );
+  }
 
   const { data, error } = await admin
     .from("ai_agent_versions")
