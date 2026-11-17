@@ -29,7 +29,7 @@ import {
   agentMcpPatchSchema,
   PUBLISH_ERROR_CODES,
   versionCreateSchema,
-  versionPatchSchema,
+  interpretarPatchDeVersao,
 } from "@/lib/ai/agents/validation";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
@@ -217,7 +217,7 @@ export async function saveAgentDraftAction(
 
   if (existingDraft) {
     // PATCH na draft existente — não infla a sequência de versions.
-    const patchValidated = versionPatchSchema.safeParse(payload);
+    const patchValidated = interpretarPatchDeVersao(payload);
     if (!patchValidated.success) {
       return { ok: false, error: "validation_failed", details: patchValidated.error.flatten() };
     }

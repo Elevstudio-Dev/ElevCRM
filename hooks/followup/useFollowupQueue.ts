@@ -1,5 +1,5 @@
 "use client";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
@@ -126,5 +126,39 @@ export function useCancelFollowupPromise() {
     onError: (err) => {
       showApiError(err);
     },
+  });
+}
+
+/** A fila ANTES da inscrição: próximos contatos de cada fluxo de silêncio com ritmo. */
+export interface ProximoDaFilaRow {
+  posicao: number;
+  contact: { id: string; name: string };
+  entra_em: string;
+}
+
+export interface ProximosDoFluxo {
+  pointer_id: string;
+  nome: string;
+  ritmo: { min_minutos: number; max_minutos: number; limite_por_dia: number };
+  usados_24h: number;
+  itens: ProximoDaFilaRow[];
+}
+
+export function useProximosDaFila() {
+  return useQuery({
+    queryKey: ["followup", "queue", "proximos"] as const,
+    queryFn: async () => {
+      try {
+        const r = await apiClient.get<{ data: { fluxos: ProximosDoFluxo[] } }>(
+          "/api/v1/ai/followups/queue/proximos",
+        );
+        return r.data.fluxos;
+      } catch (err) {
+        showApiError(err);
+        throw err;
+      }
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
