@@ -31,6 +31,38 @@ export const configDaSecretariaSchema = z.object({
 
 export type ConfigDaSecretaria = z.output<typeof configDaSecretariaSchema>;
 
+/**
+ * O que a TELA pode alterar (PATCH de `/api/v1/settings/secretaria`). Só o que faz sentido para quem opera: ligar,
+ * escolher de quem é a agenda, os horários das perguntas, os dias e a duração da avaliação. As validades da agenda
+ * conferida ficam fora da tela de propósito: mexer nelas muda quando a IA para de oferecer horário, e quem as altera
+ * precisa saber o que está fazendo (continuam no `settings` para quem opera o banco).
+ *
+ * `.strict()`: campo desconhecido é erro, não é ignorado em silêncio (um nome de campo errado numa chamada não pode
+ * parecer salvo).
+ */
+export const configDaSecretariaPatchSchema = z
+  .object({
+    ativa: z.boolean(),
+    dono_da_agenda_user_id: z.string().uuid().nullable(),
+    duracao_min: z.number().int().min(5).max(240),
+    perguntas: z
+      .array(z.string().regex(HORA))
+      .min(1)
+      .max(6)
+      .refine((l) => new Set(l).size === l.length, { message: "Horário repetido na lista de perguntas." })
+      .transform((l) => [...l].sort()),
+    dias: z
+      .array(z.number().int().min(0).max(6))
+      .min(1)
+      .max(7)
+      .refine((l) => new Set(l).size === l.length, { message: "Dia repetido." })
+      .transform((l) => [...l].sort((a, b) => a - b)),
+  })
+  .partial()
+  .strict();
+
+export type PatchDaConfigDaSecretaria = z.output<typeof configDaSecretariaPatchSchema>;
+
 /** O padrão inteiro (organização que nunca configurou). */
 export const CONFIG_PADRAO_DA_SECRETARIA: ConfigDaSecretaria = configDaSecretariaSchema.parse({});
 

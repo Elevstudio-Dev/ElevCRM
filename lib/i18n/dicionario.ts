@@ -7140,6 +7140,49 @@ export const DICIONARIO: Traducoes = {
   "leads criados": { es: "leads creados" },
   "contatos novos": { es: "contactos nuevos" },
   "Colunas que não reconheci:": { es: "Columnas que no reconocí:" },
+
+  // ─── Configurações: Agenda da secretaria ───
+  "Agenda da secretaria": { es: "Agenda de la secretaria" },
+  "A IA pergunta à secretaria como está a agenda e só oferece horário aos pacientes quando ela conferiu.": {
+    es: "La IA le pregunta a la secretaria cómo está la agenda y solo ofrece horarios a los pacientes cuando ella la confirmó.",
+  },
+  "A agenda real da clínica fica no sistema da franquia, e quem sabe como ela está é a secretaria. A IA pergunta a ela, pelo WhatsApp, em horários fixos, e só oferece horário aos pacientes se a agenda foi conferida há pouco.": {
+    es: "La agenda real de la clínica está en el sistema de la franquicia, y quien sabe cómo está es la secretaria. La IA le pregunta por WhatsApp en horarios fijos, y solo ofrece horarios a los pacientes si la agenda fue confirmada hace poco.",
+  },
+  "Agenda da secretaria salva.": { es: "Agenda de la secretaria guardada." },
+  "Usar a agenda da secretaria": { es: "Usar la agenda de la secretaria" },
+  "Ligado: a IA pergunta a agenda à secretaria e só oferece horário aos pacientes quando ela conferiu há pouco. Desligado: nada muda no atendimento.": {
+    es: "Activado: la IA le pregunta la agenda a la secretaria y solo ofrece horarios a los pacientes cuando ella confirmó hace poco. Desactivado: nada cambia en la atención.",
+  },
+  "De quem é a agenda": { es: "De quién es la agenda" },
+  "Quem o tipo de agendamento indicar": { es: "Quien indique el tipo de cita" },
+  "O profissional que faz a avaliação. O fuso e os horários de atendimento dele valem para a agenda.": {
+    es: "El profesional que hace la evaluación. Su huso horario y sus horarios de atención valen para la agenda.",
+  },
+  "Duração da avaliação (minutos)": { es: "Duración de la evaluación (minutos)" },
+  "Usada quando a secretaria diz só a hora de início.": {
+    es: "Se usa cuando la secretaria dice solo la hora de inicio.",
+  },
+  "Quando a IA pergunta": { es: "Cuándo pregunta la IA" },
+  "Se a secretaria não responde em 30 minutos, a IA lembra uma vez; se continua sem responder, você recebe um aviso na Central de avisos.": {
+    es: "Si la secretaria no responde en 30 minutos, la IA le recuerda una vez; si sigue sin responder, recibes un aviso en la Central de avisos.",
+  },
+  "Horário da pergunta": { es: "Hora de la pregunta" },
+  "Adicionar horário": { es: "Agregar horario" },
+  "Há horários repetidos na lista.": { es: "Hay horarios repetidos en la lista." },
+  "Em quais dias": { es: "En qué días" },
+  "Quem é a secretaria": { es: "Quién es la secretaria" },
+  "Abra o contato dela e marque o papel “Secretaria”. A IA só consegue perguntar se ela já tem uma conversa com o número da clínica: se ela nunca falou com o número, peça para mandar um “oi”.": {
+    es: "Abre su contacto y marca el rol «Secretaria». La IA solo puede preguntar si ella ya tiene una conversación con el número de la clínica: si nunca habló con el número, pídele que envíe un «hola».",
+  },
+  "Nenhum contato tem o papel de Secretaria ainda. Sem isso, a IA não tem para quem perguntar.": {
+    es: "Ningún contacto tiene aún el rol de Secretaria. Sin eso, la IA no tiene a quién preguntar.",
+  },
+  "A IA consegue falar com ela": { es: "La IA puede hablar con ella" },
+  "Ainda sem conversa com o número": { es: "Aún sin conversación con el número" },
+  "Quem está “sem conversa” só passa a receber a pergunta depois de mandar a primeira mensagem ao número.": {
+    es: "Quien está «sin conversación» solo empieza a recibir la pregunta después de enviar el primer mensaje al número.",
+  },
 };
 
 /**
