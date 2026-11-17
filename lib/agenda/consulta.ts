@@ -37,6 +37,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
 import { lerJornadaDoBanco } from "./jornada";
+import { situacaoDaAgendaDaSecretaria, type EstadoDaAgenda } from "./secretaria/atualidade";
+import { diaLocalISO } from "./fuso";
 import {
   agendaExternaNuncaLida,
   ocupadosDoDono,
@@ -53,6 +55,7 @@ export type CodigoDeRecusaDaConsulta =
   | "tipo_desativado"
   | "sem_responsavel"
   | "jornada_mal_configurada"
+  | "agenda_desatualizada"
   | "erro_interno";
 
 export interface ParametrosDaConsulta {
@@ -73,6 +76,14 @@ export interface ParametrosDaConsulta {
   ate: Date;
   /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
   agora: Date;
+  /**
+   * SÓ a IA liga isto. Com a agenda da secretaria ativa (`settings.secretaria.ativa`), exige que ela tenha sido
+   * CONFERIDA há pouco: conferida há mais que a validade de hoje → só horários dos dias seguintes; há mais que a
+   * validade dos dias seguintes (ou nunca) → recusa com `agenda_desatualizada`. A tela do operador NÃO liga: quem
+   * marca à mão enxerga a agenda e decide, e travá-lo porque a secretaria não respondeu seria o sistema mandando
+   * no humano. Ver `lib/agenda/secretaria/atualidade.ts`.
+   */
+  exigirAgendaConferida?: boolean;
 }
 
 export type ResultadoDaConsulta =
@@ -97,6 +108,11 @@ export type ResultadoDaConsulta =
        * um agente que o oferece MARCA por cima da cirurgia e confirma ao cliente.
        */
       agendaExternaNuncaLida: boolean;
+      /**
+       * Só preenchido quando a consulta pediu `exigirAgendaConferida`. 'sem_hoje' = a agenda da secretaria envelheceu
+       * e os horários de HOJE foram retirados da lista (os dos dias seguintes continuam valendo).
+       */
+      agendaDaSecretaria?: EstadoDaAgenda;
     }
   | {
       ok: false;
@@ -169,6 +185,32 @@ export async function horariosLivresDaOrg(
       motivoParaOperador: `"${tipo.name}" não tem responsável definido, e sem responsável não há agenda para consultar.`,
       motivoParaCliente: `Ainda não há um responsável definido para "${tipo.name}". ${NAO_OFERECA}`,
     };
+  }
+
+  // A agenda da secretaria envelhece. Só a IA pergunta por isso (ver `exigirAgendaConferida`).
+  let estadoDaSecretaria: EstadoDaAgenda | undefined;
+  if (params.exigirAgendaConferida === true) {
+    try {
+      estadoDaSecretaria = (await situacaoDaAgendaDaSecretaria(supabase, organizationId, params.agora)).estado;
+    } catch (e) {
+      return {
+        ok: false,
+        codigo: "erro_interno",
+        motivoParaOperador: e instanceof Error ? e.message : "falha ao ler a agenda da secretaria",
+        motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
+      };
+    }
+    if (estadoDaSecretaria === "desatualizada") {
+      return {
+        ok: false,
+        codigo: "agenda_desatualizada",
+        motivoParaOperador:
+          "A agenda da secretaria não foi conferida dentro da validade (ou nunca foi). Peça a ela que confirme a agenda.",
+        motivoParaCliente:
+          "A agenda ainda não foi conferida com a recepção hoje, então não dá para garantir os horários. " +
+          NAO_OFERECA,
+      };
+    }
   }
 
   const { data: disponibilidade, error: erroDisp } = await supabase
@@ -302,9 +344,18 @@ export async function horariosLivresDaOrg(
     agora: params.agora,
   });
 
+  // 'sem_hoje': a agenda da secretaria já não vale para HOJE (passou da validade do mesmo dia), mas ainda vale para os
+  // dias seguintes. O "hoje" é o dia LOCAL da agenda, o mesmo fuso em que os horários foram calculados.
+  const hojeLocal = diaLocalISO(params.agora, leitura.jornada.timezone);
+  const slotsOferecidos =
+    estadoDaSecretaria === "sem_hoje"
+      ? slots.filter((s) => diaLocalISO(s.inicio, leitura.jornada.timezone) !== hojeLocal)
+      : slots;
+
   return {
     ok: true,
-    slots,
+    slots: slotsOferecidos,
+    ...(estadoDaSecretaria !== undefined ? { agendaDaSecretaria: estadoDaSecretaria } : {}),
     fusoDaRegra: leitura.jornada.timezone,
     publicouHorarios: leitura.publicouHorarios,
     fusoSuposto: leitura.fusoSuposto,

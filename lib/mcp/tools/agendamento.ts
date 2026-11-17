@@ -187,7 +187,10 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     "Se ele for false, o atendente ainda não publicou os horários dele — não invente horários e " +
     "não diga que está lotado; avise que alguém da equipe confirma. " +
     "Se `fuso_suposto` for true, o fuso da agenda não foi escolhido por ninguém, veio do padrão: " +
-    "ofereça o horário pedindo confirmação em vez de afirmar.",
+    "ofereça o horário pedindo confirmação em vez de afirmar. " +
+    "Se vier `motivo: agenda_desatualizada`, a agenda ainda não foi conferida com a recepção: não ofereça " +
+    "horário e avise que a equipe confirma. Se `agenda_da_secretaria` vier 'sem_hoje', não há horário para " +
+    "hoje — só dos dias seguintes.",
   inputSchema: horariosLivresShape,
   category: "read",
   requiresRole: "agent",
@@ -220,6 +223,8 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
       de,
       ate,
       agora,
+      // Quem oferece horário é a IA: com a agenda da secretaria ativa, só oferece o que foi CONFERIDO há pouco.
+      exigirAgendaConferida: true,
     });
 
     // Recusa de NEGÓCIO volta como RESPOSTA, nunca exceção: exceção mata o turno
@@ -265,6 +270,13 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
       fuso_suposto: consulta.fusoSuposto,
       /** Agendas externas que não estão saudáveis: o horário pode estar defasado. */
       fontes_defasadas: consulta.fontesDefasadas,
+      /**
+       * 'sem_hoje' = a agenda que a secretaria passou envelheceu: os horários de HOJE foram retirados da lista e só
+       * os dos dias seguintes valem. Ausente quando a organização não usa a agenda da secretaria.
+       */
+      ...(consulta.agendaDaSecretaria === "sem_hoje" || consulta.agendaDaSecretaria === "atual"
+        ? { agenda_da_secretaria: consulta.agendaDaSecretaria }
+        : {}),
     };
   },
 };
