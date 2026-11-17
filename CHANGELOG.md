@@ -8,6 +8,20 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.0] — 2026-11-17
+
+### Adicionado
+
+- **Fila de follow-up com intervalo entre pacientes e limite por dia** O follow-up por silêncio inscrevia **todos** os pacientes parados de uma vez, e o único freio era o ritmo de envio do canal. Agora o fluxo pode ter um **ritmo de entrada**: um paciente por vez, com um intervalo entre um e outro (por exemplo, de 3 a 9 minutos) e um limite de inscrições a cada 24 horas (por exemplo, 25). Quem está parado há mais tempo entra primeiro.
+
+  Na aba **Fila** de Follow-ups aparece a seção **Próximos a entrar na fila**: a lista de quem vem a seguir, na ordem, com a hora prevista de cada um e quantos já entraram nas últimas 24 horas contra o limite. A hora é uma previsão: quem responder antes sai da lista e os seguintes adiantam.
+
+  O ritmo é opcional e fica na configuração do gatilho de silêncio (`params.ritmo` com `min_minutos`, `max_minutos` e `limite_por_dia`). Fluxos sem ritmo continuam se comportando como antes.
+
+### Corrigido
+
+- **Salvar só o prompt de um rascunho do agente não apaga mais as ferramentas** Ao editar um rascunho de versão do agente pela API enviando só alguns campos (por exemplo, só o prompt), o sistema preenchia os campos que não vieram com os valores padrão e gravava por cima: as **ferramentas** voltavam para nenhuma, o limite de passos, o follow-up e as palavras de transferência para humano também. Agora o PATCH muda **apenas o que foi enviado**; o resto do rascunho fica como estava. Enviar um campo vazio de propósito (por exemplo, zero ferramentas) continua funcionando. Se nenhum dos campos enviados puder ser editado por essa rota, ela responde com erro claro em vez de falha interna.
+
 ## [1.33.0] — 2026-11-17
 
 ### Adicionado
@@ -3269,7 +3283,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.33.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.0...HEAD
+[1.34.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.33.0...v1.34.0
 [1.33.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.31.0...v1.32.0
 [1.31.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.30.0...v1.31.0
