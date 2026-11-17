@@ -87,7 +87,8 @@ CRONS="
 # A PERGUNTA DIÁRIA da IA à secretaria sobre a agenda (08:30, 14:00 e 18:15 por padrão, seg–sex, no fuso da
 # agenda; lembra uma vez após 30 min e depois avisa o administrador). A cada 5 min porque a tolerância do
 # horário é de 2 h: um tick perdido não perde a pergunta, o seguinte a pega. Só age em organização com
-# `settings.secretaria.ativa` ligada. Não envia: enfileira um job `bastidor_turn` para o worker.
+# a agenda da secretaria ligada (settings.secretaria.ativa). Não envia: enfileira um job bastidor_turn.
+# (Sem crase neste arquivo: o heredoc a executaria.)
 */5 * * * *|60|api/v1/cron/secretaria-agenda
 */15 * * * *|60|api/v1/cron/risk-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
