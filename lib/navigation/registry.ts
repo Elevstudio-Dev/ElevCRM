@@ -607,6 +607,17 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     minRole: "manager",
   },
   {
+    // A agenda real da clínica vive no sistema da franquia: quem sabe é a secretaria, e a IA lhe pergunta pelo
+    // WhatsApp. Sem esta porta, ligar isso exigia editar o banco à mão.
+    href: "/app/settings/secretaria",
+    label: "Agenda da secretaria",
+    description: "A IA pergunta à secretaria como está a agenda e só oferece horário aos pacientes quando ela conferiu.",
+    icon: CalendarBlank,
+    group: "organizacao",
+    section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
     // Pedido do dono (2026-09-11): "em vez de atendente, ter setores". O setor
     // é a fila; quem está nele vê a fila dele. O menu de primeiro contato mora
     // na mesma tela porque é a outra metade da mesma pergunta — "isso é com
