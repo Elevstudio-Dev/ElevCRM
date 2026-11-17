@@ -126,6 +126,15 @@
       "tag": "runAgentTurn"
     },
     {
+      "id": "bastidor",
+      "lane": "worker",
+      "col": 2,
+      "type": "backend",
+      "label": "Bastidor",
+      "sublabel": "a IA conversando com a equipe (secretaria) · kind: bastidor_turn",
+      "tag": "bastidor_turn"
+    },
+    {
       "id": "toolbreaker",
       "lane": "guardrails",
       "col": 2,
@@ -321,6 +330,25 @@
       "toSide": "top",
       "route": "drop",
       "bias": 0.6
+    },
+    {
+      "id": "eventlog-bastidor",
+      "from": "eventlog",
+      "to": "bastidor",
+      "label": "papel interno (secretaria) vai para o bastidor, nunca para o turno de vendas",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "bastidor-gates",
+      "from": "bastidor",
+      "to": "gates",
+      "label": "mesma cadeia; só passa com papel + tipo permitido",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
     },
     {
       "id": "gates-veto",

@@ -41,6 +41,12 @@ export interface PacingInput {
    * Omitir = `true`: nenhum chamador existente muda de comportamento.
    */
   banRisk?: boolean;
+  /**
+   * Não aplica o teto de warm-up nem o cap diário. Só o BASTIDOR liga (conversa com a equipe:
+   * a secretaria e o marketing não são volume para o cliente e não devem gastar nem ser barrados
+   * pela cota de vendas). Janela horária e espaçamento continuam valendo. Omitir = `false`.
+   */
+  ignoreDailyCaps?: boolean;
   /** [0,1) — injetável nos testes; default Math.random. */
   rng?: () => number;
 }
@@ -85,7 +91,7 @@ export function decidePacing(input: PacingInput): PacingDecision {
     : 0;
   const wCap = warmupCapFor(ageDays, knobs.warmupDailyCaps);
   const effectiveCap = Math.min(wCap ?? Infinity, crmDailyLimit ?? Infinity);
-  if (state.sentToday >= effectiveCap) {
+  if (input.ignoreDailyCaps !== true && state.sentToday >= effectiveCap) {
     const nextAllowedAt = addMs(nextDayOpen(now, knobs), jitterOf(rng, knobs));
     const isWarmup = wCap !== null && wCap < (crmDailyLimit ?? Infinity);
     return {

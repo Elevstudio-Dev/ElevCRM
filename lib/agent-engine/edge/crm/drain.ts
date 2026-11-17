@@ -186,6 +186,25 @@ async function processEvent(
     return 'processado';
   }
 
+  // PAPEL INTERNO (migration 0227): a mensagem de quem é da EQUIPE com papel (secretaria, marketing) nunca vai ao
+  // agente de vendas. A secretaria ganha um job de tipo próprio, `bastidor_turn`, tratado por outro handler; as
+  // checagens abaixo que existem para o LEAD (há agente publicado? o contato é elegível para a IA de vendas?) não
+  // se aplicam a ela — a elegibilidade, aliás, a barraria de propósito, porque quem tem papel está fora do funil.
+  // Marketing ainda não tem conversa: continua sem job (o mesmo desfecho que o gate de elegibilidade dava antes).
+  const { rows: papelRows } = await pool.query<{ papel_interno: string | null }>(
+    'select papel_interno from contacts where organization_id = $1 and id = $2',
+    [event.organization_id, p.contact_id],
+  );
+  const papel = papelRows[0]?.papel_interno ?? null;
+  if (papel === 'marketing') {
+    log.info('drain: contato com papel de marketing — sem conversa nesta versão, evento pulado', {
+      event_id: event.id,
+    });
+    return 'processado';
+  }
+  const ehBastidor = papel === 'secretaria';
+  const tipoDoJob = ehBastidor ? 'bastidor_turn' : 'inbound_turn';
+
   // Ninguém para atender: NÃO gastar. Sem agente publicado para esta sessão e
   // sem roteador que possa resolver alguém, o turno seguia assim mesmo e caía
   // no caminho genérico — rodando o pipeline inteiro e pagando por ele.
@@ -209,7 +228,9 @@ async function processEvent(
   // EXISTÊNCIA da linha deixava o portão aberto para um roteador cujos membros
   // foram todos pausados — exatamente o caso que o parágrafo acima diz estar
   // cobrindo, entrando pela outra porta.
-  const { rows: capacidade } = await pool.query<{
+  const { rows: capacidade } = ehBastidor
+    ? { rows: [] as Array<{ tem_agente: boolean; tem_roteador: boolean }> }
+    : await pool.query<{
     tem_agente: boolean;
     tem_roteador: boolean;
   }>(
@@ -304,12 +325,14 @@ async function processEvent(
   // os respeitava (`isLeadInHandoff`), aqui a decisão só se antecipa para não
   // enfileirar. O turno revalida (defesa em profundidade).
   try {
-    const elegib = await decidirElegibilidadeDaConversa(pool, {
-      organizationId: event.organization_id,
-      conversationId: p.conversation_id,
-      agora: new Date(),
-      ttlMs: knobs.allowlistTtlMs ?? ALLOWLIST_TTL_MS_PADRAO,
-    });
+    const elegib = ehBastidor
+      ? null
+      : await decidirElegibilidadeDaConversa(pool, {
+          organizationId: event.organization_id,
+          conversationId: p.conversation_id,
+          agora: new Date(),
+          ttlMs: knobs.allowlistTtlMs ?? ALLOWLIST_TTL_MS_PADRAO,
+        });
     if (elegib !== null && !elegib.permite) {
       log.info('drain: conversa não elegível para IA — turno pulado (sem gasto)', {
         event_id: event.id,
@@ -369,9 +392,9 @@ async function processEvent(
     const { rows: pendingRows } = await pool.query<{ id: string }>(
       `select id from job_queue
        where organization_id = $1 and contact_id = $2
-         and kind = 'inbound_turn' and status = 'pending' and run_after > now()
+         and kind = $3 and status = 'pending' and run_after > now()
        limit 1`,
-      [event.organization_id, p.contact_id],
+      [event.organization_id, p.contact_id, tipoDoJob],
     );
     if (pendingRows[0]) {
       log.info('drain: rajada coalescida em job pendente', {
@@ -384,7 +407,7 @@ async function processEvent(
 
   const runAfter = knobs.debounceMs > 0 ? new Date(Date.now() + knobs.debounceMs) : undefined;
   const { job, deduped } = await enqueueJob(pool, event.organization_id, {
-    kind: 'inbound_turn',
+    kind: tipoDoJob,
     leadId: p.contact_id,
     sourceEventId: event.id,
     payload: {
@@ -396,7 +419,7 @@ async function processEvent(
     },
     ...(runAfter !== undefined ? { runAfter } : {}),
   });
-  log.info('drain: job de turno enfileirado', { event_id: event.id, job_id: job.id, deduped });
+  log.info('drain: job de turno enfileirado', { event_id: event.id, job_id: job.id, deduped, tipo: tipoDoJob });
   return 'processado';
 }
 
