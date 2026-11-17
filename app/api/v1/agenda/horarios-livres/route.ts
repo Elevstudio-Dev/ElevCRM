@@ -110,6 +110,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       tipo_desativado: { codigo: "validation_failed", http: 422 },
       sem_responsavel: { codigo: "validation_failed", http: 422 },
       jornada_mal_configurada: { codigo: "validation_failed", http: 422 },
+      agenda_desatualizada: { codigo: "validation_failed", http: 409 },
       erro_interno: { codigo: "internal_error", http: 500 },
     };
     const { codigo, http } = status[consulta.codigo];
