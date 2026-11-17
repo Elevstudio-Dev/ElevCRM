@@ -241,6 +241,21 @@ beforeAll(() => {
               from public.contacts c where c.organization_id = v_org limit 1;
         end if;
 
+        -- agenda_relatos (migration 0228): o que a secretaria contou da agenda,
+        -- com o nome de quem está marcado. Leitura é org-scoped e exige o papel
+        -- agent (o usuário semeado é agent); a escrita é só service-role.
+        if not exists (select 1 from public.agenda_relatos where organization_id = v_org) then
+          insert into public.agenda_relatos
+            (organization_id, texto, lido, janela_de, janela_ate)
+            values (
+              v_org,
+              'relato de invariante',
+              '{"marcados":[],"dias_fechados":[],"duvidas":[]}'::jsonb,
+              current_date,
+              current_date
+            );
+        end if;
+
         if not exists (select 1 from public.push_subscriptions where organization_id = v_org) then
           insert into public.push_subscriptions
             (organization_id, user_id, endpoint, p256dh, auth)
@@ -311,6 +326,9 @@ export const TABLES = [
   // para saber se já cadastrou); a ESCRITA é só service-role, porque quem
   // grava é a rota que falou com o sistema do cliente, nunca o browser.
   "integration_contact_links",
+  // migration 0228 — o relato da secretaria sobre a agenda (traz nome de paciente).
+  // Leitura org-scoped com gate `agent`; escrita só service-role.
+  "agenda_relatos",
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"
