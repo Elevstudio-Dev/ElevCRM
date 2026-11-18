@@ -373,18 +373,18 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
     async loadInscricoesRecentes(pointerId, sinceIso) {
       const { data, error } = await admin
         .from("followup_enrollments")
-        .select("id, created_at")
+        .select("id, started_at")
         .eq("pointer_id", pointerId)
-        .gte("created_at", sinceIso)
-        .order("created_at", { ascending: true });
+        .gte("started_at", sinceIso)
+        .order("started_at", { ascending: true });
       if (error) throw new Error(error.message);
-      const rows = (data ?? []) as Array<{ id: string; created_at: string }>;
+      const rows = (data ?? []) as Array<{ id: string; started_at: string }>;
       // A mais recente pode estar FORA das 24h (fluxo parado há dias): nesse
       // caso o intervalo dela já venceu, e basta não haver nenhuma `ultima`.
       const ultimaRow = rows[rows.length - 1];
       return {
-        criadasEm: rows.map((r) => new Date(r.created_at)),
-        ultima: ultimaRow ? { id: ultimaRow.id, criadaEm: new Date(ultimaRow.created_at) } : null,
+        criadasEm: rows.map((r) => new Date(r.started_at)),
+        ultima: ultimaRow ? { id: ultimaRow.id, criadaEm: new Date(ultimaRow.started_at) } : null,
       };
     },
 

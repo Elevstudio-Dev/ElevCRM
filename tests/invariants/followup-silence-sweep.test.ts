@@ -150,15 +150,15 @@ function silenceSweepDb(): SilenceSweepDb {
       return new Set(rows.map((r) => r.contact_id));
     },
     async loadInscricoesRecentes(pointerId, sinceIso) {
-      const { rows } = await pool.query<{ id: string; created_at: Date }>(
-        `select id, created_at from followup_enrollments
-         where pointer_id = $1 and created_at >= $2 order by created_at asc`,
+      const { rows } = await pool.query<{ id: string; started_at: Date }>(
+        `select id, started_at from followup_enrollments
+         where pointer_id = $1 and started_at >= $2 order by started_at asc`,
         [pointerId, sinceIso],
       );
       const ultima = rows[rows.length - 1];
       return {
-        criadasEm: rows.map((r) => new Date(r.created_at)),
-        ultima: ultima ? { id: ultima.id, criadaEm: new Date(ultima.created_at) } : null,
+        criadasEm: rows.map((r) => new Date(r.started_at)),
+        ultima: ultima ? { id: ultima.id, criadaEm: new Date(ultima.started_at) } : null,
       };
     },
     async loadTriggerNodeId(orgId, versionId) {
@@ -293,7 +293,11 @@ async function seedConversationAt(org: string, contactId: string, atIso: string)
 
 async function seedSilenceFlow(
   org: string,
-  opts?: { thresholdMinutes?: number; segments?: string[] },
+  opts?: {
+    thresholdMinutes?: number;
+    segments?: string[];
+    ritmo?: { min_minutos: number; max_minutos: number; limite_por_dia: number };
+  },
 ): Promise<{ pointerId: string; versionId: string }> {
   const graph: FlowGraph = {
     nodes: [
@@ -309,7 +313,11 @@ async function seedSilenceFlow(
   const versionId = versionRows[0]!.id;
   const triggerConfig = {
     kind: "silence",
-    params: { threshold_minutes: opts?.thresholdMinutes ?? 60, segments: opts?.segments ?? [] },
+    params: {
+      threshold_minutes: opts?.thresholdMinutes ?? 60,
+      segments: opts?.segments ?? [],
+      ...(opts?.ritmo ? { ritmo: opts.ritmo } : {}),
+    },
   };
   const { rows: pointerRows } = await pool.query<{ id: string }>(
     `insert into followup_flow_pointers (organization_id, name, status, active_version_id, trigger_config)
@@ -816,5 +824,72 @@ describe("dedup 0062 — >1 enrollment vivo pro mesmo (org,contact) vira 1 vivo 
       await pool.query(`delete from followup_enrollments where contact_id = $1`, [contactId]);
       await setOneLiveIndex("organization_id, contact_id");
     }
+  });
+});
+
+// ---- 6. ritmo de entrada: as consultas novas contra o schema REAL ----------
+
+/**
+ * O que este bloco prende, e por quê existe: a 1.34.0 saiu com
+ * `loadInscricoesRecentes` pedindo `created_at` a uma tabela que só tem
+ * `started_at`. Os testes em memória não percebem — o dublê não tem schema — e o
+ * adaptador de Postgres tinha o MESMO nome errado, mas nenhum caso o executava
+ * (nenhum fluxo de teste tinha ritmo). Em produção a varredura estourava a cada
+ * minuto. Aqui o fluxo TEM ritmo, então a consulta roda contra as colunas de
+ * verdade; um nome de coluna errado reprova na hora.
+ */
+describe("runSilenceSweep — ritmo de entrada (consultas contra o schema real)", () => {
+  const RITMO = { min_minutos: 3, max_minutos: 9, limite_por_dia: 25 };
+
+  it("com ritmo entra UM por varredura; a seguinte, dentro do intervalo, não inscreve ninguém", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId } = await seedSilenceFlow(org, { thresholdMinutes: 30, ritmo: RITMO });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const contatos: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const c = await seedContact(org);
+      await seedConversation(org, c, 90 + i); // o mais antigo (i=2) entra primeiro
+      contatos.push(c);
+    }
+    const deps = { db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK };
+
+    const s1 = await runSilenceSweep(deps);
+    expect(s1.enrolled).toBe(1);
+
+    const { rows } = await pool.query<{ contact_id: string }>(
+      `select contact_id from followup_enrollments where pointer_id = $1`,
+      [pointerId],
+    );
+    expect(rows).toHaveLength(1);
+
+    // 2ª rodada logo em seguida: o intervalo mínimo (3 min) ainda não venceu.
+    const s2 = await runSilenceSweep(deps);
+    expect(s2.enrolled).toBe(0);
+    expect(s2.deferred_by_pacing).toBeGreaterThanOrEqual(1);
+  });
+
+  it("no limite das últimas 24h nada entra", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const { pointerId, versionId } = await seedSilenceFlow(org, {
+      thresholdMinutes: 30,
+      ritmo: { min_minutos: 1, max_minutos: 1, limite_por_dia: 1 },
+    });
+    await seedPublishedAgentVersion(org, { enabled: true, pointerIds: [pointerId] });
+    const jaEntrou = await seedContact(org);
+    await pool.query(
+      `insert into followup_enrollments
+         (organization_id, pointer_id, version_id, contact_id, current_node_id, status, next_eval_at, started_at)
+       values ($1, $2, $3, $4, 't1', 'active', now(), now() - interval '2 hours')`,
+      [org, pointerId, versionId, jaEntrou],
+    );
+    const novo = await seedContact(org);
+    await seedConversation(org, novo, 120);
+
+    const s = await runSilenceSweep({ db: silenceSweepDb(), gateDb: pgGateDb(), clock: CLOCK });
+    expect(s.enrolled).toBe(0);
+    expect(s.deferred_by_pacing).toBeGreaterThanOrEqual(1);
+    expect(await countEnrollments(pointerId, novo)).toBe(0);
   });
 });
