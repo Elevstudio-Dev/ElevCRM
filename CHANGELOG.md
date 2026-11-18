@@ -8,6 +8,12 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.1] — 2026-11-18
+
+### Corrigido
+
+- **Fila de follow-up com ritmo: corrige consulta que falhava em produção** Na 1.34.0, a consulta das inscrições recentes (que alimenta o intervalo entre pacientes, o limite por dia e a seção "Próximos a entrar na fila") pedia ao banco uma coluna de data que a tabela não tem. Com o ritmo ligado em um fluxo, a varredura de silêncio falhava a cada minuto e a seção "Próximos a entrar" respondia com erro. Fluxos sem ritmo não eram afetados. Agora a consulta usa a coluna certa (`started_at`) e há testes contra o banco real que reprovam se o nome estiver errado. A rota também passa a registrar a causa do erro em vez de responder em silêncio.
+
 ## [1.34.0] — 2026-11-17
 
 ### Adicionado
@@ -3283,7 +3289,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.0...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.1...HEAD
+[1.34.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.0...v1.34.1
 [1.34.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.33.0...v1.34.0
 [1.33.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.32.0...v1.33.0
 [1.32.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.31.0...v1.32.0
