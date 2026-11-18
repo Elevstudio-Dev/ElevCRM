@@ -23,6 +23,7 @@ import {
 } from "@/lib/followup/silence-sweep";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,13 @@ export async function GET(_req: NextRequest): Promise<Response> {
       });
     }
     return ok({ fluxos }, { requestId });
-  } catch {
+  } catch (err) {
+    // Sem este log a causa some: o 500 saía mudo e a coluna errada da 1.34.0
+    // só apareceu comparando o schema na mão.
+    logger.error("[followup.queue.proximos] falhou", {
+      error: err instanceof Error ? err.message : String(err),
+      requestId,
+    });
     return fail("internal_error", "Erro ao montar a fila de próximos.", 500, { requestId });
   }
 }
