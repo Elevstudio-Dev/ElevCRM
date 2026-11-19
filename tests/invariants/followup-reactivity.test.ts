@@ -659,6 +659,79 @@ describe("applyReactivityEvent — inbound wake (waiting_reply, sem cancel_on_re
   });
 });
 
+// ---- 2b. inbound em nó `wait` (status active) — `cancel_on_reply` TAMBÉM vale aqui ----
+//
+// Medido em produção (18/11): o fluxo de retomada da clínica tem `cancel_on_reply`
+// ligado e esperas de 1 a 7 dias entre toques. A reação só honrava a flag para
+// `waiting_reply`; um enrollment `active` num `wait` era sempre acordado, e acordar
+// um `wait` pula a espera e manda o PRÓXIMO toque. Um paciente que respondeu 5
+// vezes em 2 minutos recebeu 3 toques empilhados sobre a conversa com a IA.
+
+describe("applyReactivityEvent — inbound em nó wait (status active)", () => {
+  it("cancel_on_reply=true: a resposta CANCELA o fluxo (outcome='replied'), não acorda o wait", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const contactId = await seedContact(org);
+    const { pointerId, versionId } = await seedFlow(org, SIMPLE_GRAPH, {
+      triggerConfig: { kind: "manual", cancel_on_reply: true },
+    });
+    const enrollmentId = await seedEnrollment({ org, pointerId, versionId, contactId, currentNodeId: "w1", status: "active" });
+
+    const row = eventRow({ organization_id: org, event_type: "message.received", payload: { contact_id: contactId } });
+    const summary = await applyReactivityEvent(reactivityDb(), () => new Date(), row);
+    expect(summary).toEqual({ matched: true, reacted: 1 });
+
+    const after = await getEnrollment(enrollmentId);
+    expect(after.status).toBe("cancelled");
+    expect(after.outcome).toBe("replied");
+    expect(after.next_eval_at).toBeNull();
+    expect((await getEvents(enrollmentId)).map((e) => e.event_type)).toEqual(["reactivity_replied"]);
+  });
+
+  it("várias respostas seguidas: continua cancelado e nenhum toque é enfileirado", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const contactId = await seedContact(org);
+    const { pointerId, versionId } = await seedFlow(org, SIMPLE_GRAPH, {
+      triggerConfig: { kind: "manual", cancel_on_reply: true },
+    });
+    const enrollmentId = await seedEnrollment({ org, pointerId, versionId, contactId, currentNodeId: "w1", status: "active" });
+
+    for (let i = 0; i < 3; i++) {
+      const row = eventRow({ organization_id: org, event_type: "message.received", payload: { contact_id: contactId } });
+      await applyReactivityEvent(reactivityDb(), () => new Date(), row);
+    }
+
+    const jobs: FollowupJobRequest[] = [];
+    const tickDeps: TickDeps = { db: engineDb(), clock: relogioAncoradoNoBanco(), enqueueJob: async (j) => void jobs.push(j) };
+    await pool.query(`update followup_enrollments set next_eval_at = now() - interval '1 second' where id = $1 and status in ('active','waiting_reply')`, [
+      enrollmentId,
+    ]);
+    const tick = await runFollowupTick(tickDeps, { limit: 5 });
+    expect(tick.scheduled).toBe(0);
+    expect(jobs).toHaveLength(0);
+    expect((await getEnrollment(enrollmentId)).status).toBe("cancelled");
+  });
+
+  it("sem cancel_on_reply: comportamento antigo — a resposta acorda o wait (next_eval_at=agora)", async () => {
+    const org = nextOrgId();
+    await seedOrg(org);
+    const contactId = await seedContact(org);
+    const { pointerId, versionId } = await seedFlow(org, SIMPLE_GRAPH); // {kind:'manual'}, sem cancel_on_reply
+    const enrollmentId = await seedEnrollment({ org, pointerId, versionId, contactId, currentNodeId: "w1", status: "active" });
+
+    const row = eventRow({ organization_id: org, event_type: "message.received", payload: { contact_id: contactId } });
+    const summary = await applyReactivityEvent(reactivityDb(), () => new Date(), row);
+    expect(summary).toEqual({ matched: true, reacted: 1 });
+
+    const after = await getEnrollment(enrollmentId);
+    expect(after.status).toBe("active");
+    expect(after.outcome).toBeNull();
+    expect(new Date(after.next_eval_at as string).getTime()).toBeLessThanOrEqual(Date.now() + 2_000);
+    expect((await getEvents(enrollmentId)).map((e) => e.event_type)).toEqual(["inbound_woke"]);
+  });
+});
+
 // ---- 3. handoff aberto: pause/cancel/allow ----
 
 describe("applyReactivityEvent — ai.handoff_triggered (aberto)", () => {

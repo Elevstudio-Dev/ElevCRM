@@ -203,7 +203,14 @@ async function reactToInbound(
   const waitingReply = live.filter((e) => e.status === "waiting_reply");
   const esperaAtiva = live.filter((e) => e.status === "active");
   let reacted = 0;
-  for (const e of waitingReply) {
+  // ⚠️ `cancel_on_reply` vale para os DOIS grupos. Antes só valia para
+  // `waiting_reply`; um fluxo parado num nó `wait` (status `active`, com timer de
+  // horas ou dias) era sempre ACORDADO pela resposta — e acordar um `wait` faz o
+  // fluxo pular a espera e mandar o PRÓXIMO toque na hora. Medido em produção
+  // (18/11): um paciente que respondeu 5 vezes em 2 minutos recebeu 3 toques de
+  // follow-up empilhados por cima da conversa com a IA, com `cancel_on_reply`
+  // ligado no fluxo. Quem respondeu saiu do silêncio: o fluxo termina.
+  for (const e of [...waitingReply, ...esperaAtiva]) {
     if (parseCancelOnReply(e.trigger_config)) {
       const key = `reactivity:${row.id}:${e.id}:reactivity_replied`;
       const applied = await applyStep(
@@ -219,11 +226,9 @@ async function reactToInbound(
       continue;
     }
 
-    if (await acordarPorInbound(db, clock, row, e)) reacted++;
-  }
-  // Nó `wait` fica `active` com timer — sem isto a resposta do lead não corta
-  // a espera de 5min (o motor só acordava `waiting_reply`).
-  for (const e of esperaAtiva) {
+    // Sem `cancel_on_reply`: a resposta acorda. Em `waiting_reply` isso faz o
+    // motor classificar a resposta; em `wait` (nó `active` com timer) corta a
+    // espera de 5min — sem isto o motor só acordava `waiting_reply`.
     if (await acordarPorInbound(db, clock, row, e)) reacted++;
   }
   return { matched: true, reacted };
