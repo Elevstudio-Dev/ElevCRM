@@ -8,6 +8,12 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.2] — 2026-11-19
+
+### Corrigido
+
+- **Follow-up: quem responde sai do fluxo, mesmo no meio de uma espera entre toques** Fluxos de follow-up com "cancelar ao responder" ligado só cancelavam quando o paciente estava no estado "aguardando resposta". Se o fluxo estava parado numa espera entre dois toques (1 a 7 dias, no fluxo de retomada de pacientes), qualquer resposta do paciente acordava a espera e o fluxo mandava o próximo toque na hora. Na clínica, um paciente que respondeu 5 vezes em 2 minutos recebeu 3 toques de follow-up por cima da conversa com a IA. Agora a resposta encerra o fluxo (resultado "respondeu") nos dois casos, e quem não usa "cancelar ao responder" continua como antes. Há testes contra o banco real, incluindo várias respostas seguidas.
+
 ## [1.34.1] — 2026-11-18
 
 ### Corrigido
@@ -3289,7 +3295,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.1...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.2...HEAD
+[1.34.2]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.1...v1.34.2
 [1.34.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.0...v1.34.1
 [1.34.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.33.0...v1.34.0
 [1.33.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.32.0...v1.33.0
