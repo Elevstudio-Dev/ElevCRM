@@ -64,6 +64,12 @@ declare
   v_novo         uuid;
   v_ini_janela   timestamptz;
   v_fim_janela   timestamptz;
+  v_carimbo      timestamptz;
+  v_ultima_conf  timestamptz;
+  v_hoje_h       numeric;
+  v_futuro_h     numeric;
+  v_idade        interval;
+  v_estado       text;
   x              record;
 begin
   -- ── 0. O que foi pedido ────────────────────────────────────────────────────────────────────────────────────────
@@ -208,6 +214,20 @@ begin
     raise exception 'Recusado: já há um turno da secretaria na fila (pendente ou rodando). Espere ele terminar e confira.';
   end if;
 
+  -- ── 5b. O carimbo e a frescura (a mesma regra de lib/agenda/secretaria/relatos.ts e atualidade.ts) ────────────
+  -- O carimbo é min(agora, resposta dela). A frescura usa a conferência MAIS RECENTE da organização depois disso.
+  v_carimbo := least(now(), v_ultima.quando);
+  select max(r.conferido_em) into v_ultima_conf
+    from agenda_relatos r where r.organization_id = v_org and r.estado = 'conferido';
+  v_hoje_h := case when jsonb_typeof(v_settings->'secretaria'->'validade_hoje_horas') = 'number'
+                   then (v_settings->'secretaria'->>'validade_hoje_horas')::numeric else 6 end;
+  v_futuro_h := case when jsonb_typeof(v_settings->'secretaria'->'validade_futuro_horas') = 'number'
+                     then (v_settings->'secretaria'->>'validade_futuro_horas')::numeric else 24 end;
+  v_idade := greatest(now() - greatest(v_carimbo, coalesce(v_ultima_conf, v_carimbo)), interval '0');
+  v_estado := case when v_idade <= v_hoje_h * interval '1 hour' then 'atual'
+                   when v_idade <= v_futuro_h * interval '1 hour' then 'sem_hoje'
+                   else 'desatualizada' end;
+
   -- ── 6. O relatório ─────────────────────────────────────────────────────────────────────────────────────────────
   insert into reprocessar_relatorio (linha) values
     ('Organização: ' || v_org),
@@ -225,6 +245,15 @@ begin
             else 'HUMANA — o turno vai reenviar o resumo perguntando se o "sim" é para ele (não aplica direto)' end),
     ('Validade: ela respondeu ' || date_trunc('minute', v_ultima.quando - v_rel.created_at) ||
        ' depois do resumo (limite 12 h) → vale'),
+    ('Carimbo de conferência (conferido_em): ' || to_char(v_carimbo at time zone v_fuso, 'DD/MM HH24:MI') ||
+       ' — a hora em que ela respondeu, não a do reprocessamento'),
+    ('Frescura da agenda depois de aplicar, agora: ' || v_estado || ' (validades da clínica: hoje ' || v_hoje_h ||
+       ' h, próximos dias ' || v_futuro_h || ' h) → ' ||
+       case v_estado
+         when 'atual' then 'a IA de vendas oferece todos os horários'
+         when 'sem_hoje' then 'a IA de vendas só oferece de amanhã em diante'
+         else 'a IA de vendas NÃO oferece horários (chama a equipe) — os espelhos entram na agenda mesmo assim; para voltar a oferecer, peça uma agenda nova à secretária'
+       end),
     ('Prévia do que o "sim" faz na agenda (aproximada; quem decide é o aplicador, lib/agenda/secretaria/aplicar.ts):');
 
   -- Os horários do relato, cada um com o que vai acontecer.
@@ -239,8 +268,11 @@ begin
     ),
     vivos as (
       select a.title, a.starts_at, a.origem_relato_id is not null as do_relato,
-             translate(lower(regexp_replace(btrim(a.title), '\s+', ' ', 'g')), c_acentos, c_sem_acento) as chave
+             translate(lower(regexp_replace(btrim(a.title), '\s+', ' ', 'g')), c_acentos, c_sem_acento) as chave,
+             translate(lower(regexp_replace(btrim(coalesce(ct.display_name, '')), '\s+', ' ', 'g')), c_acentos, c_sem_acento)
+               as chave_contato
         from calendar_appointments a
+        left join contacts ct on ct.organization_id = v_org and ct.id = a.contact_id
        where a.organization_id = v_org and a.owner_user_id = v_dono
          and a.status in ('pending', 'confirmed')
          and a.starts_at >= v_ini_janela and a.starts_at < v_fim_janela
@@ -249,6 +281,12 @@ begin
            case
              when exists (select 1 from vivos v where v.do_relato and v.starts_at = mk.inicio and v.chave = mk.chave)
                then 'mantém'
+             -- O MESMO paciente já marcado por outro caminho (IA de vendas): nada a fazer, nada a avisar.
+             when mk.chave <> '' and exists (
+               select 1 from vivos v
+                where not v.do_relato and v.starts_at = mk.inicio
+                  and (position(mk.chave in v.chave) > 0 or position(mk.chave in v.chave_contato) > 0))
+               then 'já está na agenda (marcado por outro caminho)'
              when exists (select 1 from vivos v where not v.do_relato and v.starts_at = mk.inicio)
                then 'NÃO cria (já há outro compromisso nesse horário — vai na resposta a ela)'
              when exists (select 1 from vivos v where v.do_relato and v.starts_at = mk.inicio)

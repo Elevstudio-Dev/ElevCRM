@@ -34,7 +34,16 @@ Também aceita `--mensagem <id da mensagem do sim>` ou `--relato <id do relato>`
 - o relato está `lido` e é o resumo certo (data e janela);
 - "O turno vai ler 1 mensagem(ns) dela; a última: "Sim"" — se aparecer outra coisa, ela escreveu mais depois do sim;
 - a validade foi medida até a hora em que ela respondeu (limite de 12 horas);
-- a prévia do que muda na agenda (cria, troca, mantém, cancela, fecha o dia). É aproximada: quem decide é o aplicador.
+- o carimbo de conferência que será gravado — a hora em que ela RESPONDEU, não a do reprocessamento — e a frescura
+  que a agenda terá (`atual`, `sem_hoje` ou `desatualizada`, pelas validades configuradas da clínica);
+- a prévia do que muda na agenda (cria, troca, mantém, já está na agenda, cancela, fecha o dia). É aproximada: quem
+  decide é o aplicador.
+
+**Resposta antiga = agenda aplicada, mas não "fresca".** Reprocessar um "sim" de ontem aplica os horários na agenda
+(os espelhos entram), mas a IA de vendas decide o que oferecer pela idade da conferência: com as validades padrão,
+até 6 h depois da resposta oferece tudo, até 24 h só os próximos dias, e depois disso nada (chama a equipe). Para a
+IA voltar a oferecer horários, peça uma agenda nova à secretária — ou, se a clínica decidir assim, ajuste as
+validades (`validade_hoje_horas`/`validade_futuro_horas` em `settings.secretaria`). A prévia mostra qual será o caso.
 
 **3. Enfileire:** o mesmo comando com `--aplicar` (pede confirmação). Ele grava **um** job novo na fila e mais
 nada. Em alguns segundos o worker processa, ela recebe "Pronto, agenda atualizada…" e a agenda muda.

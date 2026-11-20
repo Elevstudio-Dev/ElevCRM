@@ -202,11 +202,43 @@ describe("a prévia (padrão): mostra e NÃO escreve nada", () => {
     expect(r.saida).toContain('O turno vai ler 1 mensagem(ns) dela; a última, 18/11 17:08: "Sim"');
     expect(r.saida).toContain("Última resposta nossa antes disso: do agente");
     expect(r.saida).toContain("Validade: ela respondeu 00:08:00 depois do resumo (limite 12 h) → vale");
+    // I1: o carimbo é a hora da RESPOSTA, e a prévia diz o efeito na IA de vendas (resposta de dias atrás → nada).
+    expect(r.saida).toContain("Carimbo de conferência (conferido_em): 18/11 17:08 — a hora em que ela respondeu");
+    expect(r.saida).toMatch(/Frescura da agenda depois de aplicar, agora: desatualizada \(validades da clínica: hoje 6 h, próximos dias 24 h\) → a IA de vendas NÃO oferece horários/);
     expect(r.saida).toContain('19/11 08:30 Paciente C → troca: cancela "Paciente A" e cria');
     expect(r.saida).toContain("19/11 10:00 Paciente E → mantém");
     expect(r.saida).toContain("dia 20/11 → fecha");
     expect(r.saida).toContain(`PRÉVIA: nada foi alterado. O job novo copiaria o payload do job ${JOB_MORTO}.`);
     expect(await jobs()).toEqual(antes);
+  });
+
+  it("a frescura usa as validades CONFIGURADAS da clínica (aqui, uma semana para os próximos dias → sem_hoje)", async () => {
+    await pool.query(
+      `update organizations set settings = jsonb_set(settings, '{secretaria,validade_futuro_horas}', to_jsonb(24 * 365)) where id = $1`,
+      [ORG],
+    );
+    try {
+      const r = reprocessar({ job: JOB_MORTO });
+      expect(r.saida).toMatch(/agora: sem_hoje \(validades da clínica: hoje 6 h, próximos dias 8760 h\) → a IA de vendas só oferece de amanhã em diante/);
+    } finally {
+      await pool.query(`update organizations set settings = settings #- '{secretaria,validade_futuro_horas}' where id = $1`, [ORG]);
+    }
+  });
+
+  it("I2: o MESMO paciente já marcado pela IA de vendas no horário aparece como 'já está na agenda', não como conflito", async () => {
+    const contato = "4e940000-0000-4000-8000-0000000000e1";
+    await pool.query(
+      `insert into contacts (id, organization_id, display_name) values ($1, $2, 'Paciente C Sintetico') on conflict (id) do nothing`,
+      [contato, ORG],
+    );
+    await pool.query(`delete from calendar_appointments where organization_id = $1 and title = 'Paciente A'`, [ORG]);
+    await pool.query(
+      `insert into calendar_appointments (organization_id, title, starts_at, ends_at, owner_user_id, contact_id, created_by_kind, source)
+       values ($1, 'Avaliação', '2026-11-19T11:30:00Z', '2026-11-19T12:00:00Z', $2, $3, 'ai', 'mcp')`,
+      [ORG, DONO, contato],
+    );
+    const r = reprocessar({ job: JOB_MORTO });
+    expect(r.saida).toContain("19/11 08:30 Paciente C → já está na agenda (marcado por outro caminho)");
   });
 
   it("pela mensagem ou pelo relato chega ao MESMO lugar", () => {
@@ -275,8 +307,13 @@ describe("o reprocessamento BASTA: o job enfileirado, rodado pelo handler real, 
 
     expect(enviados).toHaveLength(1);
     expect(enviados[0]).toMatch(/^Pronto, agenda atualizada \(1 horário anotado, 1 removido, 1 dia fechado\)/);
-    const { rows: relato } = await pool.query<{ estado: string }>(`select estado from agenda_relatos where id = $1`, [RELATO]);
+    const { rows: relato } = await pool.query<{ estado: string; conferido_em: Date }>(
+      `select estado, conferido_em from agenda_relatos where id = $1`,
+      [RELATO],
+    );
     expect(relato[0]!.estado).toBe("conferido");
+    // I1: carimbado na hora do "Sim" (17:08), não na do job (07h do dia seguinte).
+    expect(relato[0]!.conferido_em.toISOString()).toBe(t(8).toISOString());
     const { rows: vivos } = await pool.query<{ title: string }>(
       `select title from calendar_appointments where organization_id = $1 and status in ('pending','confirmed') order by starts_at`,
       [ORG],
