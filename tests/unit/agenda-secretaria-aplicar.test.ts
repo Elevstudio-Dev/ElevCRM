@@ -87,7 +87,7 @@ describe("aplicarRelato — o que grava", () => {
   it("agenda vazia: cria o compromisso com os campos que o tornam um ESPELHO (origem, sem contato, já 'enviado ao Google')", async () => {
     const { admin, chamadas } = registrador(() => ({ data: [] }));
     const r = await aplicar(admin, relato());
-    expect(r).toEqual({ criados: 1, mantidos: 0, cancelados: 0, diasFechados: 0, diasReabertos: 0 });
+    expect(r).toEqual({ criados: 1, mantidos: 0, cancelados: 0, diasFechados: 0, diasReabertos: 0, conflitos: [] });
 
     const insert = chamadas.find((c) => c.tabela === "calendar_appointments" && c.op === "insert")!;
     const linha = (insert.payload as Array<Record<string, unknown>>)[0]!;
@@ -160,7 +160,7 @@ describe("aplicarRelato — o que grava", () => {
         : { data: [] },
     );
     const r = await aplicar(admin, relato());
-    expect(r).toEqual({ criados: 0, mantidos: 1, cancelados: 0, diasFechados: 0, diasReabertos: 0 });
+    expect(r).toEqual({ criados: 0, mantidos: 1, cancelados: 0, diasFechados: 0, diasReabertos: 0, conflitos: [] });
     expect(escritas(chamadas)).toEqual([]);
   });
 });
@@ -210,6 +210,75 @@ describe("aplicarRelato — dias fechados", () => {
     const del = chamadas.find((c) => c.op === "delete")!;
     expect(del.filtros).toContainEqual(["in", "id", ["f1"]]);
     expect(del.filtros).toContainEqual(["eq", "organization_id", ORG]);
+  });
+});
+
+describe("aplicarRelato — a troca de paciente no MESMO horário (a falha de produção)", () => {
+  /** O relato anterior tinha "Fulano" às 14h (17:00Z) e "Zé" às 15h (18:00Z); o novo traz "Maria" às 14h. */
+  const doRelato = (c: Chamada) =>
+    c.tabela === "calendar_appointments" && c.op === "select" && c.filtros.some(([m, col]) => m === "not" && col === "origem_relato_id");
+  const foraDoRelato = (c: Chamada) =>
+    c.tabela === "calendar_appointments" && c.op === "select" && c.filtros.some(([m, col]) => m === "is" && col === "origem_relato_id");
+  const ANTERIOR = [
+    { id: "fulano", title: "Fulano", starts_at: "2026-11-18T17:00:00Z", ends_at: "2026-11-18T17:30:00Z", status: "pending" },
+    { id: "ze", title: "Zé", starts_at: "2026-11-18T18:00:00Z", ends_at: "2026-11-18T18:30:00Z", status: "confirmed" },
+  ];
+
+  it("cancela o antigo do MESMO horário ANTES do insert; o que só sumiu continua sendo cancelado DEPOIS", async () => {
+    const { admin, chamadas } = registrador((c) => (doRelato(c) ? { data: ANTERIOR } : { data: [] }));
+    const r = await aplicar(admin, relato());
+    expect(r).toMatchObject({ criados: 1, cancelados: 2, conflitos: [] });
+
+    const ordem = escritas(chamadas).map((c) => `${c.op}:${JSON.stringify(c.filtros.find(([m, col]) => m === "in" && col === "id")?.[2] ?? null)}`);
+    expect(ordem).toEqual(['update:["fulano"]', "insert:null", 'update:["ze"]']);
+    // O cancelamento antecipado só alcança o que um relato criou e ainda está vivo.
+    const antecipado = escritas(chamadas)[0]!;
+    expect(antecipado.filtros).toContainEqual(["not", "origem_relato_id", "is", null]);
+    expect(antecipado.filtros).toContainEqual(["in", "status", ["pending", "confirmed"]]);
+    expect(antecipado.filtros).toContainEqual(["eq", "organization_id", ORG]);
+  });
+
+  it("o insert FALHA depois do cancelamento antecipado: o antigo é RESTAURADO no estado que tinha, e o erro propaga", async () => {
+    const { admin, chamadas } = registrador((c) => {
+      if (doRelato(c)) return { data: ANTERIOR };
+      if (c.op === "insert") return { error: { message: "boom" } };
+      return { data: [] };
+    });
+    await expect(aplicar(admin, relato())).rejects.toThrow(/criar compromissos do relato: boom/);
+
+    const updates = escritas(chamadas).filter((c) => c.op === "update");
+    expect(updates).toHaveLength(2); // o cancelamento antecipado e a restauração; o "Zé" NÃO é cancelado
+    const restauracao = updates[1]!;
+    expect(restauracao.payload).toMatchObject({ status: "pending", cancelled_at: null, cancellation_reason: null });
+    expect(restauracao.filtros).toContainEqual(["in", "id", ["fulano"]]);
+    expect(restauracao.filtros).toContainEqual(["eq", "status", "cancelled"]);
+    expect(restauracao.filtros).toContainEqual(["eq", "organization_id", ORG]);
+  });
+
+  it("a restauração também falha: o erro diz as duas coisas (o relato continua `lido`, reexecutar recalcula)", async () => {
+    let updates = 0;
+    const { admin } = registrador((c) => {
+      if (doRelato(c)) return { data: ANTERIOR };
+      if (c.op === "insert") return { error: { message: "boom" } };
+      if (c.op === "update" && ++updates === 2) return { error: { message: "sem rede" } };
+      return { data: [] };
+    });
+    await expect(aplicar(admin, relato())).rejects.toThrow(/boom.*restaurar.*sem rede/);
+  });
+
+  it("horário tomado por compromisso que NÃO é de relato: não cria o espelho, não toca nele e devolve o conflito", async () => {
+    const { admin, chamadas } = registrador((c) =>
+      foraDoRelato(c) ? { data: [{ starts_at: "2026-11-18T17:00:00Z" }] } : { data: [] },
+    );
+    const r = await aplicar(admin, relato());
+    expect(r.criados).toBe(0);
+    expect(r.conflitos).toEqual([{ inicio: "2026-11-18T17:00:00.000Z", nome: "Maria", porque: "outro_compromisso" }]);
+    expect(escritas(chamadas)).toEqual([]);
+    // A leitura do que NÃO é de relato filtra pelo dono e pela organização, e só o que está vivo.
+    const leitura = chamadas.find(foraDoRelato)!;
+    expect(leitura.filtros).toContainEqual(["eq", "organization_id", ORG]);
+    expect(leitura.filtros).toContainEqual(["eq", "owner_user_id", DONO]);
+    expect(leitura.filtros).toContainEqual(["in", "status", ["pending", "confirmed"]]);
   });
 });
 

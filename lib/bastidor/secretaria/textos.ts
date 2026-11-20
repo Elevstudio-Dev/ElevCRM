@@ -4,7 +4,11 @@
  *
  * Tom: curto, direto, de colega de trabalho. A secretaria está no meio do expediente.
  */
+import { diaLocalISO } from "@/lib/agenda/fuso";
+import { rotuloDaHora, rotuloDoDia } from "@/lib/agenda/secretaria/relato";
 import type { ResultadoDaConferencia } from "@/lib/agenda/secretaria/relatos";
+
+const FUSO_PADRAO = "America/Sao_Paulo";
 
 export const TEXTO_NAO_ENTENDI_A_MENSAGEM =
   "Não consegui ler sua mensagem. Pode escrever a agenda em texto? Por exemplo: terça 14h Maria, 15h João; quarta fechado.";
@@ -50,12 +54,33 @@ export function textoDeDuvida(perguntas: readonly string[]): string {
   return ["Para não errar a agenda, preciso confirmar:", ...perguntas.map((p) => `• ${p}`)].join("\n");
 }
 
-/** O que mudou na agenda depois do "sim". Conta só o que ela precisa saber. */
-export function textoDeAgendaAtualizada(r: Pick<ResultadoDaConferencia, "criados" | "cancelados" | "diasFechados">): string {
+/**
+ * O que mudou na agenda depois do "sim". Conta só o que ela precisa saber — inclusive o horário que NÃO foi anotado
+ * porque a agenda daqui já tinha outro compromisso nele (marcado pela IA de vendas ou por alguém da equipe): nada
+ * do que ela disse some calado.
+ */
+export function textoDeAgendaAtualizada(
+  r: Pick<ResultadoDaConferencia, "criados" | "cancelados" | "diasFechados"> & {
+    conflitos?: ResultadoDaConferencia["conflitos"];
+  },
+  fuso = FUSO_PADRAO,
+): string {
   const partes: string[] = [];
   if (r.criados > 0) partes.push(`${r.criados} ${r.criados === 1 ? "horário anotado" : "horários anotados"}`);
   if (r.cancelados > 0) partes.push(`${r.cancelados} ${r.cancelados === 1 ? "removido" : "removidos"}`);
   if (r.diasFechados > 0) partes.push(`${r.diasFechados} ${r.diasFechados === 1 ? "dia fechado" : "dias fechados"}`);
   const detalhe = partes.length > 0 ? ` (${partes.join(", ")})` : "";
-  return `Pronto, agenda atualizada${detalhe}. Se mudar alguma coisa, é só me avisar por aqui.`;
+  const texto = `Pronto, agenda atualizada${detalhe}. Se mudar alguma coisa, é só me avisar por aqui.`;
+
+  const conflitos = r.conflitos ?? [];
+  if (conflitos.length === 0) return texto;
+  const linhas = conflitos.map((c) => {
+    const quando = new Date(c.inicio);
+    return `• ${rotuloDoDia(diaLocalISO(quando, fuso))} ${rotuloDaHora(quando, fuso)} ${c.nome}`;
+  });
+  const cabeca =
+    conflitos.length === 1
+      ? "Só não anotei este horário, porque aqui já tinha outro compromisso marcado nele:"
+      : "Só não anotei estes horários, porque aqui já tinha outro compromisso marcado neles:";
+  return [texto, "", cabeca, ...linhas, "Se algum estiver errado, me avise que a equipe confere."].join("\n");
 }

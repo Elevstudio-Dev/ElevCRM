@@ -7,8 +7,10 @@
  *  - o que já existe e continua no relato: mantém (nada é regravado, o lembrete e o histórico seguem);
  *  - o que o relato traz e não existe: cria;
  *  - o que um relato criou, está na janela e sumiu do relato novo: cancela (a secretaria desmarcou ou corrigiu);
- *  - compromisso que NÃO nasceu de relato (marcado à mão, pela IA de vendas) nunca entra nesta conta;
- *  - o que já passou não é cancelado: é histórico.
+ *  - compromisso que NÃO nasceu de relato (marcado à mão, pela IA de vendas) nunca é cancelado nem alterado; se
+ *    ocupa o mesmo horário de um compromisso do relato, o espelho daquele horário não é criado e vira CONFLITO;
+ *  - o que já passou não é cancelado: é histórico;
+ *  - trocou o paciente de um MESMO horário: o antigo é cancelado ANTES do novo ser criado (`substituirIds`).
  *
  * Quem aplica (`aplicar.ts`) só executa este plano. Separar decidir de gravar é o que torna a regra testável sem
  * banco e o relato REPROCESSÁVEL: rodar o mesmo relato duas vezes não muda nada na segunda.
@@ -39,12 +41,35 @@ export interface NovoCompromisso {
   fim: Date;
 }
 
+/**
+ * Um horário do relato que NÃO vira compromisso porque o banco só aceita um compromisso vivo por (dono, início)
+ * (índice `calendar_appointments_sem_duplicata_idx`). A hora continua tomada — por outra coisa —, então a agenda
+ * não fica com menos; e o conflito volta para a secretaria saber, em vez de sumir calado.
+ *
+ *  - `outro_compromisso`: o horário é de um compromisso que NÃO nasceu de relato (IA de vendas, marcação à mão).
+ *    Um relato nunca toca nele.
+ *  - `horario_ja_ocupado`: o horário já é de um compromisso de relato que FICA (mantido, ou já passou e é
+ *    histórico), ou de outra pessoa do MESMO relato no mesmo horário.
+ */
+export interface ConflitoDeHorario {
+  inicio: Date;
+  nome: string;
+  porque: "outro_compromisso" | "horario_ja_ocupado";
+}
+
 export interface PlanoDeSincronizacao {
   criar: NovoCompromisso[];
   cancelarIds: string[];
+  /**
+   * SUBCONJUNTO de `cancelarIds`: os compromissos de relato que ocupam o MESMO início de um compromisso a criar
+   * (a secretaria trocou o paciente daquele horário). Estes são cancelados ANTES do insert — senão o insert bate no
+   * índice único e a conferência inteira cai. Todo o resto continua "criar antes de cancelar".
+   */
+  substituirIds: string[];
   manterIds: string[];
   fecharDias: Array<{ data: string; motivo: string | null }>;
   reabrirIds: string[];
+  conflitos: ConflitoDeHorario[];
 }
 
 const chaveDe = (nome: string, inicio: Date): string => `${normalizarNome(nome)}|${inicio.toISOString()}`;
@@ -54,6 +79,8 @@ export function planejarSincronizacao(entrada: {
   existentes: CompromissoDoRelato[];
   /** Dias fechados que um relato criou e que caem na janela. */
   fechamentosExistentes: FechamentoDoRelato[];
+  /** O início dos compromissos VIVOS do mesmo dono, na janela, que NÃO nasceram de relato. Nunca são tocados. */
+  ocupadosForaDoRelato?: Date[];
   relato: RelatoLido;
   fuso: string;
   /** Duração do atendimento, para quando a secretaria só disse a hora de início. */
@@ -62,6 +89,7 @@ export function planejarSincronizacao(entrada: {
   agora: Date;
 }): PlanoDeSincronizacao {
   const { existentes, fechamentosExistentes, relato, fuso, duracaoMin, agora } = entrada;
+  const ocupadosForaDoRelato = entrada.ocupadosForaDoRelato ?? [];
 
   // 1. O que o relato traz, sem repetição (a mesma pessoa no mesmo horário citada duas vezes é um só compromisso).
   const doRelato = new Map<string, NovoCompromisso>();
@@ -86,10 +114,44 @@ export function planejarSincronizacao(entrada: {
       cancelarIds.push(e.id);
     }
   }
-  const criar = [...doRelato.entries()].filter(([chave]) => !jaExiste.has(chave)).map(([, v]) => v);
-  criar.sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
+  const aCriar = [...doRelato.entries()].filter(([chave]) => !jaExiste.has(chave)).map(([, v]) => v);
+  aCriar.sort((a, b) => a.inicio.getTime() - b.inicio.getTime() || a.nome.localeCompare(b.nome));
 
-  // 3. Dias fechados.
+  // 3. O MESMO horário. O banco aceita UM compromisso vivo por (dono, início). Quem ocupa cada início depois do plano:
+  //    - compromisso que não é de relato: nunca sai (conflito `outro_compromisso`);
+  //    - compromisso de relato que NÃO vai ser cancelado (mantido, ou passado): fica (conflito `horario_ja_ocupado`);
+  //    - compromisso de relato que VAI ser cancelado: libera o horário — e, se alguém novo entra nele, é substituição.
+  const cancelar = new Set(cancelarIds);
+  const deOutro = new Set(ocupadosForaDoRelato.map((d) => d.getTime()));
+  const deQuemFica = new Set(existentes.filter((e) => !cancelar.has(e.id)).map((e) => e.inicio.getTime()));
+  const liberadosPor = new Map<number, string[]>();
+  for (const e of existentes) {
+    if (!cancelar.has(e.id)) continue;
+    const t = e.inicio.getTime();
+    liberadosPor.set(t, [...(liberadosPor.get(t) ?? []), e.id]);
+  }
+
+  const criar: NovoCompromisso[] = [];
+  const conflitos: ConflitoDeHorario[] = [];
+  const substituir = new Set<string>();
+  const tomados = new Set<number>();
+  for (const c of aCriar) {
+    const t = c.inicio.getTime();
+    if (deOutro.has(t)) {
+      conflitos.push({ inicio: c.inicio, nome: c.nome, porque: "outro_compromisso" });
+      continue;
+    }
+    if (deQuemFica.has(t) || tomados.has(t)) {
+      conflitos.push({ inicio: c.inicio, nome: c.nome, porque: "horario_ja_ocupado" });
+      continue;
+    }
+    tomados.add(t);
+    criar.push(c);
+    for (const id of liberadosPor.get(t) ?? []) substituir.add(id);
+  }
+  const substituirIds = cancelarIds.filter((id) => substituir.has(id));
+
+  // 4. Dias fechados.
   const fechadosNoRelato = new Map(relato.dias_fechados.map((d) => [d.data, d.motivo ?? null]));
   const jaFechados = new Set(fechamentosExistentes.map((f) => f.data));
   const fecharDias = [...fechadosNoRelato.entries()]
@@ -97,7 +159,7 @@ export function planejarSincronizacao(entrada: {
     .map(([data, motivo]) => ({ data, motivo }));
   const reabrirIds = fechamentosExistentes.filter((f) => !fechadosNoRelato.has(f.data)).map((f) => f.id);
 
-  return { criar, cancelarIds, manterIds, fecharDias, reabrirIds };
+  return { criar, cancelarIds, substituirIds, manterIds, fecharDias, reabrirIds, conflitos };
 }
 
 /** O motivo gravado na exceção: o prefixo (que diz "veio de um relato") e, se houver, o que a secretaria disse. */

@@ -320,9 +320,104 @@ describe("rpc — argumentos NOMEADOS, como o PostgREST", () => {
   });
 });
 
+describe("`in`, `is null`, `not is null`, `like` — nasceram com o aplicador da agenda da secretaria", () => {
+  it("`in` restringe à lista (e não devolve a tabela inteira)", async () => {
+    const { data, error } = await db
+      .from("crm_pipelines")
+      .select("name")
+      .eq("organization_id", ORG)
+      .in("slug", ["zulu", "alfa"]);
+    expect(error).toBeNull();
+    expect((data as Array<{ name: string }>).map((x) => x.name).sort()).toEqual(["Alfa", "Zulu"]);
+  });
+
+  it("`is(col, null)` e `not(col, 'is', null)` separam os dois lados — juntos dão a tabela inteira, nunca a mesma metade", async () => {
+    await pool.query(
+      `insert into crm_pipelines (organization_id, name, slug, position, description)
+       values ($1, 'ComDescricao', 'com-descricao', 50, 'x') on conflict do nothing`,
+      [ORG],
+    );
+    const nulos = await db.from("crm_pipelines").select("slug").eq("organization_id", ORG).is("description", null);
+    const naoNulos = await db
+      .from("crm_pipelines")
+      .select("slug")
+      .eq("organization_id", ORG)
+      .not("description", "is", null);
+    const todos = await db.from("crm_pipelines").select("slug").eq("organization_id", ORG);
+    const lista = (r: { data: unknown }) => (r.data as Array<{ slug: string }>).map((x) => x.slug);
+    expect(lista(naoNulos)).toContain("com-descricao");
+    expect(lista(nulos)).not.toContain("com-descricao");
+    expect(lista(nulos)).toContain("bravo");
+    expect(lista(naoNulos)).not.toContain("bravo");
+    expect(lista(nulos).length + lista(naoNulos).length).toBe(lista(todos).length);
+  });
+
+  it("`like` casa por padrão", async () => {
+    const { data } = await db.from("crm_pipelines").select("slug").eq("organization_id", ORG).like("slug", "bra%");
+    expect((data as Array<{ slug: string }>).map((x) => x.slug)).toEqual(["bravo"]);
+  });
+
+  it("`not` com outro operador ESTOURA (só `is null` foi implementado)", () => {
+    expect(() => db.from("crm_pipelines").select("id").not("slug", "eq", "x")).toThrow(/não está implementado/);
+  });
+});
+
+describe("insert em LISTA é um statement só — ou entram todas, ou nenhuma (como no PostgREST)", () => {
+  it("duas linhas boas: entram as duas", async () => {
+    const { error } = await db.from("crm_pipelines").insert([
+      { organization_id: ORG, name: "Lote A", slug: "lote-a", position: 61 },
+      { organization_id: ORG, name: "Lote B", slug: "lote-b", position: 62 },
+    ]);
+    expect(error).toBeNull();
+    const { rows } = await pool.query(`select count(*)::int as n from crm_pipelines where organization_id = $1 and slug like 'lote-%'`, [ORG]);
+    expect(rows[0].n).toBe(2);
+  });
+
+  it("uma boa e uma que viola a FK: NENHUMA entra — o erro volta como `{error}`", async () => {
+    const { error } = await db.from("crm_pipelines").insert([
+      { organization_id: ORG, name: "Atomica", slug: "atomica-ok", position: 63 },
+      { organization_id: "ada57e00-0000-4000-8000-0000000000ff", name: "Orfa", slug: "atomica-orfa", position: 64 },
+    ]);
+    expect(error?.message).toMatch(/foreign key|violates/i);
+    const { rows } = await pool.query(`select count(*)::int as n from crm_pipelines where slug = 'atomica-ok'`);
+    expect(rows[0].n).toBe(0);
+  });
+});
+
+describe("update com `in` e delete com filtro", () => {
+  it("update `.in(id, [...])` mexe só nas linhas da lista", async () => {
+    const { rows } = await pool.query<{ id: string; slug: string }>(
+      `insert into crm_pipelines (organization_id, name, slug, position) values
+         ($1, 'U1', 'upd-in-1', 71), ($1, 'U2', 'upd-in-2', 72), ($1, 'U3', 'upd-in-3', 73)
+       returning id, slug`,
+      [ORG],
+    );
+    const ids = rows.filter((r) => r.slug !== "upd-in-3").map((r) => r.id);
+    const { error } = await db.from("crm_pipelines").update({ name: "Mexido" }).eq("organization_id", ORG).in("id", ids);
+    expect(error).toBeNull();
+    const { rows: depois } = await pool.query<{ slug: string; name: string }>(
+      `select slug, name from crm_pipelines where slug like 'upd-in-%' order by slug`,
+    );
+    expect(depois.map((d) => d.name)).toEqual(["Mexido", "Mexido", "U3"]);
+  });
+
+  it("delete `.eq().in()` apaga só as linhas do filtro; delete SEM filtro estoura (nunca apaga a tabela)", async () => {
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into crm_pipelines (organization_id, name, slug, position) values
+         ($1, 'D1', 'del-1', 81), ($1, 'D2', 'del-2', 82) returning id`,
+      [ORG],
+    );
+    const { error } = await db.from("crm_pipelines").delete().eq("organization_id", ORG).in("id", [rows[0]!.id]);
+    expect(error).toBeNull();
+    const { rows: restam } = await pool.query<{ slug: string }>(`select slug from crm_pipelines where slug like 'del-%'`);
+    expect(restam.map((r) => r.slug)).toEqual(["del-2"]);
+    await expect(Promise.resolve().then(() => db.from("crm_pipelines").delete())).rejects.toThrow(/não está implementado/);
+  });
+});
+
 describe("o que NÃO está implementado estoura", () => {
   it("método ausente lança em vez de devolver vazio — vazio silencioso é teste verde medindo nada", () => {
-    expect(() => db.from("crm_pipelines").delete()).toThrow(/não está implementado/);
+    expect(() => db.from("crm_pipelines").upsert({})).toThrow(/não está implementado/);
     expect(() => db.from("crm_pipelines").select("id").neq("id", "x")).toThrow(/não está implementado/);
   });
 });

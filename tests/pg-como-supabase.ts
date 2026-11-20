@@ -18,7 +18,8 @@
  *    organizações é medido pelos invariantes que usam papel restrito — não aqui.
  * 2. **Rede.** Timeout, retry e erro de transporte não existem neste caminho.
  * 3. **A superfície inteira do PostgREST.** Só o que está implementado abaixo:
- *    `select/insert` com `eq`, `order`, `limit`, `maybeSingle`, `single`. Um
+ *    `select/insert/update/delete` com `eq`, `in`, `is null`, `not is null`,
+ *    `like`, `lt/gt/gte/lte`, `order`, `limit`, `maybeSingle`, `single`. Um
  *    método não implementado **estoura** em vez de ser ignorado em silêncio —
  *    ver `naoImplementado`. Silêncio aqui viraria teste verde medindo nada.
  *
@@ -48,6 +49,17 @@ function naoImplementado(metodo: string): never {
       "Implemente-o (com caso no teste do adaptador) em vez de contornar — " +
       "método ausente que devolvesse vazio faria o teste passar medindo nada.",
   );
+}
+
+/**
+ * Um filtro em SQL. Os operadores sem valor (`is null`/`is not null`) não consomem parâmetro; `in` vira
+ * `= any($n)` com a lista como array do driver.
+ */
+function sqlDoFiltro(op: string, coluna: string, valor: unknown, valores: unknown[]): string {
+  if (op === "is null" || op === "is not null") return `"${coluna}" ${op}`;
+  valores.push(valor);
+  if (op === "in") return `"${coluna}" = any($${valores.length})`;
+  return `"${coluna}" ${op} $${valores.length}`;
 }
 
 function erroDe(e: unknown): ErroPg {
@@ -127,20 +139,41 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
     return this;
   }
 
-  /** Presentes para ESTOURAR: o código que os usar precisa de implementação real. */
-  in(): never {
-    return naoImplementado("in");
+  /**
+   * `in`, `is`, `not(col, "is", null)` e `like` — QUINTA vez que o `naoImplementado` se paga: nasceram porque
+   * `aplicarRelato` (lib/agenda/secretaria/aplicar.ts) usa os quatro, e o invariante que reproduz a falha de
+   * produção da agenda da secretaria precisava rodar o aplicador DE VERDADE contra o Postgres.
+   */
+  in(coluna: string, valores: readonly unknown[]): this {
+    this.filtros.push(["in", coluna, [...valores]]);
+    return this;
   }
+
+  is(coluna: string, valor: null): this {
+    if (valor !== null) return naoImplementado(`is(${String(valor)})`);
+    this.filtros.push(["is null", coluna, null]);
+    return this;
+  }
+
+  not(coluna: string, operador: string, valor: unknown): this {
+    if (operador !== "is" || valor !== null) return naoImplementado(`not(${operador}, ${String(valor)})`);
+    this.filtros.push(["is not null", coluna, null]);
+    return this;
+  }
+
+  like(coluna: string, padrao: string): this {
+    this.filtros.push(["like", coluna, padrao]);
+    return this;
+  }
+
+  /** Presente para ESTOURAR: o código que o usar precisa de implementação real. */
   neq(): never {
     return naoImplementado("neq");
   }
 
   private montar(): { texto: string; valores: unknown[] } {
     const valores: unknown[] = [];
-    const onde = this.filtros.map(([op, c, v]) => {
-      valores.push(v);
-      return `"${c}" ${op} $${valores.length}`;
-    });
+    const onde = this.filtros.map(([op, c, v]) => sqlDoFiltro(op, c, v, valores));
     let texto = `select ${colunasSql(this.colunas)} from public."${this.tabela}"`;
     if (onde.length > 0) texto += ` where ${onde.join(" and ")}`;
     if (this.ordem) texto += ` order by "${this.ordem.coluna}" ${this.ordem.asc ? "asc" : "desc"}`;
@@ -197,11 +230,20 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
 class InsercaoPg<T> implements PromiseLike<RespostaFalsa<null>> {
   private colunasDeVolta: string | null = null;
 
+  /**
+   * Uma linha ou uma LISTA. A lista vira UM statement (`values (...), (...)`), como no PostgREST: ou entram
+   * todas, ou nenhuma. `aplicarRelato` depende disso — um insert em lote que gravasse metade e falhasse na outra
+   * metade mediria um aplicador que não existe.
+   */
+  private readonly linhas: Array<Record<string, unknown>>;
+
   constructor(
     private readonly pool: pg.Pool,
     private readonly tabela: string,
-    private readonly linha: Record<string, unknown>,
-  ) {}
+    linha: Record<string, unknown> | Array<Record<string, unknown>>,
+  ) {
+    this.linhas = Array.isArray(linha) ? linha : [linha];
+  }
 
   select(colunas = "*"): this {
     this.colunasDeVolta = colunas;
@@ -209,15 +251,19 @@ class InsercaoPg<T> implements PromiseLike<RespostaFalsa<null>> {
   }
 
   private montar(): { texto: string; valores: unknown[] } {
-    const chaves = Object.keys(this.linha);
-    const valores = chaves.map((k) => {
-      const v = this.linha[k];
-      // jsonb/array vão como parâmetro; objeto solto o driver não converte.
-      return v !== null && typeof v === "object" && !Array.isArray(v) ? JSON.stringify(v) : v;
+    const chaves = Object.keys(this.linhas[0] ?? {});
+    const valores: unknown[] = [];
+    const tuplas = this.linhas.map((linha) => {
+      const marcas = chaves.map((k) => {
+        const v = linha[k];
+        // jsonb/array vão como parâmetro; objeto solto o driver não converte.
+        valores.push(v !== null && typeof v === "object" && !Array.isArray(v) ? JSON.stringify(v) : v);
+        return `$${valores.length}`;
+      });
+      return `(${marcas.join(", ")})`;
     });
-    const marcas = chaves.map((_, i) => `$${i + 1}`).join(", ");
     const texto =
-      `insert into public."${this.tabela}" (${chaves.map((k) => `"${k}"`).join(", ")}) values (${marcas})` +
+      `insert into public."${this.tabela}" (${chaves.map((k) => `"${k}"`).join(", ")}) values ${tuplas.join(", ")}` +
       (this.colunasDeVolta ? ` returning ${colunasSql(this.colunasDeVolta)}` : "");
     return { texto, valores };
   }
@@ -263,7 +309,7 @@ class InsercaoPg<T> implements PromiseLike<RespostaFalsa<null>> {
  * nada). O `naoImplementado` fez o trabalho dele.
  */
 class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
-  private filtros: Array<[string, unknown]> = [];
+  private filtros: Array<[string, string, unknown]> = [];
   private colunasDeVolta: string | null = null;
 
   constructor(
@@ -273,7 +319,20 @@ class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
   ) {}
 
   eq(coluna: string, valor: unknown): this {
-    this.filtros.push([coluna, valor]);
+    this.filtros.push(["=", coluna, valor]);
+    return this;
+  }
+
+  /** `in` — nasceu com `aplicarRelato`, que cancela e restaura compromissos por lista de ids. */
+  in(coluna: string, valores: readonly unknown[]): this {
+    this.filtros.push(["in", coluna, [...valores]]);
+    return this;
+  }
+
+  /** `not(col, "is", null)` — a guarda "só o que um relato criou" do aplicador. */
+  not(coluna: string, operador: string, valor: unknown): this {
+    if (operador !== "is" || valor !== null) return naoImplementado(`not(${operador}, ${String(valor)})`);
+    this.filtros.push(["is not null", coluna, null]);
     return this;
   }
 
@@ -289,10 +348,7 @@ class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
       valores.push(v !== null && typeof v === "object" && !Array.isArray(v) ? JSON.stringify(v) : v);
       return `"${k}" = $${valores.length}`;
     });
-    const onde = this.filtros.map(([c, v]) => {
-      valores.push(v);
-      return `"${c}" = $${valores.length}`;
-    });
+    const onde = this.filtros.map(([op, c, v]) => sqlDoFiltro(op, c, v, valores));
     let texto = `update public."${this.tabela}" set ${sets.join(", ")}`;
     if (onde.length > 0) texto += ` where ${onde.join(" and ")}`;
     if (this.colunasDeVolta) texto += ` returning ${colunasSql(this.colunasDeVolta)}`;
@@ -351,6 +407,44 @@ class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
 }
 
 /**
+ * DELETE com filtros — a forma `.delete().eq(a,b).in(c,[...])`. Nasceu com `aplicarRelato`, que reabre os dias
+ * que um relato fechou. SEM filtro ele ESTOURA: um delete sem `where` apagaria a tabela inteira do teste, e o
+ * PostgREST real também recusa (exige filtro).
+ */
+class RemocaoPg implements PromiseLike<RespostaFalsa<null>> {
+  private filtros: Array<[string, string, unknown]> = [];
+
+  constructor(
+    private readonly pool: pg.Pool,
+    private readonly tabela: string,
+  ) {}
+
+  eq(coluna: string, valor: unknown): this {
+    this.filtros.push(["=", coluna, valor]);
+    return this;
+  }
+
+  in(coluna: string, valores: readonly unknown[]): this {
+    this.filtros.push(["in", coluna, [...valores]]);
+    return this;
+  }
+
+  then<R1 = RespostaFalsa<null>, R2 = never>(
+    aoResolver?: ((v: RespostaFalsa<null>) => R1 | PromiseLike<R1>) | null,
+    aoRejeitar?: ((r: unknown) => R2 | PromiseLike<R2>) | null,
+  ): PromiseLike<R1 | R2> {
+    if (this.filtros.length === 0) naoImplementado("delete sem filtro");
+    const valores: unknown[] = [];
+    const onde = this.filtros.map(([op, c, v]) => sqlDoFiltro(op, c, v, valores));
+    return this.pool
+      .query(`delete from public."${this.tabela}" where ${onde.join(" and ")}`, valores)
+      .then(() => ({ data: null, error: null }) as RespostaFalsa<null>)
+      .catch((e: unknown) => ({ data: null, error: erroDe(e) }) as RespostaFalsa<null>)
+      .then(aoResolver, aoRejeitar);
+  }
+}
+
+/**
  * `rpc(nome, args)` — chamada de função por argumentos NOMEADOS, como o
  * PostgREST faz. Sem isto, todo caminho que emite evento (`emit_event`) morre no
  * meio do handler sob teste.
@@ -384,9 +478,10 @@ export function pgComoSupabase(pool: pg.Pool): SupabaseClient {
     from(tabela: string) {
       return {
         select: (colunas = "*") => new ConsultaPg(pool, tabela, colunas),
-        insert: (linha: Record<string, unknown>) => new InsercaoPg(pool, tabela, linha),
+        insert: (linha: Record<string, unknown> | Array<Record<string, unknown>>) =>
+          new InsercaoPg(pool, tabela, linha),
         update: (patch: Record<string, unknown>) => new AtualizacaoPg(pool, tabela, patch),
-        delete: () => naoImplementado("delete"),
+        delete: () => new RemocaoPg(pool, tabela),
         upsert: () => naoImplementado("upsert"),
       };
     },

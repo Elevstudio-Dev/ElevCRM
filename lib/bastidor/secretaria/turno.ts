@@ -101,7 +101,7 @@ export async function executarTurnoDaSecretaria(p: Portas): Promise<DesfechoDoTu
     if (resposta === "sim") {
       try {
         const resultado = await p.conferir(pendente.id);
-        await p.enviar(textoDeAgendaAtualizada(resultado));
+        await p.enviar(textoDeAgendaAtualizada(resultado, p.fuso));
         return { acao: "agenda_conferida", resultado };
       } catch (err) {
         if (err instanceof Error && err.message === "dono_da_agenda_nao_definido") {

@@ -73,7 +73,14 @@ export interface ResultadoDaConferencia extends ResultadoDaAplicacao {
   jaConferido: boolean;
 }
 
-const SEM_MUDANCA: ResultadoDaAplicacao = { criados: 0, mantidos: 0, cancelados: 0, diasFechados: 0, diasReabertos: 0 };
+const SEM_MUDANCA: ResultadoDaAplicacao = {
+  criados: 0,
+  mantidos: 0,
+  cancelados: 0,
+  diasFechados: 0,
+  diasReabertos: 0,
+  conflitos: [],
+};
 
 /**
  * A secretaria disse "sim": aplica o relato na agenda e só DEPOIS o marca como conferido. Se a aplicação falhar no

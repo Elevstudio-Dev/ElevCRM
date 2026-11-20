@@ -38,6 +38,7 @@ const CONFERIDO: ResultadoDaConferencia = {
   cancelados: 0,
   diasFechados: 0,
   diasReabertos: 0,
+  conflitos: [],
 };
 
 function portas(over: Partial<Portas> = {}) {
@@ -101,6 +102,21 @@ describe("o 'sim' — o único que mexe na agenda", () => {
     expect(p.registrar).not.toHaveBeenCalled();
     expect(enviados[0]).toContain("agenda atualizada");
     expect(enviados[0]).toContain("1 horário anotado");
+  });
+
+  it("horário que não coube (já havia outro compromisso nele): a confirmação DIZ qual foi, no fuso da agenda", async () => {
+    const { p, enviados } = portas({
+      texto: "sim",
+      pendente: pendente(),
+      conferir: vi.fn(async () => ({
+        ...CONFERIDO,
+        conflitos: [{ inicio: "2026-11-19T19:00:00.000Z", nome: "Beltrano", porque: "outro_compromisso" as const }],
+      })),
+    });
+    expect((await executarTurnoDaSecretaria(p)).acao).toBe("agenda_conferida");
+    expect(enviados[0]).toContain("agenda atualizada");
+    expect(enviados[0]).toContain("não anotei este horário");
+    expect(enviados[0]).toContain("qui 19/11 16h Beltrano");
   });
 
   it.each(["Sim!", "isso mesmo", "ok", "👍", "certo, obrigada"])("'%s' confirma", async (texto) => {
