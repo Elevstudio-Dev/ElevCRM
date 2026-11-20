@@ -223,7 +223,7 @@ describe("o resumo esperando o 'sim' e o lembrete de confirmar", () => {
     expect(chamadas[0]!.passos).toEqual(
       expect.arrayContaining([
         ["match", { organization_id: "org-1", contact_id: "contato-1" }],
-        ["eq", "estado", "lido"],
+        ["in", "estado", ["lido"]],
         ["order", "created_at", { ascending: false }],
         ["limit", 1],
       ]),

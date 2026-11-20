@@ -224,7 +224,10 @@ export function portasDoTickNoSupabase(
             .from("agenda_relatos")
             .select("id, created_at")
             .match(chave)
-            .eq("estado", "lido")
+            // `.in` e não `.eq`: `lido` também é o NOME de uma coluna de `agenda_relatos` (o jsonb), e o guarda
+            // `postgrest-nao-compara-coluna-com-coluna` lê `.eq("estado", "lido")` como comparação entre colunas.
+            // Mesma forma de `relatos.ts`.
+            .in("estado", ["lido"])
             .order("created_at", { ascending: false })
             .limit(1);
           erro("agenda_relatos", e);
