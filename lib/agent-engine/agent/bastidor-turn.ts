@@ -51,7 +51,7 @@ import { runModelCall } from '../edge/llm/run-model-call';
 import { withFields } from '../obs/logger';
 import { PREFIXO_DA_AGENDA_NAO_APLICADA, type JobRow } from '../queue/queue';
 import { enviarAoBastidor, fusoDaAgenda } from './bastidor-envio';
-import { lerMensagensDesdeAUltimaResposta } from './bastidor-mensagens';
+import { lerMensagensDesdeAUltimaResposta, resumoAindaEsperaOSim } from './bastidor-mensagens';
 import {
   executarTrabalhoDaReserva,
   tratarRespostaDaReserva,
@@ -399,19 +399,15 @@ async function tratarLembreteDaConferencia(a: LembreteDaConferencia): Promise<vo
     return;
   }
 
-  const { rows } = await pool.query<{ aguardando: boolean }>(
-    `select (r.estado = 'lido'
-             and r.created_at > $4::timestamptz - make_interval(hours => $5)
-             and not exists (
-               select 1 from messages m
-                where m.organization_id = r.organization_id and m.conversation_id = $6
-                  and m.direction = 'inbound' and coalesce(m.sent_at, m.created_at) > r.created_at
-             )) as aguardando
-       from agenda_relatos r
-      where r.organization_id = $1 and r.contact_id = $2 and r.id = $3`,
-    [tenantId, leadId, pedido.relato_id, agora.toISOString(), VALIDADE_DO_RESUMO_HORAS, pedido.conversation_id],
-  );
-  if (rows[0] === undefined || !rows[0].aguardando) {
+  const aguardando = await resumoAindaEsperaOSim(pool, {
+    tenantId,
+    contactId: leadId,
+    relatoId: pedido.relato_id,
+    conversationId: pedido.conversation_id,
+    agora,
+    validadeHoras: VALIDADE_DO_RESUMO_HORAS,
+  });
+  if (!aguardando) {
     log.info('bastidor: lembrete do resumo dispensado — o resumo não espera mais o "sim"');
     return;
   }

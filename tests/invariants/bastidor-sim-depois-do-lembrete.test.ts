@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import pg from "pg";
 
-import { lerMensagensDesdeAUltimaResposta } from "@/lib/agent-engine/agent/bastidor-mensagens";
+import { lerMensagensDesdeAUltimaResposta, resumoAindaEsperaOSim } from "@/lib/agent-engine/agent/bastidor-mensagens";
 
 /**
  * O "SIM" QUE SE PERDIA — a leitura das mensagens da secretaria contra o Postgres de verdade.
@@ -174,5 +174,44 @@ describe("o que CONTA como resposta nossa (fronteira)", () => {
     await entrada("sim", t(1));
     const outra = await lerMensagensDesdeAUltimaResposta(pool, "5e5e0000-0000-4000-8000-0000000000ff", CONVERSA);
     expect(outra).toEqual({ texto: "", respondeuEm: null, ultimaRespostaNossa: "nenhuma" });
+  });
+});
+
+describe("a guarda do lembrete 'falta só você confirmar o resumo' (resumoAindaEsperaOSim)", () => {
+  const RELATO = "5e5e0000-0000-4000-8000-0000000000a1";
+  const espera = (agora: Date, org = ORG) =>
+    resumoAindaEsperaOSim(pool, { tenantId: org, contactId: SECRETARIA, relatoId: RELATO, conversationId: CONVERSA, agora, validadeHoras: 12 });
+
+  beforeEach(async () => {
+    await pool.query(`delete from agenda_relatos where organization_id = $1`, [ORG]);
+    await pool.query(
+      `insert into agenda_relatos (id, organization_id, contact_id, texto, lido, janela_de, janela_ate, created_at)
+       values ($1, $2, $3, 't', '{}'::jsonb, '2026-11-18', '2026-11-18', $4)`,
+      [RELATO, ORG, SECRETARIA, t(0)],
+    );
+  });
+
+  it("lido, novo e sem nada dela depois: espera", async () => {
+    await entrada("a agenda é…", t(-1)); // o que gerou o resumo — antes dele
+    expect(await espera(t(60))).toBe(true);
+  });
+
+  it("ela escreveu depois do resumo (inclusive um 'sim' cujo turno falhou): NÃO espera — não se cobra o que ela já fez", async () => {
+    await entrada("Sim", t(8));
+    expect(await espera(t(60))).toBe(false);
+  });
+
+  it("passou das 12 h: não espera (venceu)", async () => {
+    expect(await espera(t(12 * 60 + 1))).toBe(false);
+    expect(await espera(t(12 * 60 - 1))).toBe(true);
+  });
+
+  it("já conferido (ou corrigido/descartado): não espera", async () => {
+    await pool.query(`update agenda_relatos set estado = 'conferido', conferido_em = now() where id = $1`, [RELATO]);
+    expect(await espera(t(60))).toBe(false);
+  });
+
+  it("de outra organização: não espera", async () => {
+    expect(await espera(t(60), "5e5e0000-0000-4000-8000-0000000000ff")).toBe(false);
   });
 });

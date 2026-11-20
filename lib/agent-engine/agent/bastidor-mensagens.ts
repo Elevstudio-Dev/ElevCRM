@@ -48,6 +48,30 @@ export interface MensagensDoTurno {
   ultimaRespostaNossa: UltimaRespostaNossa;
 }
 
+/**
+ * O resumo ainda espera o "sim"? É desta secretaria e desta organização, está `lido`, foi criado há menos de
+ * `validadeHoras`, e ela não escreveu NADA na conversa depois dele (se escreveu — inclusive um "sim" cujo turno
+ * falhou —, cobrar a confirmação seria cobrar o que ela já fez). Guarda do lembrete "falta só você confirmar".
+ */
+export async function resumoAindaEsperaOSim(
+  pool: pg.Pool,
+  a: { tenantId: string; contactId: string; relatoId: string; conversationId: string; agora: Date; validadeHoras: number },
+): Promise<boolean> {
+  const { rows } = await pool.query<{ aguardando: boolean }>(
+    `select (r.estado = 'lido'
+             and r.created_at > $4::timestamptz - make_interval(hours => $5::int)
+             and not exists (
+               select 1 from messages m
+                where m.organization_id = r.organization_id and m.conversation_id = $6
+                  and m.direction = 'inbound' and coalesce(m.sent_at, m.created_at) > r.created_at
+             )) as aguardando
+       from agenda_relatos r
+      where r.organization_id = $1 and r.contact_id = $2 and r.id = $3`,
+    [a.tenantId, a.contactId, a.relatoId, a.agora.toISOString(), a.validadeHoras, a.conversationId],
+  );
+  return rows[0]?.aguardando === true;
+}
+
 const UUID = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 
 export async function lerMensagensDesdeAUltimaResposta(
