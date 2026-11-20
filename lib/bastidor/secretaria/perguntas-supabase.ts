@@ -219,6 +219,41 @@ export function portasDoTickNoSupabase(
           erro("job_queue", e);
         },
 
+        async resumoPendente() {
+          const { data: linhas, error: e } = await admin
+            .from("agenda_relatos")
+            .select("id, created_at")
+            .match(chave)
+            .eq("estado", "lido")
+            .order("created_at", { ascending: false })
+            .limit(1);
+          erro("agenda_relatos", e);
+          const r = linhas?.[0] as { id: string; created_at: string } | undefined;
+          return r ? { relatoId: r.id, criadoEm: new Date(r.created_at) } : null;
+        },
+
+        async enfileirarLembreteDaConferencia(relatoId, conversa) {
+          // `source_event_id` = o relato: o índice único (organização, source_event_id) da fila é a idempotência de
+          // "no máximo UM lembrete por resumo" — duas instâncias do cron, ou dois horários do dia, não mandam dois.
+          // A coluna existe para deduplicar evento → job; o relato É o evento que origina este job.
+          const { error: e } = await admin.from("job_queue").insert({
+            organization_id: organizationId,
+            contact_id: contactId,
+            kind: "bastidor_turn",
+            source_event_id: relatoId,
+            payload: {
+              conversation_id: conversa.conversationId,
+              contact_id: contactId,
+              channel_session_id: conversa.channelSessionId,
+              acao: "lembrar_conferencia",
+              relato_id: relatoId,
+            },
+          });
+          if ((e as { code?: string } | null)?.code === "23505") return false;
+          erro("job_queue", e);
+          return true;
+        },
+
         async avisarAdmin(motivo: MotivoDoAviso, dia, horario) {
           // Um aviso ABERTO por pergunta: o mesmo tick não empilha cartões iguais na Central de avisos.
           const refId = contactId;

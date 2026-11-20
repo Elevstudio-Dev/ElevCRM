@@ -214,6 +214,69 @@ describe("enfileirar", () => {
   });
 });
 
+describe("o resumo esperando o 'sim' e o lembrete de confirmar", () => {
+  it("resumoPendente: o relato `lido` mais recente DELA, na organização dela", async () => {
+    const { admin, chamadas } = clienteFalso(() => ({ data: [{ id: "rel-1", created_at: "2026-11-17T20:50:00Z" }] }));
+    const r = await portasDoTickNoSupabase(admin, semErro).portasDe(SEC).resumoPendente();
+    expect(r).toEqual({ relatoId: "rel-1", criadoEm: new Date("2026-11-17T20:50:00Z") });
+    expect(chamadas[0]!.tabela).toBe("agenda_relatos");
+    expect(chamadas[0]!.passos).toEqual(
+      expect.arrayContaining([
+        ["match", { organization_id: "org-1", contact_id: "contato-1" }],
+        ["eq", "estado", "lido"],
+        ["order", "created_at", { ascending: false }],
+        ["limit", 1],
+      ]),
+    );
+  });
+
+  it("resumoPendente sem nenhum: nulo; erro do banco propaga", async () => {
+    expect(await portasDoTickNoSupabase(clienteFalso(() => ({ data: [] })).admin, semErro).portasDe(SEC).resumoPendente()).toBeNull();
+    await expect(
+      portasDoTickNoSupabase(clienteFalso(() => ({ error: { message: "boom" } })).admin, semErro).portasDe(SEC).resumoPendente(),
+    ).rejects.toThrow(/agenda_relatos: boom/);
+  });
+
+  it("o lembrete é UM job por resumo: `source_event_id` = id do relato (o índice único da fila recusa o segundo)", async () => {
+    const { admin, chamadas } = clienteFalso(() => ({}));
+    const ok = await portasDoTickNoSupabase(admin, semErro)
+      .portasDe(SEC)
+      .enfileirarLembreteDaConferencia("rel-1", { conversationId: "conv-1", channelSessionId: "sess-1" });
+    expect(ok).toBe(true);
+    expect(passo(chamadas[0]!, "insert")).toEqual([
+      "insert",
+      {
+        organization_id: "org-1",
+        contact_id: "contato-1",
+        kind: "bastidor_turn",
+        source_event_id: "rel-1",
+        payload: {
+          conversation_id: "conv-1",
+          contact_id: "contato-1",
+          channel_session_id: "sess-1",
+          acao: "lembrar_conferencia",
+          relato_id: "rel-1",
+        },
+      },
+    ]);
+  });
+
+  it("o segundo lembrete do mesmo resumo (23505): falso, sem erro; outro erro propaga", async () => {
+    const dup = clienteFalso(() => ({ error: { message: "duplicate key", code: "23505" } as { message: string } }));
+    expect(
+      await portasDoTickNoSupabase(dup.admin, semErro)
+        .portasDe(SEC)
+        .enfileirarLembreteDaConferencia("rel-1", { conversationId: "c", channelSessionId: "s" }),
+    ).toBe(false);
+    const fora = clienteFalso(() => ({ error: { message: "fila fora" } }));
+    await expect(
+      portasDoTickNoSupabase(fora.admin, semErro)
+        .portasDe(SEC)
+        .enfileirarLembreteDaConferencia("rel-1", { conversationId: "c", channelSessionId: "s" }),
+    ).rejects.toThrow(/job_queue: fila fora/);
+  });
+});
+
 describe("avisar o administrador", () => {
   it("abre UM cartão agenda_sem_resposta na Central de avisos, ligado ao contato", async () => {
     const { admin, chamadas } = clienteFalso((c) => (passo(c, "select") ? { data: [] } : {}));

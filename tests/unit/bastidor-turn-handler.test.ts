@@ -414,6 +414,45 @@ describe("bastidor_turn — falhas", () => {
     expect(runBeforeSend).not.toHaveBeenCalled();
   });
 
+  describe("o 'sim' que não pôde ser aplicado: o erro que vai para a Central diz o que aconteceu", () => {
+    const PENDENTE = {
+      id: "pend",
+      lido: { janela: { de: "2026-11-18", ate: "2026-11-18" }, marcados: [], dias_fechados: [], duvidas: [] },
+      created_at: new Date(AGORA.getTime() - 5 * 60_000),
+    };
+    const sim = { mensagens: [{ body: "sim", media_derived_text: null }], pendente: PENDENTE };
+
+    it("duplicidade de horário: PROPAGA (o job tenta de novo) com a frase do dono, e nada é enviado a ela", async () => {
+      conferirEAplicarRelato.mockRejectedValue(
+        new Error('criar compromissos do relato: duplicate key value violates unique constraint "calendar_appointments_sem_duplicata_idx"'),
+      );
+      const erro = await rodar(sim).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(erro?.message).toMatch(/^A agenda que a secretária confirmou não foi aplicada\. Motivo: /);
+      expect(erro?.message).toMatch(/mesmo horário/);
+      expect(runBeforeSend).not.toHaveBeenCalled();
+    });
+
+    it("relato incoerente: o motivo é uma frase fixa — o nome do paciente NUNCA vai para o erro (last_error, Central, log)", async () => {
+      const { RelatoIncoerente } = await import("@/lib/agenda/secretaria/aplicar");
+      conferirEAplicarRelato.mockRejectedValue(new RelatoIncoerente(["Fulano Sintetico está marcado(a) num dia que o mesmo relato fecha."]));
+      const erro = await rodar(sim).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(erro?.message).toMatch(/horários contraditórios/);
+      expect(erro?.message).not.toMatch(/Fulano/);
+    });
+
+    it("dono da agenda não definido NÃO vira erro: o turno responde a ela o que falta", async () => {
+      conferirEAplicarRelato.mockRejectedValue(new Error("dono_da_agenda_nao_definido"));
+      await expect(rodar(sim)).resolves.toBeDefined();
+      expect(runBeforeSend.mock.calls[0]?.[0].body).toMatch(/falta uma configuração/);
+    });
+  });
+
   it("payload fora do contrato: falha alto (não processa lixo)", async () => {
     const { pool } = poolFalso();
     const ruim = { ...job, payload: { conversation_id: "nao-e-uuid" } } as unknown as JobRow;

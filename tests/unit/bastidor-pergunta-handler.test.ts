@@ -10,7 +10,11 @@ vi.mock("@/lib/agent-engine/edge/llm/run-model-call", () => ({ runModelCall: (..
 
 import { createBastidorTurnHandler } from "@/lib/agent-engine/agent/bastidor-turn";
 import type { JobRow } from "@/lib/agent-engine/queue/queue";
-import { TEXTO_DO_LEMBRETE_DA_PERGUNTA, textoDaPergunta } from "@/lib/bastidor/secretaria/textos";
+import {
+  TEXTO_DO_LEMBRETE_DA_CONFERENCIA,
+  TEXTO_DO_LEMBRETE_DA_PERGUNTA,
+  textoDaPergunta,
+} from "@/lib/bastidor/secretaria/textos";
 
 /**
  * O job do CRON das perguntas diárias (sem mensagem dela): perguntar ou lembrar a agenda. Aqui se prova o que é do
@@ -46,6 +50,8 @@ interface Mundo {
   settings?: unknown;
   /** Linha de `agenda_perguntas` para o lembrete: respondeu ou não; `null` = a pergunta não existe mais. */
   respondeu?: boolean | null;
+  /** O resumo do lembrete de conferência ainda espera o "sim"? `null` = o relato não existe (nesta organização). */
+  aguardando?: boolean | null;
 }
 
 function poolFalso(m: Mundo = {}) {
@@ -55,6 +61,9 @@ function poolFalso(m: Mundo = {}) {
     sqls.push(sql);
     if (sql.includes("from agenda_perguntas")) {
       return { rows: m.respondeu === null ? [] : [{ respondeu: m.respondeu ?? false }] };
+    }
+    if (sql.includes("from agenda_relatos")) {
+      return { rows: m.aguardando === null ? [] : [{ aguardando: m.aguardando ?? true }] };
     }
     if (sql.includes("from contacts")) return { rows: contato ? [contato] : [] };
     if (sql.includes("from organizations")) {
@@ -153,6 +162,53 @@ describe("lembrar", () => {
   it("a PERGUNTA não consulta resposta (só o lembrete consulta)", async () => {
     const sqls = await rodar(jobDe("perguntar"));
     expect(sqls.some((s) => s.includes("from agenda_perguntas"))).toBe(false);
+  });
+});
+
+describe("lembrar de CONFIRMAR o resumo (no lugar da pergunta, com um resumo esperando o 'sim')", () => {
+  const RELATO = "0be7a70a-0000-4000-8000-0000000000aa";
+  const jobDoResumo = (criado: Date = AGORA): JobRow =>
+    ({
+      id: "job-c",
+      organization_id: ORG,
+      contact_id: CONTATO,
+      kind: "bastidor_turn",
+      created_at: criado,
+      payload: { conversation_id: CONVERSA, contact_id: CONTATO, channel_session_id: SESSAO, acao: "lembrar_conferencia", relato_id: RELATO },
+    }) as unknown as JobRow;
+
+  it("resumo ainda esperando: manda o texto fixo como agenda_lembrete (o tipo AUTOMÁTICO), sem modelo", async () => {
+    const sqls = await rodar(jobDoResumo(), { aguardando: true });
+    expect(runModelCall).not.toHaveBeenCalled();
+    expect(runBeforeSend.mock.calls[0]?.[0]).toMatchObject({
+      bastidor: { tipo: "agenda_lembrete" },
+      body: TEXTO_DO_LEMBRETE_DA_CONFERENCIA,
+    });
+    // A consulta filtra pela organização e pela secretaria do job, e usa o relógio injetado.
+    const consulta = sqls.find((s) => s.includes("from agenda_relatos"))!;
+    expect(consulta).toMatch(/organization_id = \$1/);
+    expect(consulta).toMatch(/contact_id = \$2/);
+  });
+
+  it("ela já respondeu, o resumo foi confirmado/corrigido ou venceu: não envia", async () => {
+    await rodar(jobDoResumo(), { aguardando: false });
+    expect(runBeforeSend).not.toHaveBeenCalled();
+  });
+
+  it("o relato não existe (ou é de outra organização): não envia", async () => {
+    await rodar(jobDoResumo(), { aguardando: null });
+    expect(runBeforeSend).not.toHaveBeenCalled();
+  });
+
+  it("pedido velho na fila (worker parado mais de 2 h): não envia", async () => {
+    await rodar(jobDoResumo(new Date(AGORA.getTime() - 121 * 60_000)), { aguardando: true });
+    expect(runBeforeSend).not.toHaveBeenCalled();
+  });
+
+  it("o texto pede o 'sim' ou a correção, sem cobrar", () => {
+    expect(TEXTO_DO_LEMBRETE_DA_CONFERENCIA).toMatch(/falta só você confirmar o resumo/i);
+    expect(TEXTO_DO_LEMBRETE_DA_CONFERENCIA).toMatch(/\*sim\*/);
+    expect(TEXTO_DO_LEMBRETE_DA_CONFERENCIA).toMatch(/corrigir/);
   });
 });
 

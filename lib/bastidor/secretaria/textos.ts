@@ -60,6 +60,13 @@ export function textoDaPergunta(horario: string): string {
 export const TEXTO_DO_LEMBRETE_DA_PERGUNTA =
   "Só relembrando a agenda: quando puder, me conta quem está marcado. Assim consigo oferecer horários certos aos pacientes.";
 
+/**
+ * O lembrete de CONFIRMAR o resumo (uma vez por resumo), que ocupa o lugar da pergunta diária enquanto um resumo
+ * espera o "sim": ela já contou a agenda, perguntar de novo faria a conversa andar para trás.
+ */
+export const TEXTO_DO_LEMBRETE_DA_CONFERENCIA =
+  "Falta só você confirmar o resumo da agenda que te mandei: responda *sim* se estiver certo, ou me diga o que corrigir.";
+
 /** Perguntas de volta, uma por linha. Nunca grava nada. */
 export function textoDeDuvida(perguntas: readonly string[]): string {
   if (perguntas.length === 1) return `Para não errar a agenda, preciso confirmar uma coisa:\n${perguntas[0]}`;

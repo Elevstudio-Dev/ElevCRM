@@ -42,6 +42,8 @@ function portasFalsas(over: Partial<PortasDaSecretaria> = {}) {
     conversa: vi.fn(async () => CONVERSA),
     enfileirar: vi.fn(async (p) => registro("enfileirar")(p.acao, p.dia, p.horario)),
     avisarAdmin: vi.fn(async (...a) => registro("aviso")(...a)),
+    resumoPendente: vi.fn(async () => null),
+    enfileirarLembreteDaConferencia: vi.fn(async (relatoId: string) => (registro("lembrete_conferencia")(relatoId), true)),
     ...over,
   };
   return { portas, chamadas };
@@ -198,6 +200,80 @@ describe("isolamento", () => {
 
   it("sem nenhuma secretaria ativa: tick vazio", async () => {
     const r = await tick(sp(TERCA, "08:30"), {}, []).rodar();
-    expect(r).toEqual({ secretarias: 0, perguntadas: 0, dispensadas: 0, lembradas: 0, avisos: 0, respondidas: 0, erros: 0 });
+    expect(r).toEqual({
+      secretarias: 0,
+      perguntadas: 0,
+      dispensadas: 0,
+      lembradas: 0,
+      conferenciasLembradas: 0,
+      avisos: 0,
+      respondidas: 0,
+      erros: 0,
+    });
+  });
+});
+
+describe("com um RESUMO esperando o 'sim' (relato `lido` com menos de 12 h)", () => {
+  // O caso de produção: o resumo saiu, ela respondeu (o job falhou ou ainda não rodou) e o cron mandou "Antes de
+  // encerrar o dia: como ficou a agenda…" e "Só relembrando…" POR CIMA. A pergunta nova faz a conversa andar para
+  // trás: ela já contou a agenda, só falta confirmar.
+  const RESUMO = { relatoId: "relato-1", criadoEm: sp(TERCA, "17:50") };
+
+  it("na hora de uma pergunta: NÃO pergunta (grava 'dispensada') e manda UM lembrete de confirmar o resumo", async () => {
+    const { portas, chamadas } = portasFalsas({ resumoPendente: vi.fn(async () => RESUMO) });
+    const r = await tick(sp(TERCA, "18:15"), { "contato-a": portas }, [SEC("a")]).rodar();
+    expect(chamadas).toEqual([`registrar:${TERCA}/18:15/dispensada`, "lembrete_conferencia:relato-1"]);
+    expect(portas.enfileirar).not.toHaveBeenCalled();
+    expect(portas.enfileirarLembreteDaConferencia).toHaveBeenCalledWith("relato-1", CONVERSA);
+    expect(r).toMatchObject({ perguntadas: 0, dispensadas: 1, conferenciasLembradas: 1 });
+  });
+
+  it("no máximo UM lembrete por resumo: se ele já foi enfileirado (a fila recusa a repetição), não conta de novo", async () => {
+    const { portas } = portasFalsas({
+      resumoPendente: vi.fn(async () => RESUMO),
+      enfileirarLembreteDaConferencia: vi.fn(async () => false),
+    });
+    const r = await tick(sp(TERCA, "18:15"), { "contato-a": portas }, [SEC("a")]).rodar();
+    expect(portas.enfileirar).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ perguntadas: 0, conferenciasLembradas: 0 });
+  });
+
+  it("na hora do LEMBRETE de uma pergunta feita por cima do resumo (antes deste conserto): não manda o 'Só relembrando…'; manda o de confirmar", async () => {
+    const { portas } = portasFalsas({
+      resumoPendente: vi.fn(async () => ({ relatoId: "relato-1", criadoEm: sp(TERCA, "13:50") })),
+      feitasHoje: vi.fn(async () => [pedida("14:00", "14:00")]),
+    });
+    const r = await tick(sp(TERCA, "14:30"), { "contato-a": portas }, [SEC("a")]).rodar();
+    expect(portas.marcarLembrete).not.toHaveBeenCalled();
+    expect(portas.enfileirar).not.toHaveBeenCalled();
+    expect(portas.enfileirarLembreteDaConferencia).toHaveBeenCalledTimes(1);
+    expect(r).toMatchObject({ lembradas: 0, conferenciasLembradas: 1 });
+  });
+
+  it("fora da hora de uma pergunta: não manda nada (o lembrete do resumo só ocupa o lugar de uma mensagem que sairia)", async () => {
+    const { portas } = portasFalsas({ resumoPendente: vi.fn(async () => RESUMO) });
+    await tick(sp(TERCA, "17:55"), { "contato-a": portas }, [SEC("a")]).rodar();
+    expect(portas.enfileirarLembreteDaConferencia).not.toHaveBeenCalled();
+    expect(portas.enfileirar).not.toHaveBeenCalled();
+  });
+
+  it("o resumo tem mais de 12 h (venceu): as perguntas voltam ao normal", async () => {
+    const { portas } = portasFalsas({
+      resumoPendente: vi.fn(async () => ({ relatoId: "velho", criadoEm: sp("2026-11-16", "18:00") })),
+    });
+    const r = await tick(sp(TERCA, "08:30"), { "contato-a": portas }, [SEC("a")]).rodar();
+    expect(portas.enfileirar).toHaveBeenCalledWith({ acao: "perguntar", dia: TERCA, horario: "08:30", conversa: CONVERSA });
+    expect(portas.enfileirarLembreteDaConferencia).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ perguntadas: 1, conferenciasLembradas: 0 });
+  });
+
+  it("o aviso ao administrador segue valendo (ele não fala com a secretaria)", async () => {
+    const { portas } = portasFalsas({
+      resumoPendente: vi.fn(async () => ({ relatoId: "relato-1", criadoEm: sp(TERCA, "08:00") })),
+      feitasHoje: vi.fn(async () => [pedida("08:30", "08:30", { lembretePedidoEm: sp(TERCA, "09:00") })]),
+    });
+    const r = await tick(sp(TERCA, "09:30"), { "contato-a": portas }, [SEC("a")]).rodar();
+    expect(portas.avisarAdmin).toHaveBeenCalledWith("sem_resposta", TERCA, "08:30");
+    expect(r.avisos).toBe(1);
   });
 });
