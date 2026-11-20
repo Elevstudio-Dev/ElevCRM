@@ -24,6 +24,18 @@ export const TEXTO_DO_NAO = "Sem problema! O que está diferente? Me diga o que 
 export const TEXTO_SEM_NADA_PARA_CONFERIR =
   "Não tenho nenhuma agenda esperando conferência agora. Me conta como está a agenda quando puder.";
 
+/** Ela respondeu a um resumo que já passou da validade (12 h): nada foi aplicado e ela precisa saber disso. */
+export const TEXTO_RESUMO_VENCIDO =
+  "Esse resumo da agenda já venceu (passou mais de 12 horas) e eu não atualizei nada com ele. Me manda a agenda de novo, por favor, que eu confiro com você.";
+
+/**
+ * O "sim" veio depois de uma mensagem de alguém da equipe, não do agente: pode ser resposta a ela. O resumo volta,
+ * inteiro, com a pergunta — e o próximo "sim" confirma.
+ */
+export function textoDeConfirmarOResumo(resumo: string): string {
+  return `Só para eu não errar a agenda: esse *sim* é para este resumo?\n\n${resumo}`;
+}
+
 export const TEXTO_FALTA_CONFIGURAR =
   "Não consegui salvar a agenda agora: falta uma configuração no sistema. Peça à equipe do CRM para conferir.";
 

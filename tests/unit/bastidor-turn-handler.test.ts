@@ -73,7 +73,8 @@ const job = {
 interface Mundo {
   contato?: { papel_interno: string | null; is_blocked: boolean; is_anonymized: boolean } | null;
   settings?: unknown;
-  mensagens?: Array<{ body: string | null; media_derived_text: string | null }>;
+  mensagens?: Array<{ body: string | null; media_derived_text: string | null; quando?: Date }>;
+  fronteira?: { quando: Date; job_kind: string | null } | null;
   pendente?: { id: string; lido: unknown; created_at: Date } | null;
   jaRegistrado?: { id: string; estado: string; lido: unknown } | null;
   fusoDaJornada?: string | null;
@@ -98,8 +99,14 @@ function poolFalso(m: Mundo = {}) {
     if (sql.includes("from attendant_availability")) {
       return { rows: m.fusoDaJornada ? [{ tz: m.fusoDaJornada }] : [] };
     }
+    if (sql.includes("from messages") && sql.includes("direction = 'outbound'")) {
+      // A fronteira (última resposta nossa): por padrão, o resumo do agente.
+      const f = m.fronteira === undefined ? { quando: new Date(AGORA.getTime() - 3_600_000), job_kind: "bastidor_turn" } : m.fronteira;
+      return { rows: f ? [f] : [] };
+    }
     if (sql.includes("from messages") && sql.includes("direction = 'inbound'")) {
-      return { rows: m.mensagens ?? [{ body: "terça 14h Maria", media_derived_text: null }] };
+      const rows = m.mensagens ?? [{ body: "terça 14h Maria", media_derived_text: null }];
+      return { rows: rows.map((r) => ({ quando: AGORA, ...r })) };
     }
     if (sql.includes("from agenda_relatos") && sql.includes("estado = 'lido'")) {
       return { rows: m.pendente ? [m.pendente] : [] };
@@ -260,6 +267,27 @@ describe("bastidor_turn — o 'sim' e a correção", () => {
     expect(conferirEAplicarRelato).toHaveBeenCalledWith({ fake: true }, { organizationId: ORG, relatoId: "pend", agora: AGORA });
     expect(runModelCall).not.toHaveBeenCalled();
     expect(runBeforeSend.mock.calls[0]?.[0].body).toContain("agenda atualizada");
+  });
+
+  it("o 'sim' dado 10 min depois do resumo vale mesmo com o job rodando 20 h depois (validade medida até a RESPOSTA)", async () => {
+    const criado = new Date(AGORA.getTime() - 20 * 3_600_000);
+    await rodar({
+      mensagens: [{ body: "Sim", media_derived_text: null, quando: new Date(criado.getTime() + 10 * 60_000) }],
+      pendente: { ...PENDENTE, created_at: criado },
+    });
+    expect(descartarRelato).not.toHaveBeenCalled();
+    expect(conferirEAplicarRelato).toHaveBeenCalledTimes(1);
+  });
+
+  it("'sim' depois de mensagem HUMANA: não aplica, reenvia o resumo perguntando (o relato continua esperando)", async () => {
+    await rodar({
+      mensagens: [{ body: "sim", media_derived_text: null }],
+      pendente: PENDENTE,
+      fronteira: { quando: new Date(AGORA.getTime() - 60_000), job_kind: null },
+    });
+    expect(conferirEAplicarRelato).not.toHaveBeenCalled();
+    expect(descartarRelato).not.toHaveBeenCalled();
+    expect(runBeforeSend.mock.calls[0]?.[0].body).toMatch(/esse \*sim\* é para este resumo/);
   });
 
   it("correção: registra o novo resumo e marca o antigo como corrigido", async () => {

@@ -46,6 +46,7 @@ import { runModelCall } from '../edge/llm/run-model-call';
 import { withFields } from '../obs/logger';
 import type { JobRow } from '../queue/queue';
 import { enviarAoBastidor, fusoDaAgenda } from './bastidor-envio';
+import { lerMensagensDesdeAUltimaResposta } from './bastidor-mensagens';
 import {
   executarTrabalhoDaReserva,
   tratarRespostaDaReserva,
@@ -80,9 +81,6 @@ export const perguntaDaAgendaPayloadSchema = z
 
 /** Pergunta que esperou na fila mais que isto (worker parado) não vale mais: "bom dia" às 15h é fora de propósito. */
 const VALIDADE_DO_PEDIDO_DE_PERGUNTA_MS = TOLERANCIA_DA_PERGUNTA_MIN * 60_000;
-
-/** Quantas mensagens em rajada entram num turno. Mais que isso é conversa, não rajada. */
-const MAXIMO_DE_MENSAGENS_POR_TURNO = 15;
 
 interface LinhaDoContato {
   papel_interno: string | null;
@@ -176,7 +174,14 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
     if (payload === null) throw new Error('bastidor_turn: payload nem de pergunta nem de mensagem — inalcançável');
 
     const fuso = await fusoDaAgenda(pool, tenantId, config.dono_da_agenda_user_id, orgRows[0]?.timezone ?? null);
-    const texto = await lerMensagensDesdeAUltimaResposta(pool, tenantId, payload.conversation_id);
+    // Rajada junta ("terça 14h Maria" / "e 15h João"): o drain pula o evento superado e o turno da última lê as duas.
+    // A fronteira ignora as mensagens AUTOMÁTICAS de agenda (ver `bastidor-mensagens.ts`): o "sim" dado antes de um
+    // lembrete do cron não se perde.
+    const { texto, respondeuEm, ultimaRespostaNossa } = await lerMensagensDesdeAUltimaResposta(
+      pool,
+      tenantId,
+      payload.conversation_id,
+    );
     const pendente = await lerResumoPendente(pool, tenantId, leadId);
     const jaRegistrado = await lerRelatoDestaMensagem(pool, tenantId, payload.inbound_message_id);
 
@@ -205,6 +210,8 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
       agora,
       fuso,
       texto,
+      respondeuEm,
+      ultimaRespostaNossa,
       pendente,
       jaRegistrado,
       lerComModelo: async (prompt) => {
@@ -319,37 +326,6 @@ async function tratarPerguntaDaAgenda(a: PerguntaDaAgenda): Promise<void> {
     tipo: pedido.acao === 'perguntar' ? 'agenda_pergunta' : 'agenda_lembrete',
     agora,
   });
-}
-
-/**
- * O que ela escreveu desde a última coisa que NÓS enviamos nesta conversa, em ordem. É o que faz duas mensagens
- * seguidas ("terça 14h Maria" / "e 15h João") serem lidas juntas: o drain pula o evento superado e o turno da
- * última lê as duas. Áudio entra pela transcrição.
- */
-async function lerMensagensDesdeAUltimaResposta(
-  pool: pg.Pool,
-  tenantId: string,
-  conversationId: string,
-): Promise<string> {
-  const { rows } = await pool.query<{ body: string | null; media_derived_text: string | null }>(
-    `select body, media_derived_text from (
-       select body, media_derived_text, coalesce(sent_at, created_at) as quando, created_at
-         from messages
-        where organization_id = $1 and conversation_id = $2 and direction = 'inbound'
-          and coalesce(sent_at, created_at) > coalesce(
-                (select max(coalesce(sent_at, created_at)) from messages
-                  where organization_id = $1 and conversation_id = $2 and direction = 'outbound'),
-                'epoch'::timestamptz)
-        order by quando desc, created_at desc
-        limit $3
-     ) recentes
-     order by quando asc, created_at asc`,
-    [tenantId, conversationId, MAXIMO_DE_MENSAGENS_POR_TURNO],
-  );
-  return rows
-    .map((r) => (r.body ?? '').trim() || (r.media_derived_text ?? '').trim())
-    .filter((t) => t !== '')
-    .join('\n');
 }
 
 /** O resumo mais recente que ainda espera o "sim" (estado `lido`). */

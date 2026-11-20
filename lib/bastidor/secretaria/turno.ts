@@ -12,13 +12,15 @@
  *   "sim"                                      sim → aplica na agenda e confirma
  *   "não"                                      sim → pergunta o que corrigir (o resumo continua esperando)
  *   qualquer outra coisa                       sim → relê COMO CORREÇÃO do resumo; novo resumo para conferir
- *   "sim"/"não" sem nada esperando             — → "não tenho nada esperando"
+ *   "sim" depois de mensagem HUMANA            sim → reenvia o resumo perguntando se o "sim" é para ele
+ *   "sim"/"não" sem nada esperando             — → "não tenho nada esperando" (ou "esse resumo já venceu")
  *   qualquer outra coisa                       não → lê como relato novo
  *
  * Três regras que não se negociam:
  *  1. A agenda SÓ muda no "sim" inequívoco (`interpretarRespostaDeConferencia` é conservadora de propósito).
  *  2. Dúvida vira pergunta, nunca palpite: o relato com ambiguidade nem é registrado.
- *  3. Resumo velho não vale: um "sim" 12 horas depois do resumo não confirma nada (a agenda mudou nesse meio tempo).
+ *  3. Resumo velho não vale: um "sim" dado 12 horas depois do resumo não confirma nada (a agenda mudou nesse meio
+ *     tempo). As 12 horas vão até o instante em que ELA respondeu, não até o job rodar.
  */
 import type { RelatoLido } from "@/lib/agenda/secretaria/relato";
 import { resumoParaConferencia } from "@/lib/agenda/secretaria/relato";
@@ -32,8 +34,10 @@ import {
   TEXTO_NAO_ENTENDI_A_AGENDA,
   TEXTO_NAO_ENTENDI_A_MENSAGEM,
   TEXTO_OUTRO_ASSUNTO,
+  TEXTO_RESUMO_VENCIDO,
   TEXTO_SEM_NADA_PARA_CONFERIR,
   textoDeAgendaAtualizada,
+  textoDeConfirmarOResumo,
   textoDeDuvida,
 } from "./textos";
 
@@ -50,8 +54,19 @@ export interface Portas {
   agora: Date;
   /** Fuso da agenda (o da jornada do dono; senão o da organização). */
   fuso: string;
-  /** O que ela escreveu desde a última resposta nossa, na ordem (mensagens em rajada juntas). Vazio = não leu nada. */
+  /**
+   * O que ela escreveu desde a última resposta nossa, na ordem (mensagens em rajada juntas). Vazio = não leu nada.
+   * "Resposta nossa" NÃO inclui as mensagens automáticas de agenda do cron (pergunta, lembrete): ver
+   * `lib/agent-engine/agent/bastidor-mensagens.ts`.
+   */
   texto: string;
+  /** Quando ela mandou a última mensagem de `texto`. É até AQUI que a validade do resumo é medida. Nulo = agora. */
+  respondeuEm: Date | null;
+  /**
+   * Quem escreveu a última resposta nossa antes do `texto`. Um "sim" depois de uma mensagem HUMANA (alguém da equipe
+   * escreveu do aparelho) pode ser resposta a ela, não ao resumo: nesse caso o resumo é reenviado com a pergunta.
+   */
+  ultimaRespostaNossa: "bastidor" | "humana" | "nenhuma";
   /** Resumo esperando conferência, se houver. */
   pendente: RelatoPendente | null;
   /** Relato que ESTA mesma mensagem já gerou numa tentativa anterior do job (replay). */
@@ -70,7 +85,10 @@ export interface Portas {
 export type DesfechoDoTurno =
   | { acao: "agenda_conferida"; resultado: ResultadoDaConferencia }
   | { acao: "resumo_enviado"; relatoId: string; corrigiu: boolean; replay: boolean }
-  | { acao: "perguntou"; motivo: "duvida" | "ilegivel" | "nao" | "sem_texto" | "sem_nada_para_conferir" }
+  | {
+      acao: "perguntou";
+      motivo: "duvida" | "ilegivel" | "nao" | "sem_texto" | "sem_nada_para_conferir" | "resumo_vencido" | "confirmar_resumo";
+    }
   | { acao: "outro_assunto" }
   | { acao: "falta_configurar" };
 
@@ -89,15 +107,26 @@ export async function executarTurnoDaSecretaria(p: Portas): Promise<DesfechoDoTu
     return { acao: "perguntou", motivo: "sem_texto" };
   }
 
+  // A validade é medida até quando ELA RESPONDEU: um "sim" dado 8 minutos depois do resumo continua valendo se o job
+  // só rodar no dia seguinte (fila parada, falha e reprocessamento). Sem o instante da resposta, mede até agora.
   let pendente = p.pendente;
-  if (pendente && idadeEmHoras(pendente.criadoEm, p.agora) > VALIDADE_DO_RESUMO_HORAS) {
+  let venceu = false;
+  if (pendente && idadeEmHoras(pendente.criadoEm, p.respondeuEm ?? p.agora) > VALIDADE_DO_RESUMO_HORAS) {
     await p.descartar(pendente.id);
     pendente = null;
+    venceu = true;
   }
 
   const resposta = interpretarRespostaDeConferencia(p.texto);
 
   if (pendente) {
+    if (resposta === "sim" && p.ultimaRespostaNossa !== "bastidor") {
+      // O "sim" veio depois de uma mensagem HUMANA (ou o resumo nem chegou a sair): pode ser resposta a outra coisa.
+      // A agenda só muda no "sim" inequívoco — então o resumo volta, com a pergunta, e o relato continua esperando.
+      // O próximo "sim" vem depois desta mensagem do agente e confirma.
+      await p.enviar(textoDeConfirmarOResumo(resumoParaConferencia(pendente.lido, p.fuso)));
+      return { acao: "perguntou", motivo: "confirmar_resumo" };
+    }
     if (resposta === "sim") {
       try {
         const resultado = await p.conferir(pendente.id);
@@ -116,6 +145,12 @@ export async function executarTurnoDaSecretaria(p: Portas): Promise<DesfechoDoTu
       return { acao: "perguntou", motivo: "nao" };
     }
   } else if (resposta !== "outro") {
+    // Havia um resumo, mas ela respondeu tarde demais: dizer "não tenho nada esperando" faria ela achar que a agenda
+    // já estava atualizada. Diz que venceu e pede a agenda de novo.
+    if (venceu) {
+      await p.enviar(TEXTO_RESUMO_VENCIDO);
+      return { acao: "perguntou", motivo: "resumo_vencido" };
+    }
     await p.enviar(TEXTO_SEM_NADA_PARA_CONFERIR);
     return { acao: "perguntou", motivo: "sem_nada_para_conferir" };
   }
