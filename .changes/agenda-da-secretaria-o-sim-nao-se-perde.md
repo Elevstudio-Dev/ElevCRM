@@ -1,0 +1,7 @@
+---
+impacto: nada_mudou
+secao: corrigido
+titulo: 'Agenda da secretária: o "sim" dela volta a atualizar a agenda'
+---
+
+Na clínica, a agenda ficou mais de 24 horas sem atualizar e a IA de vendas parou de oferecer horários. Três defeitos em cadeia: quando a secretária trocava o paciente de um mesmo horário, gravar a agenda falhava por "horário repetido" e a tentativa morria; a pergunta do fim do dia e o lembrete do sistema chegavam por cima do resumo, e o "sim" que ela tinha dado antes deixava de ser lido; e um "sim" dado a tempo passava a contar como resumo vencido se fosse processado no dia seguinte. Agora a troca de paciente no mesmo horário é aplicada (o antigo sai antes de o novo entrar, e volta se a gravação falhar); um horário já ocupado por uma consulta marcada pela IA ou pela equipe não é tocado e é avisado à secretária na confirmação; o "sim" vale mesmo com mensagens automáticas no meio, com as 12 horas contadas até a hora em que ela respondeu; um resumo vencido de verdade é avisado como vencido; e, com um resumo esperando o "sim", o sistema não pergunta a agenda de novo, só lembra uma vez de confirmar. Se o "sim" ainda assim não puder ser aplicado, a Central de avisos diz isso com o motivo e o que fazer. Para reaplicar uma resposta que já ficou para trás, há um script de operação descrito em `docs/runbooks/agenda-da-secretaria.md`. Há testes contra o banco real reproduzindo o caso de produção.
