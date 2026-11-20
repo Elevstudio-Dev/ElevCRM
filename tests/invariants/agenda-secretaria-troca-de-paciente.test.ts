@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import pg from "pg";
 
 import { aplicarRelato } from "@/lib/agenda/secretaria/aplicar";
+import { situacaoDaAgendaDaSecretaria } from "@/lib/agenda/secretaria/atualidade";
 import { conferirEAplicarRelato } from "@/lib/agenda/secretaria/relatos";
 import type { RelatoLido } from "@/lib/agenda/secretaria/relato";
 
@@ -89,7 +90,7 @@ beforeEach(async () => {
   await pool.query(`delete from agenda_relatos where organization_id = $1`, [ORG]);
   await pool.query(
     `insert into agenda_relatos (id, organization_id, texto, lido, janela_de, janela_ate, estado, conferido_em)
-     values ($1, $2, 'relato antigo', '{}'::jsonb, '2026-11-18', '2026-11-20', 'conferido', now())`,
+     values ($1, $2, 'relato antigo', '{}'::jsonb, '2026-11-18', '2026-11-20', 'conferido', '2026-11-10T12:00:00Z')`,
     [RELATO_VELHO, ORG],
   );
   await pool.query(
@@ -187,6 +188,84 @@ describe("o caso de produção: o relato novo troca o paciente de um MESMO horá
     // E rodar de novo, com o banco bom, aplica.
     const r = await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA });
     expect(r).toMatchObject({ criados: 2, cancelados: 3 });
+  });
+});
+
+describe("um 'sim' processado tarde não faz a agenda parecer fresca (I1)", () => {
+  it("'sim' respondido 20 h antes do job: aplica, carimba conferido_em = hora da resposta, e a IA de vendas NÃO oferece hoje", async () => {
+    const respondeuEm = new Date(AGORA.getTime() - 20 * 3_600_000);
+    const r = await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA, respondeuEm });
+    expect(r).toMatchObject({ criados: 2, cancelados: 3 }); // o espelho é aplicado
+    const { rows } = await pool.query<{ estado: string; conferido_em: Date }>(
+      `select estado, conferido_em from agenda_relatos where id = $1`,
+      [RELATO_NOVO],
+    );
+    expect(rows[0]!.estado).toBe("conferido");
+    expect(rows[0]!.conferido_em.toISOString()).toBe(respondeuEm.toISOString());
+
+    // A decisão de verdade (banco + config padrão: 6 h para hoje, 24 h para o futuro): só os próximos dias…
+    expect((await situacaoDaAgendaDaSecretaria(db, ORG, AGORA)).estado).toBe("sem_hoje");
+    // …e, passadas 24 h da RESPOSTA, nada.
+    expect((await situacaoDaAgendaDaSecretaria(db, ORG, new Date(AGORA.getTime() + 5 * 3_600_000))).estado).toBe(
+      "desatualizada",
+    );
+  });
+
+  it("sem a hora da resposta (chamador antigo): carimba agora, como antes", async () => {
+    await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA });
+    expect((await situacaoDaAgendaDaSecretaria(db, ORG, AGORA)).estado).toBe("atual");
+  });
+});
+
+describe("o MESMO paciente já marcado pela IA de vendas no horário (I2): sem espelho e sem conflito falso", () => {
+  const CONTATO_PACIENTE = "a9e4da00-0000-4000-8000-0000000000e1";
+
+  beforeEach(async () => {
+    await pool.query(
+      `insert into contacts (id, organization_id, display_name) values ($1, $2, 'Hélio Sintético') on conflict (id) do nothing`,
+      [CONTATO_PACIENTE, ORG],
+    );
+  });
+
+  async function marcadoPelaIA(titulo: string, contato: string | null) {
+    await pool.query(
+      `insert into calendar_appointments
+         (organization_id, title, starts_at, ends_at, time_zone, status, owner_user_id, contact_id, created_by_kind, source)
+       values ($1, $2, $3::timestamptz, $3::timestamptz + interval '30 minutes', $4, 'confirmed', $5, $6, 'ai', 'mcp')`,
+      [ORG, titulo, H_VENDAS, FUSO, DONO, contato],
+    );
+  }
+  const comHelio = async (nome: string) =>
+    pool.query(`update agenda_relatos set lido = $2::jsonb where id = $1`, [
+      RELATO_NOVO,
+      JSON.stringify({ ...RELATO_NOVO_LIDO, marcados: [...RELATO_NOVO_LIDO.marcados, { nome, inicio: H_VENDAS }] }),
+    ]);
+
+  it("pelo nome do CONTATO (título genérico) e com acento/caixa diferentes: silencioso, nenhum espelho no horário", async () => {
+    await marcadoPelaIA("Avaliação", CONTATO_PACIENTE);
+    await comHelio("HELIO");
+    const r = await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA });
+    expect(r.conflitos).toEqual([]);
+    expect(r.criados).toBe(2); // só C e D; o Hélio já estava
+    const { rows } = await pool.query<{ n: number }>(
+      `select count(*)::int as n from calendar_appointments where organization_id = $1 and starts_at = $2 and status = 'confirmed'`,
+      [ORG, H_VENDAS],
+    );
+    expect(rows[0]!.n).toBe(1);
+  });
+
+  it("pelo TÍTULO (sem contato): silencioso", async () => {
+    await marcadoPelaIA("Avaliação - Hélio Sintético", null);
+    await comHelio("hélio");
+    expect((await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA })).conflitos).toEqual([]);
+  });
+
+  it("ocupante sem título útil e sem contato, ou outra pessoa: conflito avisado", async () => {
+    await marcadoPelaIA("Avaliação", null);
+    await comHelio("Hélio");
+    expect((await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA })).conflitos).toEqual([
+      { inicio: H_VENDAS, nome: "Hélio", porque: "outro_compromisso" },
+    ]);
   });
 });
 

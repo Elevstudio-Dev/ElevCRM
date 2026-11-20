@@ -15,7 +15,12 @@
  *
  * Uma secretaria que quebra NÃO derruba as outras do mesmo tick.
  */
-import { planejarPerguntas, type AcaoDaPergunta, type PerguntaFeita } from "./perguntas";
+import {
+  ESPERA_ANTES_DO_AVISO_DO_RESUMO_MIN,
+  planejarPerguntas,
+  type AcaoDaPergunta,
+  type PerguntaFeita,
+} from "./perguntas";
 import { VALIDADE_DO_RESUMO_HORAS } from "./turno";
 import type { ConfigDaSecretaria } from "@/lib/agenda/secretaria/config";
 import { diaLocalISO } from "@/lib/agenda/fuso";
@@ -65,6 +70,13 @@ export interface PortasDaSecretaria {
    * segundo lembrete do mesmo resumo (é a idempotência de "no máximo um por resumo").
    */
   enfileirarLembreteDaConferencia(relatoId: string, conversa: ConversaDaSecretaria): Promise<boolean>;
+  /** Quando o lembrete de confirmar ESTE resumo foi processado (job concluído), ou nulo se ainda não. */
+  lembreteDaConferenciaEnviadoEm(relatoId: string): Promise<Date | null>;
+  /**
+   * Abre UM aviso na Central (`agenda_sem_resposta`) de que o resumo continua sem confirmação. `true` só se esta
+   * chamada abriu: um por resumo.
+   */
+  avisarResumoSemConfirmacao(relatoId: string): Promise<boolean>;
 }
 
 export interface PortasDoTick {
@@ -144,7 +156,7 @@ async function tickDeUmaSecretaria(p: PortasDoTick, sec: SecretariaAtiva, r: Res
   // agenda…") ou lembrar a pergunta faria a conversa andar para trás — e cada mensagem nossa por cima do resumo
   // empurrava o "sim" dela para longe (o defeito de produção). No lugar: a pergunta é dispensada, o lembrete dela
   // não sai, e vai NO MÁXIMO UM lembrete de confirmar o resumo.
-  const pendente = acoes.some((a) => a.tipo === "perguntar" || a.tipo === "lembrar") ? await portas.resumoPendente() : null;
+  const pendente = await portas.resumoPendente();
   const aguardandoSim =
     pendente !== null && agora.getTime() - pendente.criadoEm.getTime() < VALIDADE_DO_RESUMO_HORAS * 3_600_000;
 
@@ -176,6 +188,25 @@ async function tickDeUmaSecretaria(p: PortasDoTick, sec: SecretariaAtiva, r: Res
     } catch (erro) {
       r.erros += 1;
       p.registrarErro("lembrar_conferencia", erro);
+    }
+  }
+
+  // O resumo continua sem confirmação DUAS HORAS depois do lembrete (e ainda não venceu): as perguntas do dia estão
+  // suspensas, então o aviso "a secretária não respondeu" nunca nasceria por elas. Avisa o administrador UMA vez por
+  // resumo — a IA de vendas está sem horário para oferecer e alguém precisa saber.
+  if (aguardandoSim && pendente !== null) {
+    try {
+      const lembradoEm = await portas.lembreteDaConferenciaEnviadoEm(pendente.relatoId);
+      if (
+        lembradoEm !== null &&
+        agora.getTime() - lembradoEm.getTime() >= ESPERA_ANTES_DO_AVISO_DO_RESUMO_MIN * 60_000 &&
+        (await portas.avisarResumoSemConfirmacao(pendente.relatoId))
+      ) {
+        r.avisos += 1;
+      }
+    } catch (erro) {
+      r.erros += 1;
+      p.registrarErro("avisar_resumo_sem_confirmacao", erro);
     }
   }
 }

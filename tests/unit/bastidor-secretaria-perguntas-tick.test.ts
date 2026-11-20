@@ -44,6 +44,8 @@ function portasFalsas(over: Partial<PortasDaSecretaria> = {}) {
     avisarAdmin: vi.fn(async (...a) => registro("aviso")(...a)),
     resumoPendente: vi.fn(async () => null),
     enfileirarLembreteDaConferencia: vi.fn(async (relatoId: string) => (registro("lembrete_conferencia")(relatoId), true)),
+    lembreteDaConferenciaEnviadoEm: vi.fn(async () => null),
+    avisarResumoSemConfirmacao: vi.fn(async (relatoId: string) => (registro("aviso_resumo")(relatoId), true)),
     ...over,
   };
   return { portas, chamadas };
@@ -265,6 +267,53 @@ describe("com um RESUMO esperando o 'sim' (relato `lido` com menos de 12 h)", ()
     expect(portas.enfileirar).toHaveBeenCalledWith({ acao: "perguntar", dia: TERCA, horario: "08:30", conversa: CONVERSA });
     expect(portas.enfileirarLembreteDaConferencia).not.toHaveBeenCalled();
     expect(r).toMatchObject({ perguntadas: 1, conferenciasLembradas: 0 });
+  });
+
+  describe("o resumo segue sem confirmação depois do lembrete (M2)", () => {
+    const resumo = { relatoId: "relato-1", criadoEm: sp(TERCA, "13:50") };
+
+    it("2 h depois do lembrete, ainda lido e dentro das 12 h: abre UM aviso na Central (a IA está sem horários)", async () => {
+      const { portas, chamadas } = portasFalsas({
+        resumoPendente: vi.fn(async () => resumo),
+        lembreteDaConferenciaEnviadoEm: vi.fn(async () => sp(TERCA, "14:00")),
+      });
+      const r = await tick(sp(TERCA, "16:00"), { "contato-a": portas }, [SEC("a")]).rodar();
+      expect(chamadas).toContain("aviso_resumo:relato-1");
+      expect(r.avisos).toBe(1);
+    });
+
+    it("1h59 depois: ainda não avisa", async () => {
+      const { portas } = portasFalsas({
+        resumoPendente: vi.fn(async () => resumo),
+        lembreteDaConferenciaEnviadoEm: vi.fn(async () => sp(TERCA, "14:01")),
+      });
+      await tick(sp(TERCA, "16:00"), { "contato-a": portas }, [SEC("a")]).rodar();
+      expect(portas.avisarResumoSemConfirmacao).not.toHaveBeenCalled();
+    });
+
+    it("o lembrete ainda não saiu: não avisa", async () => {
+      const { portas } = portasFalsas({ resumoPendente: vi.fn(async () => resumo) });
+      await tick(sp(TERCA, "20:00"), { "contato-a": portas }, [SEC("a")]).rodar();
+      expect(portas.avisarResumoSemConfirmacao).not.toHaveBeenCalled();
+    });
+
+    it("já avisado para este resumo (a porta devolve falso): não conta de novo", async () => {
+      const { portas } = portasFalsas({
+        resumoPendente: vi.fn(async () => resumo),
+        lembreteDaConferenciaEnviadoEm: vi.fn(async () => sp(TERCA, "14:00")),
+        avisarResumoSemConfirmacao: vi.fn(async () => false),
+      });
+      expect((await tick(sp(TERCA, "16:30"), { "contato-a": portas }, [SEC("a")]).rodar()).avisos).toBe(0);
+    });
+
+    it("o resumo venceu (12 h): não avisa (o caminho passa a ser a pergunta diária de novo)", async () => {
+      const { portas } = portasFalsas({
+        resumoPendente: vi.fn(async () => ({ relatoId: "velho", criadoEm: sp("2026-11-16", "18:00") })),
+        lembreteDaConferenciaEnviadoEm: vi.fn(async () => sp("2026-11-16", "18:15")),
+      });
+      await tick(sp(TERCA, "16:00"), { "contato-a": portas }, [SEC("a")]).rodar();
+      expect(portas.avisarResumoSemConfirmacao).not.toHaveBeenCalled();
+    });
   });
 
   it("o aviso ao administrador segue valendo (ele não fala com a secretaria)", async () => {

@@ -187,14 +187,66 @@ describe("planejarSincronizacao — o MESMO horário (a falha de produção)", (
   it("horário ocupado por compromisso que NÃO é de relato (IA de vendas, marcação à mão): não cria o espelho, devolve o conflito e não cancela nada dele", () => {
     const p = plano({
       relato: relato({ marcados: [{ nome: "Beltrano", inicio: "2026-11-18T16:00:00-03:00" }] }),
-      ocupadosForaDoRelato: [new Date("2026-11-18T19:00:00Z")],
+      ocupadosForaDoRelato: [{ inicio: new Date("2026-11-18T19:00:00Z"), nomes: ["Avaliação - Sicrano", "Sicrano Souza"] }],
     });
     expect(p.criar).toEqual([]);
+    expect(p.jaNaAgenda).toEqual([]);
     expect(p.cancelarIds).toEqual([]);
     expect(p.substituirIds).toEqual([]);
     expect(p.conflitos).toEqual([
       { inicio: new Date("2026-11-18T19:00:00Z"), nome: "Beltrano", porque: "outro_compromisso" },
     ]);
+  });
+
+  describe("o ocupante que não é de relato é o MESMO paciente (ex.: a IA de vendas marcou) — I2", () => {
+    const BELTRANO = { nome: "Beltrano", inicio: "2026-11-18T16:00:00-03:00" };
+    const as16h = new Date("2026-11-18T19:00:00Z");
+
+    it("título do compromisso contém o nome do relato: 'já está na agenda' — sem espelho e SEM conflito", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Avaliação - Beltrano Silva", ""] }],
+      });
+      expect(p.criar).toEqual([]);
+      expect(p.conflitos).toEqual([]);
+      expect(p.jaNaAgenda.map((c) => c.nome)).toEqual(["Beltrano"]);
+    });
+
+    it("o nome do CONTATO casa mesmo com título genérico", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Avaliação", "Beltrano"] }],
+      });
+      expect(p.conflitos).toEqual([]);
+      expect(p.jaNaAgenda).toHaveLength(1);
+    });
+
+    it("acento e caixa não importam ('JOÃO' no relato, 'joao pedro' no contato)", () => {
+      const p = plano({
+        relato: relato({ marcados: [{ nome: "JOÃO", inicio: "2026-11-18T16:00:00-03:00" }] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Consulta", "joao pedro"] }],
+      });
+      expect(p.conflitos).toEqual([]);
+      expect(p.jaNaAgenda).toHaveLength(1);
+    });
+
+    it("ocupante sem título nem contato: é OUTRA pessoa até prova em contrário — conflito avisado", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["", ""] }],
+      });
+      expect(p.jaNaAgenda).toEqual([]);
+      expect(p.conflitos).toMatchObject([{ nome: "Beltrano", porque: "outro_compromisso" }]);
+    });
+
+    it("outra pessoa no horário continua conflito avisado", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Avaliação - Fulano", "Fulano"] }],
+      });
+      expect(p.conflitos).toHaveLength(1);
+      expect(p.jaNaAgenda).toEqual([]);
+    });
   });
 
   it("horário de um compromisso de relato que JÁ PASSOU (histórico, não é cancelado): o novo do mesmo horário é conflito, não erro", () => {
@@ -229,7 +281,7 @@ describe("planejarSincronizacao — o MESMO horário (a falha de produção)", (
         { nome: "Beltrano", inicio: "2026-11-18T16:00:00-03:00" },
       ],
     });
-    const ocupadosForaDoRelato = [new Date("2026-11-18T19:00:00Z")];
+    const ocupadosForaDoRelato = [{ inicio: new Date("2026-11-18T19:00:00Z"), nomes: ["Outra Pessoa"] }];
     const primeiro = plano({ relato: r, ocupadosForaDoRelato });
     const segundo = plano({
       relato: r,

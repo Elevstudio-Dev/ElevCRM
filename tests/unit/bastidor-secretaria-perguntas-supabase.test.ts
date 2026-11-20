@@ -277,6 +277,38 @@ describe("o resumo esperando o 'sim' e o lembrete de confirmar", () => {
   });
 });
 
+describe("o resumo sem confirmação depois do lembrete (M2)", () => {
+  it("lembreteDaConferenciaEnviadoEm: o job concluído DESTE resumo, na organização", async () => {
+    const { admin, chamadas } = clienteFalso(() => ({ data: [{ created_at: "2026-11-17T17:00:00Z" }] }));
+    expect(await portasDoTickNoSupabase(admin, semErro).portasDe(SEC).lembreteDaConferenciaEnviadoEm("rel-1")).toEqual(
+      new Date("2026-11-17T17:00:00Z"),
+    );
+    expect(chamadas[0]!.passos).toEqual(
+      expect.arrayContaining([
+        ["eq", "organization_id", "org-1"],
+        ["eq", "source_event_id", "rel-1"],
+        ["eq", "status", "done"],
+      ]),
+    );
+  });
+
+  it("avisarResumoSemConfirmacao: um item agenda_sem_resposta POR RESUMO, em português, sem nome de paciente", async () => {
+    const { admin, chamadas } = clienteFalso((c) => (passo(c, "select") ? { data: [] } : {}));
+    expect(await portasDoTickNoSupabase(admin, semErro).portasDe(SEC).avisarResumoSemConfirmacao("rel-1")).toBe(true);
+    const linha = passo(chamadas.find((c) => passo(c, "insert"))!, "insert")![1] as Record<string, string>;
+    expect(linha).toMatchObject({ kind: "agenda_sem_resposta", severity: "warn", ref_kind: "agenda_relatos", ref_id: "rel-1" });
+    expect(linha.title).toMatch(/não confirmou o resumo da agenda/);
+    expect(linha.body).toMatch(/a IA não oferece horários/);
+    expect(linha.body).toMatch(/O que fazer/);
+  });
+
+  it("já existe aviso para este resumo: não abre outro", async () => {
+    const { admin, chamadas } = clienteFalso((c) => (passo(c, "select") ? { data: [{ id: "x" }] } : {}));
+    expect(await portasDoTickNoSupabase(admin, semErro).portasDe(SEC).avisarResumoSemConfirmacao("rel-1")).toBe(false);
+    expect(chamadas.some((c) => passo(c, "insert"))).toBe(false);
+  });
+});
+
 describe("avisar o administrador", () => {
   it("abre UM cartão agenda_sem_resposta na Central de avisos, ligado ao contato", async () => {
     const { admin, chamadas } = clienteFalso((c) => (passo(c, "select") ? { data: [] } : {}));

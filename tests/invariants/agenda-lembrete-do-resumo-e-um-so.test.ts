@@ -48,6 +48,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await pool.query("delete from agent_inbox_items where organization_id = $1", [ORG]);
   await pool.query("delete from job_queue where organization_id = $1", [ORG]);
   await pool.end();
 });
@@ -67,5 +68,24 @@ describe("o lembrete de confirmar o resumo", () => {
       { kind: "bastidor_turn", acao: "lembrar_conferencia", relato: RELATO_1, status: "pending" },
       { kind: "bastidor_turn", acao: "lembrar_conferencia", relato: RELATO_2, status: "pending" },
     ]);
+  });
+
+  it("M2: o lembrete só conta como enviado quando o job CONCLUIU; o aviso à Central é UM por resumo (aberto ou resolvido)", async () => {
+    expect(await portas().lembreteDaConferenciaEnviadoEm(RELATO_1)).toBeNull(); // ainda pendente
+    await pool.query(`update job_queue set status = 'done' where organization_id = $1 and source_event_id = $2`, [ORG, RELATO_1]);
+    expect(await portas().lembreteDaConferenciaEnviadoEm(RELATO_1)).toBeInstanceOf(Date);
+
+    expect(await portas().avisarResumoSemConfirmacao(RELATO_1)).toBe(true);
+    expect(await portas().avisarResumoSemConfirmacao(RELATO_1)).toBe(false);
+    await pool.query(`update agent_inbox_items set status = 'resolved' where organization_id = $1`, [ORG]);
+    expect(await portas().avisarResumoSemConfirmacao(RELATO_1)).toBe(false); // resolvido não reabre
+    expect(await portas().avisarResumoSemConfirmacao(RELATO_2)).toBe(true); // outro resumo, outro aviso
+
+    const { rows } = await pool.query<{ kind: string; ref_kind: string; title: string }>(
+      `select kind, ref_kind, title from agent_inbox_items where organization_id = $1 order by created_at`,
+      [ORG],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.kind === "agenda_sem_resposta" && r.ref_kind === "agenda_relatos")).toBe(true);
   });
 });

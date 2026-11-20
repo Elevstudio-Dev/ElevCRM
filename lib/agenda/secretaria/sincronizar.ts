@@ -57,6 +57,27 @@ export interface ConflitoDeHorario {
   porque: "outro_compromisso" | "horario_ja_ocupado";
 }
 
+/** Um compromisso que não nasceu de relato, ocupando um início. */
+export interface OcupanteForaDoRelato {
+  inicio: Date;
+  /** Título do compromisso e nome do contato (quando há). Vazios são ignorados. */
+  nomes: string[];
+}
+
+/**
+ * O ocupante é o MESMO paciente que o relato lista? O nome normalizado do relato (sem acento, sem caixa — a mesma
+ * normalização dos "mantidos") igual a, ou contido em, algum nome normalizado do ocupante. Ex.: o relato diz "Maria"
+ * e a IA de vendas marcou "Avaliação - Maria Souza". Nome vazio nunca casa (ocupante sem título é "outra pessoa").
+ */
+export function mesmoPaciente(nomeDoRelato: string, nomesDoOcupante: readonly string[]): boolean {
+  const alvo = normalizarNome(nomeDoRelato);
+  if (alvo === "") return false;
+  return nomesDoOcupante.some((n) => {
+    const o = normalizarNome(n ?? "");
+    return o !== "" && o.includes(alvo);
+  });
+}
+
 export interface PlanoDeSincronizacao {
   criar: NovoCompromisso[];
   cancelarIds: string[];
@@ -70,6 +91,11 @@ export interface PlanoDeSincronizacao {
   fecharDias: Array<{ data: string; motivo: string | null }>;
   reabrirIds: string[];
   conflitos: ConflitoDeHorario[];
+  /**
+   * Do relato, mas JÁ na agenda por outro caminho: o horário é de um compromisso que não é de relato e é o MESMO
+   * paciente (a IA de vendas marcou). Não vira espelho nem conflito: não há nada a avisar à secretaria.
+   */
+  jaNaAgenda: NovoCompromisso[];
 }
 
 const chaveDe = (nome: string, inicio: Date): string => `${normalizarNome(nome)}|${inicio.toISOString()}`;
@@ -79,8 +105,11 @@ export function planejarSincronizacao(entrada: {
   existentes: CompromissoDoRelato[];
   /** Dias fechados que um relato criou e que caem na janela. */
   fechamentosExistentes: FechamentoDoRelato[];
-  /** O início dos compromissos VIVOS do mesmo dono, na janela, que NÃO nasceram de relato. Nunca são tocados. */
-  ocupadosForaDoRelato?: Date[];
+  /**
+   * Os compromissos VIVOS do mesmo dono, na janela, que NÃO nasceram de relato (IA de vendas, mão). Nunca são tocados.
+   * `nomes`: o título e, se houver, o nome do contato — para reconhecer que é o MESMO paciente que o relato lista.
+   */
+  ocupadosForaDoRelato?: OcupanteForaDoRelato[];
   relato: RelatoLido;
   fuso: string;
   /** Duração do atendimento, para quando a secretaria só disse a hora de início. */
@@ -122,7 +151,11 @@ export function planejarSincronizacao(entrada: {
   //    - compromisso de relato que NÃO vai ser cancelado (mantido, ou passado): fica (conflito `horario_ja_ocupado`);
   //    - compromisso de relato que VAI ser cancelado: libera o horário — e, se alguém novo entra nele, é substituição.
   const cancelar = new Set(cancelarIds);
-  const deOutro = new Set(ocupadosForaDoRelato.map((d) => d.getTime()));
+  const deOutro = new Map<number, string[]>();
+  for (const o of ocupadosForaDoRelato) {
+    const t = o.inicio.getTime();
+    deOutro.set(t, [...(deOutro.get(t) ?? []), ...o.nomes]);
+  }
   const deQuemFica = new Set(existentes.filter((e) => !cancelar.has(e.id)).map((e) => e.inicio.getTime()));
   const liberadosPor = new Map<number, string[]>();
   for (const e of existentes) {
@@ -133,11 +166,17 @@ export function planejarSincronizacao(entrada: {
 
   const criar: NovoCompromisso[] = [];
   const conflitos: ConflitoDeHorario[] = [];
+  const jaNaAgenda: NovoCompromisso[] = [];
   const substituir = new Set<string>();
   const tomados = new Set<number>();
   for (const c of aCriar) {
     const t = c.inicio.getTime();
-    if (deOutro.has(t)) {
+    const ocupante = deOutro.get(t);
+    if (ocupante !== undefined && mesmoPaciente(c.nome, ocupante)) {
+      jaNaAgenda.push(c);
+      continue;
+    }
+    if (ocupante !== undefined) {
       conflitos.push({ inicio: c.inicio, nome: c.nome, porque: "outro_compromisso" });
       continue;
     }
@@ -159,7 +198,7 @@ export function planejarSincronizacao(entrada: {
     .map(([data, motivo]) => ({ data, motivo }));
   const reabrirIds = fechamentosExistentes.filter((f) => !fechadosNoRelato.has(f.data)).map((f) => f.id);
 
-  return { criar, cancelarIds, substituirIds, manterIds, fecharDias, reabrirIds, conflitos };
+  return { criar, cancelarIds, substituirIds, manterIds, fecharDias, reabrirIds, conflitos, jaNaAgenda };
 }
 
 /** O motivo gravado na exceção: o prefixo (que diz "veio de um relato") e, se houver, o que a secretaria disse. */

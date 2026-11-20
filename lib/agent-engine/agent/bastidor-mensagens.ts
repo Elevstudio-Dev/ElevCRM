@@ -72,6 +72,26 @@ export async function resumoAindaEsperaOSim(
   return rows[0]?.aguardando === true;
 }
 
+/**
+ * Há um resumo DELA esperando o "sim" (relato `lido` com menos de `validadeHoras`)? A mesma regra que o cron usa para
+ * não perguntar por cima do resumo (`perguntas-tick.ts`), rechecada no handler na hora de ENVIAR a pergunta: um
+ * pedido de pergunta que entrou na fila logo antes de o resumo nascer não pode sair depois dele.
+ */
+export async function haResumoEsperandoOSim(
+  pool: pg.Pool,
+  a: { tenantId: string; contactId: string; agora: Date; validadeHoras: number },
+): Promise<boolean> {
+  const { rows } = await pool.query<{ pendente: boolean }>(
+    `select exists (
+       select 1 from agenda_relatos r
+        where r.organization_id = $1 and r.contact_id = $2 and r.estado = 'lido'
+          and r.created_at > $3::timestamptz - make_interval(hours => $4::int)
+     ) as pendente`,
+    [a.tenantId, a.contactId, a.agora.toISOString(), a.validadeHoras],
+  );
+  return rows[0]?.pendente === true;
+}
+
 const UUID = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 
 export async function lerMensagensDesdeAUltimaResposta(

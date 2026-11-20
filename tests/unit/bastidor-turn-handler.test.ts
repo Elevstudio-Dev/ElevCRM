@@ -264,7 +264,10 @@ describe("bastidor_turn — o 'sim' e a correção", () => {
 
   it("'sim' aplica o relato na agenda e confirma — sem chamar o modelo", async () => {
     await rodar({ mensagens: [{ body: "sim", media_derived_text: null }], pendente: PENDENTE });
-    expect(conferirEAplicarRelato).toHaveBeenCalledWith({ fake: true }, { organizationId: ORG, relatoId: "pend", agora: AGORA });
+    expect(conferirEAplicarRelato).toHaveBeenCalledWith(
+      { fake: true },
+      { organizationId: ORG, relatoId: "pend", agora: AGORA, respondeuEm: AGORA },
+    );
     expect(runModelCall).not.toHaveBeenCalled();
     expect(runBeforeSend.mock.calls[0]?.[0].body).toContain("agenda atualizada");
   });
@@ -277,6 +280,11 @@ describe("bastidor_turn — o 'sim' e a correção", () => {
     });
     expect(descartarRelato).not.toHaveBeenCalled();
     expect(conferirEAplicarRelato).toHaveBeenCalledTimes(1);
+    // O carimbo da conferência vai ser o instante da RESPOSTA, não o do job (I1: agenda velha não parece fresca).
+    expect(conferirEAplicarRelato.mock.calls[0]?.[1]).toMatchObject({
+      agora: AGORA,
+      respondeuEm: new Date(criado.getTime() + 10 * 60_000),
+    });
   });
 
   it("'sim' depois de mensagem HUMANA: não aplica, reenvia o resumo perguntando (o relato continua esperando)", async () => {
@@ -444,6 +452,19 @@ describe("bastidor_turn — falhas", () => {
       );
       expect(erro?.message).toMatch(/horários contraditórios/);
       expect(erro?.message).not.toMatch(/Fulano/);
+      // Nem pela CAUSA: ela viaja com o erro (Sentry, log estruturado) e a mensagem do relato incoerente cita nomes.
+      expect(erro?.cause).toBeUndefined();
+      expect(JSON.stringify(erro, Object.getOwnPropertyNames(erro ?? {}))).not.toMatch(/Fulano/);
+    });
+
+    it("erro técnico (não-incoerente) mantém a causa, para quem investiga", async () => {
+      const original = new Error("criar compromissos do relato: duplicate key value");
+      conferirEAplicarRelato.mockRejectedValue(original);
+      const erro = await rodar(sim).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(erro?.cause).toBe(original);
     });
 
     it("dono da agenda não definido NÃO vira erro: o turno responde a ela o que falta", async () => {

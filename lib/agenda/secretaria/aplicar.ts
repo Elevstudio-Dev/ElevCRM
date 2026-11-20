@@ -26,9 +26,10 @@
  *    relato continua `lido` e reexecutar recria o horário (o antigo já está cancelado, então o plano manda criar).
  *
  * 4. **Não pisa no que não é dele.** Horário ocupado por compromisso que NÃO nasceu de relato (IA de vendas,
- *    marcação à mão) não é cancelado nem alterado: o espelho daquele horário simplesmente não é criado e volta como
- *    `conflitos`, para a resposta à secretaria dizer qual horário não foi anotado. A hora continua tomada (por
- *    outra coisa), então a agenda nunca fica com menos.
+ *    marcação à mão) não é cancelado nem alterado: o espelho daquele horário simplesmente não é criado. Se o ocupante
+ *    é o MESMO paciente que o relato lista (título ou nome do contato contém o nome do relato), está tudo certo e
+ *    nada é dito; se é outra pessoa, volta como `conflitos`, para a resposta à secretaria dizer qual horário não foi
+ *    anotado. A hora continua tomada, então a agenda nunca fica com menos.
  *
  * O compromisso nasce sem contato e sem tipo: não é uma consulta de um paciente do CRM, é uma hora tomada. Sem
  * contato, o lembrete ao paciente nem arma (`portas-supabase.ts` só trata o que tem contato e tipo).
@@ -128,7 +129,7 @@ export async function aplicarRelato(
   //     único compara). Nunca é tocado — serve para o plano não tentar criar um espelho em cima.
   const { data: outros, error: erroOutros } = await admin
     .from("calendar_appointments")
-    .select("starts_at")
+    .select("starts_at, title, contact_id")
     .eq("organization_id", organizationId)
     .eq("owner_user_id", donoUserId)
     .is("origem_relato_id", null)
@@ -136,7 +137,26 @@ export async function aplicarRelato(
     .gte("starts_at", inicio.toISOString())
     .lt("starts_at", fim.toISOString());
   if (erroOutros) falhou("ler compromissos fora do relato", erroOutros);
-  const ocupadosForaDoRelato = ((outros ?? []) as Array<{ starts_at: string }>).map((l) => new Date(l.starts_at));
+  const linhasDeOutros = (outros ?? []) as Array<{ starts_at: string; title: string | null; contact_id: string | null }>;
+  // O nome do contato (quando o compromisso tem contato, como os da IA de vendas): é por ele que se reconhece que o
+  // ocupante é o MESMO paciente que o relato lista — aí não há conflito a avisar.
+  const idsDeContato = [...new Set(linhasDeOutros.map((l) => l.contact_id).filter((id): id is string => id !== null))];
+  const nomeDoContato = new Map<string, string>();
+  if (idsDeContato.length > 0) {
+    const { data: contatos, error: erroContatos } = await admin
+      .from("contacts")
+      .select("id, display_name")
+      .eq("organization_id", organizationId)
+      .in("id", idsDeContato);
+    if (erroContatos) falhou("ler os contatos dos compromissos fora do relato", erroContatos);
+    for (const c of (contatos ?? []) as Array<{ id: string; display_name: string | null }>) {
+      if (c.display_name) nomeDoContato.set(c.id, c.display_name);
+    }
+  }
+  const ocupadosForaDoRelato = linhasDeOutros.map((l) => ({
+    inicio: new Date(l.starts_at),
+    nomes: [l.title ?? "", l.contact_id ? (nomeDoContato.get(l.contact_id) ?? "") : ""],
+  }));
 
   // 2. Os dias que um relato fechou, dentro da janela.
   const { data: fechados, error: erroFechados } = await admin

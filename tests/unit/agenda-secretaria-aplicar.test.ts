@@ -282,6 +282,34 @@ describe("aplicarRelato — a troca de paciente no MESMO horário (a falha de pr
   });
 });
 
+describe("aplicarRelato — o ocupante é o MESMO paciente (I2)", () => {
+  const foraDoRelato = (c: Chamada) =>
+    c.tabela === "calendar_appointments" && c.op === "select" && c.filtros.some(([m, col]) => m === "is" && col === "origem_relato_id");
+
+  it("o nome do CONTATO do compromisso (lido na organização) casa com o relato: nada é criado nem avisado", async () => {
+    const { admin, chamadas } = registrador((c) => {
+      if (foraDoRelato(c)) return { data: [{ starts_at: "2026-11-18T17:00:00Z", title: "Avaliação", contact_id: "ct-1" }] };
+      if (c.tabela === "contacts") return { data: [{ id: "ct-1", display_name: "Maria Aparecida" }] };
+      return { data: [] };
+    });
+    const r = await aplicar(admin, relato());
+    expect(r).toMatchObject({ criados: 0, conflitos: [] });
+    expect(escritas(chamadas)).toEqual([]);
+    const leitura = chamadas.find((c) => c.tabela === "contacts")!;
+    expect(leitura.filtros).toContainEqual(["eq", "organization_id", ORG]);
+    expect(leitura.filtros).toContainEqual(["in", "id", ["ct-1"]]);
+  });
+
+  it("outro paciente no horário: conflito avisado", async () => {
+    const { admin } = registrador((c) => {
+      if (foraDoRelato(c)) return { data: [{ starts_at: "2026-11-18T17:00:00Z", title: "Avaliação", contact_id: "ct-1" }] };
+      if (c.tabela === "contacts") return { data: [{ id: "ct-1", display_name: "Fulano" }] };
+      return { data: [] };
+    });
+    expect((await aplicar(admin, relato())).conflitos).toHaveLength(1);
+  });
+});
+
 describe("aplicarRelato — o que NUNCA chega ao banco", () => {
   it("relato contraditório (marcado num dia que ele mesmo fecha): lança e não escreve nada", async () => {
     const { admin, chamadas } = registrador(() => ({ data: [] }));

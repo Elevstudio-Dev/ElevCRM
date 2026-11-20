@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import pg from "pg";
 
-import { lerMensagensDesdeAUltimaResposta, resumoAindaEsperaOSim } from "@/lib/agent-engine/agent/bastidor-mensagens";
+import {
+  haResumoEsperandoOSim,
+  lerMensagensDesdeAUltimaResposta,
+  resumoAindaEsperaOSim,
+} from "@/lib/agent-engine/agent/bastidor-mensagens";
 
 /**
  * O "SIM" QUE SE PERDIA — a leitura das mensagens da secretaria contra o Postgres de verdade.
@@ -135,7 +139,7 @@ describe("o que CONTA como resposta nossa (fronteira)", () => {
   it("mensagem HUMANA depois do resumo é fronteira — e o turno sabe que foi humana", async () => {
     await saidaDoAgente("Entendi assim: … Está certo?", t(0));
     await entrada("ok, vou ver", t(2));
-    await saidaHumana("Cris, a paciente das 10h confirmou?", t(5));
+    await saidaHumana("Oi, a paciente das 10h confirmou?", t(5));
     await entrada("sim", t(6));
     const r = await ler();
     expect(r.texto).toBe("sim");
@@ -213,5 +217,18 @@ describe("a guarda do lembrete 'falta só você confirmar o resumo' (resumoAinda
 
   it("de outra organização: não espera", async () => {
     expect(await espera(t(60), "5e5e0000-0000-4000-8000-0000000000ff")).toBe(false);
+  });
+
+  it("haResumoEsperandoOSim (a guarda da PERGUNTA no handler): lido < 12 h desta secretária; não com 12 h+, conferido ou outra org", async () => {
+    const ha = (agora: Date, org = ORG) =>
+      haResumoEsperandoOSim(pool, { tenantId: org, contactId: SECRETARIA, agora, validadeHoras: 12 });
+    expect(await ha(t(60))).toBe(true);
+    // Ela já respondeu (o "sim" do turno que falhou): ainda é resumo esperando — a pergunta continua não saindo.
+    await entrada("Sim", t(8));
+    expect(await ha(t(60))).toBe(true);
+    expect(await ha(t(12 * 60 + 1))).toBe(false);
+    expect(await ha(t(60), "5e5e0000-0000-4000-8000-0000000000ff")).toBe(false);
+    await pool.query(`update agenda_relatos set estado = 'conferido', conferido_em = now() where id = $1`, [RELATO]);
+    expect(await ha(t(60))).toBe(false);
   });
 });

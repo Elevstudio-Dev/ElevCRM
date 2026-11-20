@@ -51,7 +51,7 @@ import { runModelCall } from '../edge/llm/run-model-call';
 import { withFields } from '../obs/logger';
 import { PREFIXO_DA_AGENDA_NAO_APLICADA, type JobRow } from '../queue/queue';
 import { enviarAoBastidor, fusoDaAgenda } from './bastidor-envio';
-import { lerMensagensDesdeAUltimaResposta, resumoAindaEsperaOSim } from './bastidor-mensagens';
+import { haResumoEsperandoOSim, lerMensagensDesdeAUltimaResposta, resumoAindaEsperaOSim } from './bastidor-mensagens';
 import {
   executarTrabalhoDaReserva,
   tratarRespostaDaReserva,
@@ -281,15 +281,19 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
       // (ver `PREFIXO_DA_AGENDA_NAO_APLICADA` em queue.ts). "Dono não definido" segue cru: o turno responde a ela.
       conferir: async (relatoId) => {
         try {
-          return await conferirEAplicarRelato(admin, { organizationId: tenantId, relatoId, agora });
+          // `respondeuEm`: o carimbo de conferência é o instante da resposta dela, não o do job (ver relatos.ts).
+          return await conferirEAplicarRelato(admin, { organizationId: tenantId, relatoId, agora, respondeuEm });
         } catch (err) {
           if (err instanceof Error && err.message === 'dono_da_agenda_nao_definido') throw err;
           log.warn('bastidor: a agenda confirmada não foi aplicada — o job vai tentar de novo', {
             motivo: motivoDaFalhaDaConferencia(err),
           });
-          throw new Error(`${PREFIXO_DA_AGENDA_NAO_APLICADA} Motivo: ${motivoDaFalhaDaConferencia(err)}`, {
-            cause: err,
-          });
+          // Sem `cause` para o relato incoerente: a mensagem DELE cita nomes de paciente, e a causa viaja junto com o
+          // erro (Sentry, log estruturado). Os outros erros são técnicos e a causa ajuda a investigar.
+          throw new Error(
+            `${PREFIXO_DA_AGENDA_NAO_APLICADA} Motivo: ${motivoDaFalhaDaConferencia(err)}`,
+            err instanceof RelatoIncoerente ? undefined : { cause: err },
+          );
         }
       },
       marcarCorrigido: (relatoId) => marcarRelatoCorrigido(admin, { organizationId: tenantId, relatoId }),
@@ -344,6 +348,15 @@ async function tratarPerguntaDaAgenda(a: PerguntaDaAgenda): Promise<void> {
 
   if (agora.getTime() - a.jobCriadoEm.getTime() > VALIDADE_DO_PEDIDO_DE_PERGUNTA_MS) {
     log.info('bastidor: pedido de pergunta velho demais — não enviado', { acao: pedido.acao, horario: pedido.horario });
+    return;
+  }
+
+  // Um resumo dela esperando o "sim": a pergunta (ou o lembrete dela) não sai por cima — a mesma regra do cron,
+  // rechecada aqui porque o pedido pode ter entrado na fila logo ANTES de o resumo nascer.
+  if (
+    await haResumoEsperandoOSim(pool, { tenantId, contactId: leadId, agora, validadeHoras: VALIDADE_DO_RESUMO_HORAS })
+  ) {
+    log.info('bastidor: pergunta da agenda dispensada — há um resumo esperando o "sim"', { acao: pedido.acao });
     return;
   }
 

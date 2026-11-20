@@ -52,6 +52,8 @@ interface Mundo {
   respondeu?: boolean | null;
   /** O resumo do lembrete de conferência ainda espera o "sim"? `null` = o relato não existe (nesta organização). */
   aguardando?: boolean | null;
+  /** Há um resumo dela esperando o "sim" (relato lido < 12 h)? */
+  resumoPendente?: boolean;
 }
 
 function poolFalso(m: Mundo = {}) {
@@ -61,6 +63,9 @@ function poolFalso(m: Mundo = {}) {
     sqls.push(sql);
     if (sql.includes("from agenda_perguntas")) {
       return { rows: m.respondeu === null ? [] : [{ respondeu: m.respondeu ?? false }] };
+    }
+    if (sql.includes("from agenda_relatos") && sql.includes("as pendente")) {
+      return { rows: [{ pendente: m.resumoPendente ?? false }] };
     }
     if (sql.includes("from agenda_relatos")) {
       return { rows: m.aguardando === null ? [] : [{ aguardando: m.aguardando ?? true }] };
@@ -162,6 +167,25 @@ describe("lembrar", () => {
   it("a PERGUNTA não consulta resposta (só o lembrete consulta)", async () => {
     const sqls = await rodar(jobDe("perguntar"));
     expect(sqls.some((s) => s.includes("from agenda_perguntas"))).toBe(false);
+  });
+});
+
+describe("pergunta enfileirada logo ANTES de o resumo nascer (M1)", () => {
+  it("há um resumo esperando o 'sim' na hora de enviar: a pergunta NÃO sai", async () => {
+    const sqls = await rodar(jobDe("perguntar"), { resumoPendente: true });
+    expect(runBeforeSend).not.toHaveBeenCalled();
+    const consulta = sqls.find((s) => s.includes("as pendente"))!;
+    expect(consulta).toMatch(/organization_id = \$1 and r\.contact_id = \$2 and r\.estado = 'lido'/);
+  });
+
+  it("o lembrete da pergunta também não sai", async () => {
+    await rodar(jobDe("lembrar"), { resumoPendente: true, respondeu: false });
+    expect(runBeforeSend).not.toHaveBeenCalled();
+  });
+
+  it("sem resumo esperando: a pergunta sai como sempre", async () => {
+    await rodar(jobDe("perguntar"), { resumoPendente: false });
+    expect(runBeforeSend).toHaveBeenCalledTimes(1);
   });
 });
 

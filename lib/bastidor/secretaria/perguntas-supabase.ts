@@ -257,6 +257,46 @@ export function portasDoTickNoSupabase(
           return true;
         },
 
+        async lembreteDaConferenciaEnviadoEm(relatoId) {
+          // O job do lembrete é único por resumo (`source_event_id` = relato). Concluído = o handler tratou.
+          const { data: linhas, error: e } = await admin
+            .from("job_queue")
+            .select("created_at")
+            .eq("organization_id", organizationId)
+            .eq("source_event_id", relatoId)
+            .eq("kind", "bastidor_turn")
+            .eq("status", "done")
+            .limit(1);
+          erro("job_queue", e);
+          const quando = (linhas?.[0] as { created_at: string } | undefined)?.created_at;
+          return quando ? new Date(quando) : null;
+        },
+
+        async avisarResumoSemConfirmacao(relatoId) {
+          // Um aviso por RESUMO (aberto ou já resolvido): `ref` aponta para o relato, não para o contato.
+          const { data: ja, error: eJa } = await admin
+            .from("agent_inbox_items")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("kind", "agenda_sem_resposta")
+            .eq("ref_kind", "agenda_relatos")
+            .eq("ref_id", relatoId)
+            .limit(1);
+          erro("agent_inbox_items", eJa);
+          if ((ja ?? []).length > 0) return false;
+          const { error: e } = await admin.from("agent_inbox_items").insert({
+            organization_id: organizationId,
+            kind: "agenda_sem_resposta",
+            severity: "warn",
+            title: "A secretária ainda não confirmou o resumo da agenda",
+            body: `${sec.nome ?? "A secretária"} recebeu o resumo da agenda e o lembrete, mas ainda não respondeu "sim" nem corrigiu. Enquanto a agenda não for confirmada, a IA não oferece horários aos pacientes e chama a equipe. O que fazer: peça para ela conferir o resumo no WhatsApp e responder "sim" (ou dizer o que corrigir), ou mandar a agenda de novo.`,
+            ref_kind: "agenda_relatos",
+            ref_id: relatoId,
+          });
+          erro("agent_inbox_items", e);
+          return true;
+        },
+
         async avisarAdmin(motivo: MotivoDoAviso, dia, horario) {
           // Um aviso ABERTO por pergunta: o mesmo tick não empilha cartões iguais na Central de avisos.
           const refId = contactId;
