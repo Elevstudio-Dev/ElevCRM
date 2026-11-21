@@ -52,7 +52,9 @@ nada. Em alguns segundos o worker processa, ela recebe "Pronto, agenda atualizad
 
 **Avisos da Central sobre a agenda.** Se o resumo continua sem "sim" duas horas depois do lembrete de confirmar (e ela
 não escreveu nada depois do resumo), abre um aviso *"A secretária ainda não confirmou o resumo da agenda"*. Ele fecha
-sozinho quando o resumo é confirmado, corrigido, descartado ou vence (12 h).
+sozinho quando o resumo é confirmado, corrigido, descartado ou vence (12 h). Decisão consciente: QUALQUER mensagem
+dela depois do resumo (mesmo um "ok" que não confirma nada) cala esse aviso — ela não está calada, e quem cobre um
+"sim" que falhou ao ser aplicado é o aviso "A agenda que a secretária confirmou não foi aplicada".
 
 **Risco aceito: uma instância do cron.** As guardas "uma pergunta por horário", "um lembrete por resumo" e "um aviso
 por resumo" contam com o cron das perguntas rodando numa instância só (é como a VPS roda). Duas instâncias ao mesmo

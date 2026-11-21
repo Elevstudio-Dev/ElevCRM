@@ -21,6 +21,8 @@ interface Chamada {
   op: "select" | "insert" | "update" | "delete";
   filtros: Array<[string, ...unknown[]]>;
   payload?: unknown;
+  /** As colunas pedidas no `.select(...)`, quando houve. */
+  colunas?: string;
 }
 type Resposta = { data?: unknown; error?: { message: string; code?: string } | null };
 
@@ -32,6 +34,7 @@ function registrador(responder: (c: Chamada) => Resposta) {
     for (const m of ["eq", "neq", "in", "not", "is", "gte", "lte", "lt", "gt", "like", "order", "limit", "select"]) {
       q[m] = (...a: unknown[]) => {
         if (m !== "select") c.filtros.push([m, ...a]);
+        else if (typeof a[0] === "string") c.colunas = a[0];
         return q;
       };
     }
@@ -308,6 +311,10 @@ describe("aplicarRelato — o ocupante é o MESMO paciente (I2)", () => {
     });
     expect((await aplicar(admin, relato())).conflitos).toEqual([]);
     expect(escritas(chamadas)).toEqual([]);
+    // A leitura do contato pede de fato os DOIS nomes (o registrador devolve o que o teste manda; o pedido é o que
+    // prova que o PostgREST traria `name` em produção).
+    const colunas = (chamadas.find((c) => c.tabela === "contacts")?.colunas ?? "").split(",").map((s) => s.trim());
+    expect(colunas).toEqual(expect.arrayContaining(["name", "display_name"]));
   });
 
   it("outro paciente no horário: conflito avisado", async () => {

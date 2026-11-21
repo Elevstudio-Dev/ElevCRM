@@ -247,6 +247,7 @@ describe("planejarSincronizacao — o MESMO horário (a falha de produção)", (
       ["Ana Paula", ["Ana Paula Souza"], true],
       ["Ana Paula", ["Ana Souza"], false], // falta "paula": não é garantido que seja ela
       ["Paula Ana", ["Ana Paula Souza"], true], // a ordem das palavras não importa
+      ["D'Avila-Souza", ["Avaliação - Maria D'Ávila Souza"], true], // hífen e apóstrofo separam palavras
     ])("palavras INTEIRAS: relato '%s' contra ocupante %j → mesmo paciente = %s", (nome, nomes, mesmo) => {
       expect(mesmoPaciente(nome, nomes)).toBe(mesmo);
     });

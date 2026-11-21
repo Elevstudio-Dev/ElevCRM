@@ -9,6 +9,7 @@
 --   relato   uuid do relato (o resumo) que ela aprovou ├ pelo menos UMA das três
 --   job      uuid do job `bastidor_turn` que morreu    ┘ (o `ref_id` do aviso da Central)
 --   aplicar  0 = só mostra (padrão)   1 = enfileira UM job `bastidor_turn` novo
+--   agora    OPCIONAL, só para teste: o relógio injetado (timestamptz ISO). Ausente ou vazio = `now()` do banco.
 --
 -- O que ESCREVE: no máximo UMA linha em `job_queue` (com `--aplicar`), e só isso. Quem aplica a agenda é o worker,
 -- pelo caminho de sempre (o turno da secretaria): este script não toca em agenda, relato nem mensagem.
@@ -206,16 +207,53 @@ begin
   -- configuração PADRÃO — que tem `ativa = false`, e então o turno da secretaria nem roda. Por isso aqui: valor fora
   -- da faixa, ou secretaria desligada, é recusa (enfileirar um turno que o worker ignoraria só confundiria).
   v_cfg := coalesce(v_settings->'secretaria', '{}'::jsonb);
+  -- Sempre `case`, nunca `and`/`or` para guardar um cast: o SQL não garante a ordem, e o cast de um texto estouraria
+  -- cru em vez de virar a recusa abaixo.
   if not (
-    (v_cfg->'validade_hoje_horas' is null or (jsonb_typeof(v_cfg->'validade_hoje_horas') = 'number'
-       and (v_cfg->>'validade_hoje_horas')::numeric between 0.5 and 24))
-    and (v_cfg->'validade_futuro_horas' is null or (jsonb_typeof(v_cfg->'validade_futuro_horas') = 'number'
-       and (v_cfg->>'validade_futuro_horas')::numeric between 1 and 168))
-    and (v_cfg->'duracao_min' is null or (jsonb_typeof(v_cfg->'duracao_min') = 'number'
-       and (v_cfg->>'duracao_min')::numeric between 5 and 240
-       and (v_cfg->>'duracao_min')::numeric = trunc((v_cfg->>'duracao_min')::numeric)))
+    case when v_cfg->'validade_hoje_horas' is null then true
+         when jsonb_typeof(v_cfg->'validade_hoje_horas') <> 'number' then false
+         else (v_cfg->>'validade_hoje_horas')::numeric between 0.5 and 24 end
+    and case when v_cfg->'validade_futuro_horas' is null then true
+             when jsonb_typeof(v_cfg->'validade_futuro_horas') <> 'number' then false
+             else (v_cfg->>'validade_futuro_horas')::numeric between 1 and 168 end
+    and case when v_cfg->'duracao_min' is null then true
+             when jsonb_typeof(v_cfg->'duracao_min') <> 'number' then false
+             else (v_cfg->>'duracao_min')::numeric between 5 and 240
+                  and (v_cfg->>'duracao_min')::numeric = trunc((v_cfg->>'duracao_min')::numeric) end
   ) then
     raise exception 'Recusado: a configuração da secretaria tem valor fora da faixa (validade_hoje_horas 0,5–24, validade_futuro_horas 1–168, duracao_min 5–240) e o sistema a lê como DESLIGADA. Corrija e rode de novo.';
+  end if;
+  -- Os outros campos que o zod de config.ts valida: um só inválido invalida a configuração INTEIRA no app.
+  if v_cfg->'perguntas' is not null and not (
+    case when jsonb_typeof(v_cfg->'perguntas') <> 'array' then false
+         else jsonb_array_length(v_cfg->'perguntas') between 1 and 6
+              and not exists (
+                select 1 from jsonb_array_elements(v_cfg->'perguntas') h
+                 where case when jsonb_typeof(h) <> 'string' then true
+                            else (h #>> '{}') !~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' end)
+    end
+  ) then
+    raise exception 'Recusado: a configuração da secretaria tem horários de pergunta inválidos (1 a 6 horários HH:MM) e o sistema a lê como DESLIGADA. Corrija e rode de novo.';
+  end if;
+  if v_cfg->'dias' is not null and not (
+    case when jsonb_typeof(v_cfg->'dias') <> 'array' then false
+    else jsonb_array_length(v_cfg->'dias') between 1 and 7
+    and not exists (
+      select 1 from jsonb_array_elements(v_cfg->'dias') d
+       -- `case` e não `or`: o SQL não garante a ordem de um `or`, e o cast de um texto estouraria cru.
+       where case when jsonb_typeof(d) <> 'number' then true
+                  else (d #>> '{}')::numeric not between 0 and 6 or (d #>> '{}')::numeric <> trunc((d #>> '{}')::numeric)
+             end)
+    end
+  ) then
+    raise exception 'Recusado: a configuração da secretaria tem dias da semana inválidos (1 a 7 números de 0 a 6) e o sistema a lê como DESLIGADA. Corrija e rode de novo.';
+  end if;
+  if not (
+    case when v_cfg->'dono_da_agenda_user_id' is null or jsonb_typeof(v_cfg->'dono_da_agenda_user_id') = 'null' then true
+         when jsonb_typeof(v_cfg->'dono_da_agenda_user_id') <> 'string' then false
+         else (v_cfg->>'dono_da_agenda_user_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' end
+  ) then
+    raise exception 'Recusado: o dono da agenda na configuração da secretaria não é um id válido e o sistema lê a configuração como DESLIGADA. Escolha o dono de novo na tela e rode de novo.';
   end if;
   if (v_cfg->'ativa') is distinct from 'true'::jsonb then
     raise exception 'Recusado: a agenda da secretaria não está ligada nesta organização — o turno não rodaria.';
@@ -227,7 +265,8 @@ begin
   select nullif(btrim(a.schedule->>'timezone'), '') into v_fuso
     from attendant_availability a where a.organization_id = v_org and a.user_id = v_dono;
   v_fuso := coalesce(v_fuso, v_org_tz, 'America/Sao_Paulo');
-  v_duracao := coalesce((v_settings->'secretaria'->>'duracao_min')::int, 30);
+  -- `::numeric::int`: o jsonb pode guardar 30 como `30.0`, e `'30.0'::int` é erro cru (já validado como inteiro acima).
+  v_duracao := coalesce((v_cfg->>'duracao_min')::numeric::int, 30);
   v_ini_janela := (v_rel.janela_de::timestamp) at time zone v_fuso;
   v_fim_janela := ((v_rel.janela_ate + 1)::timestamp) at time zone v_fuso;
 

@@ -257,6 +257,57 @@ describe("a prévia (padrão): mostra e NÃO escreve nada", () => {
     expect((await jobs()).filter((j) => j.status === "pending")).toHaveLength(0);
   });
 
+  it.each([
+    ["secretaria,perguntas", ["8h30"], /horários de pergunta inválidos/],
+    ["secretaria,perguntas", [], /horários de pergunta inválidos/],
+    ["secretaria,dias", [7], /dias da semana inválidos/],
+    ["secretaria,dias", ["seg"], /dias da semana inválidos/],
+    ["secretaria,dono_da_agenda_user_id", "nao-e-um-uuid", /dono da agenda .* não é um id válido/],
+    ["secretaria,validade_hoje_horas", "seis", /fora da faixa/],
+  ])("config que o app lê como desligada (%s = %j): 'Recusado:' claro, sem erro cru e sem escrever", async (caminho, valor, motivo) => {
+    await comConfig(caminho, valor, async () => {
+      const r = reprocessar({ job: JOB_MORTO, aplicar: true });
+      expect(r.ok).toBe(false);
+      expect(r.erro).toMatch(/Recusado:/);
+      expect(r.erro).toMatch(motivo);
+    });
+    expect((await jobs()).filter((j) => j.status === "pending")).toHaveLength(0);
+  });
+
+  it("duracao_min guardada como 30.0 no jsonb: aceita (sem erro cru de cast)", async () => {
+    await pool.query(
+      `update organizations set settings = jsonb_set(settings, '{secretaria,duracao_min}', '30.0'::jsonb) where id = $1`,
+      [ORG],
+    );
+    try {
+      const r = reprocessar({ job: JOB_MORTO });
+      expect(r.erro).toBe("");
+      expect(r.ok).toBe(true);
+    } finally {
+      await pool.query(`update organizations set settings = settings #- '{secretaria,duracao_min}' where id = $1`, [ORG]);
+    }
+  });
+
+  it("palavras inteiras na prévia: 'Lia' NÃO casa com 'Avaliação'; hífen e apóstrofo separam palavras", async () => {
+    const outroNome = async (nome: string) =>
+      pool.query(`update agenda_relatos set lido = jsonb_set(lido, '{marcados,0,nome}', to_jsonb($2::text)) where id = $1`, [
+        RELATO,
+        nome,
+      ]);
+    await pool.query(`delete from calendar_appointments where organization_id = $1 and title = 'Paciente A'`, [ORG]);
+    await pool.query(
+      `insert into calendar_appointments (organization_id, title, starts_at, ends_at, owner_user_id, created_by_kind, source)
+       values ($1, 'Avaliação', '2026-11-19T11:30:00Z', '2026-11-19T12:00:00Z', $2, 'ai', 'mcp')`,
+      [ORG, DONO],
+    );
+    await outroNome("Lia");
+    expect(reprocessar({ job: JOB_MORTO }).saida).toContain("19/11 08:30 Lia → NÃO cria");
+
+    await pool.query(`update calendar_appointments set title = 'Avaliação - Maria D''Ávila Souza' where organization_id = $1 and title = 'Avaliação'`, [ORG]);
+    await outroNome("D'Avila-Souza");
+    expect(reprocessar({ job: JOB_MORTO }).saida).toContain("19/11 08:30 D'Avila-Souza → já está na agenda");
+  });
+
   it("secretaria DESLIGADA na organização: recusa", async () => {
     await comConfig("secretaria,ativa", false, async () => {
       const r = reprocessar({ job: JOB_MORTO, aplicar: true });
