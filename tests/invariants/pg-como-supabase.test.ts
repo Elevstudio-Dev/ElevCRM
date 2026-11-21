@@ -110,6 +110,52 @@ describe("o adaptador COMPARA — `lt`/`gt`, não só igualdade", () => {
   });
 });
 
+describe("o adaptador testa NULO — `.is(c, null)` e `.not(c, 'is', null)`", () => {
+  // Nasceram porque o cron `agenda-google-push` filtra `owner_user_id` não nulo
+  // e (agora) `origem_relato_id` nulo. Sem eles o adaptador estourava no
+  // `.not(...)` e o invariante do espelho de relato não chegava a medir nada.
+  // Dois funis na mesma `position` (25: nem `lt` nem `gt` dos outros casos o enxergam), um com `description`, outro sem: os
+  // dois filtros só acertam se cada um separar os dois de verdade.
+  beforeAll(async () => {
+    await pool.query(
+      `insert into crm_pipelines (organization_id, name, slug, position, description) values
+         ($1, 'Com descricao', 'nulo-com-descricao', 25, 'tem texto'),
+         ($1, 'Sem descricao', 'nulo-sem-descricao', 25, null)
+       on conflict do nothing`,
+      [ORG],
+    );
+  });
+
+  it("`.is(c, null)` traz SÓ as linhas de coluna nula", async () => {
+    const { data, error } = await db
+      .from("crm_pipelines")
+      .select("name")
+      .eq("organization_id", ORG)
+      .eq("position", 25)
+      .is("description", null);
+    expect(error).toBeNull();
+    expect((data as Array<{ name: string }>).map((x) => x.name)).toEqual(["Sem descricao"]);
+  });
+
+  it("`.not(c, 'is', null)` traz SÓ as linhas de coluna preenchida — o espelho exato do anterior", async () => {
+    const { data, error } = await db
+      .from("crm_pipelines")
+      .select("name")
+      .eq("organization_id", ORG)
+      .eq("position", 25)
+      .not("description", "is", null);
+    expect(error).toBeNull();
+    expect((data as Array<{ name: string }>).map((x) => x.name)).toEqual(["Com descricao"]);
+  });
+
+  it("o que o adaptador não confere estoura: `.is` com valor e `.not` com outro operador", () => {
+    expect(() => db.from("crm_pipelines").select("id").is("description", "x")).toThrow(/não está implementado/);
+    expect(() => db.from("crm_pipelines").select("id").not("description", "eq", "x")).toThrow(
+      /não está implementado/,
+    );
+  });
+});
+
 describe("o adaptador ORDENA", () => {
   it("`.order(asc).limit(1)` traz o de menor valor, não o primeiro que o Postgres devolver", async () => {
     // Sem ordenação real o Postgres devolveria em ordem de heap — que aqui é a

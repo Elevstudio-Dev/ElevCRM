@@ -129,6 +129,29 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
     return this;
   }
 
+  /**
+   * `.is(coluna, null)` → `coluna is null`. SÓ nulo: é o único uso do repo, e é
+   * o jeito certo de perguntar por nulo no PostgREST (`eq` com `null` não casa
+   * nada). Outro valor ESTOURA em vez de virar um filtro que ninguém conferiu.
+   */
+  is(coluna: string, valor: unknown): this {
+    if (valor !== null) return naoImplementado(`is(${coluna}, ${String(valor)})`);
+    this.filtros.push(["is null", coluna, null]);
+    return this;
+  }
+
+  /**
+   * `.not(coluna, "is", null)` → `coluna is not null`. Só esta forma — qualquer
+   * outro operador negado ESTOURA, pelo mesmo motivo de `is`.
+   */
+  not(coluna: string, operador: string, valor: unknown): this {
+    if (operador !== "is" || valor !== null) {
+      return naoImplementado(`not(${coluna}, ${operador}, ${String(valor)})`);
+    }
+    this.filtros.push(["is not null", coluna, null]);
+    return this;
+  }
+
   order(coluna: string, opts?: { ascending?: boolean }): this {
     this.ordem = { coluna, asc: opts?.ascending !== false };
     return this;
