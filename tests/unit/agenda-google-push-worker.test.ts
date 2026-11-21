@@ -102,7 +102,7 @@ beforeEach(() => {
     from: (tabela: string) => ({
       select: () => {
         const cadeia: Record<string, unknown> = {};
-        for (const m of ["or", "not", "order", "limit", "eq"]) {
+        for (const m of ["or", "not", "is", "order", "limit", "eq"]) {
           cadeia[m] = () => cadeia;
         }
         cadeia.then = (r: (v: unknown) => unknown) =>
