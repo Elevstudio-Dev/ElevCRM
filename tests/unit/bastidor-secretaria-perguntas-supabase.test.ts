@@ -278,21 +278,35 @@ describe("o resumo esperando o 'sim' e o lembrete de confirmar", () => {
 });
 
 describe("o resumo sem confirmação depois do lembrete (M2)", () => {
-  it("lembreteDaConferenciaEnviadoEm: o job concluído DESTE resumo, na organização", async () => {
-    const { admin, chamadas } = clienteFalso(() => ({ data: [{ created_at: "2026-11-17T17:00:00Z" }] }));
+  it("lembreteDaConferenciaEnviadoEm: a MENSAGEM que saiu (job DESTE resumo → ledger aceito → mensagem), na organização", async () => {
+    const { admin, chamadas } = clienteFalso((c) => {
+      if (c.tabela === "job_queue") return { data: [{ id: "job-1" }] };
+      if (c.tabela === "send_ledger") return { data: [{ crm_message_id: "msg-1" }] };
+      return { data: [{ sent_at: "2026-11-17T17:02:00Z", created_at: "2026-11-17T17:00:00Z", status: "sent" }] };
+    });
     expect(await portasDoTickNoSupabase(admin, semErro).portasDe(SEC).lembreteDaConferenciaEnviadoEm("rel-1")).toEqual(
-      new Date("2026-11-17T17:00:00Z"),
+      new Date("2026-11-17T17:02:00Z"),
     );
-    expect(chamadas[0]!.passos).toEqual(
-      expect.arrayContaining([
-        ["eq", "organization_id", "org-1"],
-        ["eq", "source_event_id", "rel-1"],
-        ["eq", "status", "done"],
-      ]),
-    );
+    expect(chamadas.map((c) => c.tabela)).toEqual(["job_queue", "send_ledger", "messages"]);
+    expect(chamadas[0]!.passos).toEqual(expect.arrayContaining([["eq", "organization_id", "org-1"], ["eq", "source_event_id", "rel-1"]]));
+    // NÃO é "job concluído": o handler conclui o job também quando dispensa o lembrete.
+    expect(chamadas[0]!.passos).not.toContainEqual(["eq", "status", "done"]);
+    expect(chamadas[1]!.passos).toEqual(expect.arrayContaining([["eq", "job_id", "job-1"], ["eq", "status", "accepted"]]));
+    expect(chamadas[2]!.passos).toEqual(expect.arrayContaining([["eq", "organization_id", "org-1"], ["eq", "id", "msg-1"]]));
   });
 
-  it("avisarResumoSemConfirmacao: um item agenda_sem_resposta POR RESUMO, em português, sem nome de paciente", async () => {
+  it("job sem envio (dispensado), ledger não aceito ou mensagem falhada: nulo", async () => {
+    const semLedger = clienteFalso((c) => (c.tabela === "job_queue" ? { data: [{ id: "job-1" }] } : { data: [] }));
+    expect(await portasDoTickNoSupabase(semLedger.admin, semErro).portasDe(SEC).lembreteDaConferenciaEnviadoEm("rel-1")).toBeNull();
+    const falhou = clienteFalso((c) => {
+      if (c.tabela === "job_queue") return { data: [{ id: "job-1" }] };
+      if (c.tabela === "send_ledger") return { data: [{ crm_message_id: "msg-1" }] };
+      return { data: [{ sent_at: null, created_at: "2026-11-17T17:00:00Z", status: "failed" }] };
+    });
+    expect(await portasDoTickNoSupabase(falhou.admin, semErro).portasDe(SEC).lembreteDaConferenciaEnviadoEm("rel-1")).toBeNull();
+  });
+
+  it("avisarResumoSemConfirmacao: um item agenda_sem_resposta POR RESUMO, em português, sem nome de ninguém", async () => {
     const { admin, chamadas } = clienteFalso((c) => (passo(c, "select") ? { data: [] } : {}));
     expect(await portasDoTickNoSupabase(admin, semErro).portasDe(SEC).avisarResumoSemConfirmacao("rel-1")).toBe(true);
     const linha = passo(chamadas.find((c) => passo(c, "insert"))!, "insert")![1] as Record<string, string>;
@@ -300,6 +314,37 @@ describe("o resumo sem confirmação depois do lembrete (M2)", () => {
     expect(linha.title).toMatch(/não confirmou o resumo da agenda/);
     expect(linha.body).toMatch(/a IA não oferece horários/);
     expect(linha.body).toMatch(/O que fazer/);
+    // O nome da secretária do cenário ("Ana") não entra no aviso.
+    expect(`${linha.title} ${linha.body}`).not.toMatch(/\bAna\b/);
+  });
+
+  it("fecharAvisosDeResumoResolvidos: fecha só os avisos ABERTOS cujo relato já não espera (conferido ou vencido)", async () => {
+    const agora = new Date("2026-11-17T20:00:00Z");
+    const { admin, chamadas } = clienteFalso((c) => {
+      if (c.tabela === "agent_inbox_items" && passo(c, "select")) {
+        return { data: [{ id: "av-espera", ref_id: "r-espera" }, { id: "av-conf", ref_id: "r-conf" }, { id: "av-velho", ref_id: "r-velho" }] };
+      }
+      if (c.tabela === "agenda_relatos") {
+        return {
+          data: [
+            { id: "r-espera", estado: "lido", created_at: "2026-11-17T15:00:00Z" },
+            { id: "r-conf", estado: "conferido", created_at: "2026-11-17T15:00:00Z" },
+            { id: "r-velho", estado: "lido", created_at: "2026-11-17T07:00:00Z" },
+          ],
+        };
+      }
+      return {};
+    });
+    expect(await portasDoTickNoSupabase(admin, semErro).portasDe(SEC).fecharAvisosDeResumoResolvidos(agora, 12)).toBe(2);
+    const fecha = chamadas.find((c) => passo(c, "update"))!;
+    expect(passo(fecha, "update")).toEqual(["update", { status: "resolved" }]);
+    expect(fecha.passos).toEqual(
+      expect.arrayContaining([
+        ["eq", "organization_id", "org-1"],
+        ["eq", "status", "open"],
+        ["in", "id", ["av-conf", "av-velho"]],
+      ]),
+    );
   });
 
   it("já existe aviso para este resumo: não abre outro", async () => {

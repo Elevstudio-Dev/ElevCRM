@@ -300,6 +300,16 @@ describe("aplicarRelato — o ocupante é o MESMO paciente (I2)", () => {
     expect(leitura.filtros).toContainEqual(["in", "id", ["ct-1"]]);
   });
 
+  it("contato só com `name` (display_name nulo): também casa — a leitura pede os DOIS campos", async () => {
+    const { admin, chamadas } = registrador((c) => {
+      if (foraDoRelato(c)) return { data: [{ starts_at: "2026-11-18T17:00:00Z", title: "Avaliação", contact_id: "ct-1" }] };
+      if (c.tabela === "contacts") return { data: [{ id: "ct-1", name: "Maria Aparecida", display_name: null }] };
+      return { data: [] };
+    });
+    expect((await aplicar(admin, relato())).conflitos).toEqual([]);
+    expect(escritas(chamadas)).toEqual([]);
+  });
+
   it("outro paciente no horário: conflito avisado", async () => {
     const { admin } = registrador((c) => {
       if (foraDoRelato(c)) return { data: [{ starts_at: "2026-11-18T17:00:00Z", title: "Avaliação", contact_id: "ct-1" }] };

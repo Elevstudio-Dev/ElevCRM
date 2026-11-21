@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RelatoLido } from "@/lib/agenda/secretaria/relato";
 import {
   conflitosComFechamento,
+  mesmoPaciente,
   motivoDoFechamento,
   planejarSincronizacao,
   PREFIXO_DO_MOTIVO,
@@ -237,6 +238,17 @@ describe("planejarSincronizacao — o MESMO horário (a falha de produção)", (
       });
       expect(p.jaNaAgenda).toEqual([]);
       expect(p.conflitos).toMatchObject([{ nome: "Beltrano", porque: "outro_compromisso" }]);
+    });
+
+    it.each([
+      ["Lia", ["Avaliação"], false], // "lia" é pedaço de "avaliacao", não palavra
+      ["Ana", ["Juliana Souza"], false], // "ana" dentro de "juliana" não é a Ana
+      ["Ana", ["Avaliação - Ana Souza"], true],
+      ["Ana Paula", ["Ana Paula Souza"], true],
+      ["Ana Paula", ["Ana Souza"], false], // falta "paula": não é garantido que seja ela
+      ["Paula Ana", ["Ana Paula Souza"], true], // a ordem das palavras não importa
+    ])("palavras INTEIRAS: relato '%s' contra ocupante %j → mesmo paciente = %s", (nome, nomes, mesmo) => {
+      expect(mesmoPaciente(nome, nomes)).toBe(mesmo);
     });
 
     it("outra pessoa no horário continua conflito avisado", () => {

@@ -70,8 +70,13 @@ export interface PortasDaSecretaria {
    * segundo lembrete do mesmo resumo (é a idempotência de "no máximo um por resumo").
    */
   enfileirarLembreteDaConferencia(relatoId: string, conversa: ConversaDaSecretaria): Promise<boolean>;
-  /** Quando o lembrete de confirmar ESTE resumo foi processado (job concluído), ou nulo se ainda não. */
+  /**
+   * Quando o lembrete de confirmar ESTE resumo SAIU de verdade (a mensagem enviada, não o job concluído — o handler
+   * conclui o job também quando dispensa o lembrete), ou nulo.
+   */
   lembreteDaConferenciaEnviadoEm(relatoId: string): Promise<Date | null>;
+  /** Fecha os avisos "resumo sem confirmação" cujo relato já não espera o "sim". Devolve quantos fechou. */
+  fecharAvisosDeResumoResolvidos(agora: Date, validadeHoras: number): Promise<number>;
   /**
    * Abre UM aviso na Central (`agenda_sem_resposta`) de que o resumo continua sem confirmação. `true` só se esta
    * chamada abriu: um por resumo.
@@ -95,6 +100,8 @@ export interface ResultadoDoTick {
   /** Lembretes "falta só você confirmar o resumo" enfileirados (no lugar de uma pergunta/lembrete). */
   conferenciasLembradas: number;
   avisos: number;
+  /** Avisos "resumo sem confirmação" fechados porque o resumo já não espera o "sim". */
+  avisosFechados: number;
   respondidas: number;
   erros: number;
 }
@@ -107,6 +114,7 @@ export async function executarTickDasPerguntas(p: PortasDoTick): Promise<Resulta
     lembradas: 0,
     conferenciasLembradas: 0,
     avisos: 0,
+    avisosFechados: 0,
     respondidas: 0,
     erros: 0,
   };
@@ -194,12 +202,15 @@ async function tickDeUmaSecretaria(p: PortasDoTick, sec: SecretariaAtiva, r: Res
   // O resumo continua sem confirmação DUAS HORAS depois do lembrete (e ainda não venceu): as perguntas do dia estão
   // suspensas, então o aviso "a secretária não respondeu" nunca nasceria por elas. Avisa o administrador UMA vez por
   // resumo — a IA de vendas está sem horário para oferecer e alguém precisa saber.
+  // Se ela ESCREVEU depois do resumo (inclusive um "sim" cujo turno falhou), ela não está calada: o aviso seria falso —
+  // quem cobre a falha do turno é o aviso de job morto.
   if (aguardandoSim && pendente !== null) {
     try {
       const lembradoEm = await portas.lembreteDaConferenciaEnviadoEm(pendente.relatoId);
       if (
         lembradoEm !== null &&
         agora.getTime() - lembradoEm.getTime() >= ESPERA_ANTES_DO_AVISO_DO_RESUMO_MIN * 60_000 &&
+        (await portas.primeiraRespostaDesde(pendente.criadoEm)) === null &&
         (await portas.avisarResumoSemConfirmacao(pendente.relatoId))
       ) {
         r.avisos += 1;
@@ -208,6 +219,14 @@ async function tickDeUmaSecretaria(p: PortasDoTick, sec: SecretariaAtiva, r: Res
       r.erros += 1;
       p.registrarErro("avisar_resumo_sem_confirmacao", erro);
     }
+  }
+
+  // O aviso de um resumo que já não espera o "sim" (confirmado, corrigido, descartado, vencido) fecha sozinho.
+  try {
+    r.avisosFechados += await portas.fecharAvisosDeResumoResolvidos(agora, VALIDADE_DO_RESUMO_HORAS);
+  } catch (erro) {
+    r.erros += 1;
+    p.registrarErro("fechar_avisos_de_resumo", erro);
   }
 }
 

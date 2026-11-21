@@ -45,6 +45,7 @@ function portasFalsas(over: Partial<PortasDaSecretaria> = {}) {
     resumoPendente: vi.fn(async () => null),
     enfileirarLembreteDaConferencia: vi.fn(async (relatoId: string) => (registro("lembrete_conferencia")(relatoId), true)),
     lembreteDaConferenciaEnviadoEm: vi.fn(async () => null),
+    fecharAvisosDeResumoResolvidos: vi.fn(async () => 0),
     avisarResumoSemConfirmacao: vi.fn(async (relatoId: string) => (registro("aviso_resumo")(relatoId), true)),
     ...over,
   };
@@ -209,6 +210,7 @@ describe("isolamento", () => {
       lembradas: 0,
       conferenciasLembradas: 0,
       avisos: 0,
+      avisosFechados: 0,
       respondidas: 0,
       erros: 0,
     });
@@ -280,6 +282,24 @@ describe("com um RESUMO esperando o 'sim' (relato `lido` com menos de 12 h)", ()
       const r = await tick(sp(TERCA, "16:00"), { "contato-a": portas }, [SEC("a")]).rodar();
       expect(chamadas).toContain("aviso_resumo:relato-1");
       expect(r.avisos).toBe(1);
+    });
+
+    it("ela ESCREVEU depois do resumo (ex.: o 'sim' cujo turno falhou): não abre aviso falso de 'não respondeu'", async () => {
+      const { portas } = portasFalsas({
+        resumoPendente: vi.fn(async () => resumo),
+        lembreteDaConferenciaEnviadoEm: vi.fn(async () => sp(TERCA, "14:00")),
+        primeiraRespostaDesde: vi.fn(async (desde: Date) => (desde.getTime() === resumo.criadoEm.getTime() ? sp(TERCA, "13:58") : null)),
+      });
+      const r = await tick(sp(TERCA, "16:00"), { "contato-a": portas }, [SEC("a")]).rodar();
+      expect(portas.avisarResumoSemConfirmacao).not.toHaveBeenCalled();
+      expect(r.avisos).toBe(0);
+    });
+
+    it("todo tick fecha os avisos de resumo que já não espera o 'sim' (com a validade de 12 h), e conta", async () => {
+      const { portas } = portasFalsas({ fecharAvisosDeResumoResolvidos: vi.fn(async () => 2) });
+      const r = await tick(sp(TERCA, "07:00"), { "contato-a": portas }, [SEC("a")]).rodar();
+      expect(portas.fecharAvisosDeResumoResolvidos).toHaveBeenCalledWith(sp(TERCA, "07:00"), 12);
+      expect(r.avisosFechados).toBe(2);
     });
 
     it("1h59 depois: ainda não avisa", async () => {

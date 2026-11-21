@@ -254,6 +254,25 @@ describe("o MESMO paciente já marcado pela IA de vendas no horário (I2): sem e
     expect(rows[0]!.n).toBe(1);
   });
 
+  it("contato só com `name` (display_name nulo): silencioso — os dois campos do contato são lidos", async () => {
+    const soNome = "a9e4da00-0000-4000-8000-0000000000e2";
+    await pool.query(
+      `insert into contacts (id, organization_id, name, display_name) values ($1, $2, 'Hélio Sintético', null) on conflict (id) do nothing`,
+      [soNome, ORG],
+    );
+    await marcadoPelaIA("Avaliação", soNome);
+    await comHelio("Hélio");
+    expect((await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA })).conflitos).toEqual([]);
+  });
+
+  it("palavras INTEIRAS no banco também: 'Lia' contra o título 'Avaliação' é conflito avisado", async () => {
+    await marcadoPelaIA("Avaliação", null);
+    await comHelio("Lia");
+    expect((await conferirEAplicarRelato(db, { organizationId: ORG, relatoId: RELATO_NOVO, agora: AGORA })).conflitos).toEqual([
+      { inicio: H_VENDAS, nome: "Lia", porque: "outro_compromisso" },
+    ]);
+  });
+
   it("pelo TÍTULO (sem contato): silencioso", async () => {
     await marcadoPelaIA("Avaliação - Hélio Sintético", null);
     await comHelio("hélio");

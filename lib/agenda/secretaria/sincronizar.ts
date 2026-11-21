@@ -65,17 +65,29 @@ export interface OcupanteForaDoRelato {
 }
 
 /**
- * O ocupante é o MESMO paciente que o relato lista? O nome normalizado do relato (sem acento, sem caixa — a mesma
- * normalização dos "mantidos") igual a, ou contido em, algum nome normalizado do ocupante. Ex.: o relato diz "Maria"
- * e a IA de vendas marcou "Avaliação - Maria Souza". Nome vazio nunca casa (ocupante sem título é "outra pessoa").
+ * O ocupante é o MESMO paciente que o relato lista? TODAS as palavras do nome do relato (normalizadas como nos
+ * "mantidos": sem acento, sem caixa) existem como palavras INTEIRAS em algum nome do ocupante (título ou contato).
+ * Ex.: o relato diz "Maria" e a IA de vendas marcou "Avaliação - Maria Souza". Nome vazio nunca casa (ocupante sem
+ * título é "outra pessoa").
  */
 export function mesmoPaciente(nomeDoRelato: string, nomesDoOcupante: readonly string[]): boolean {
-  const alvo = normalizarNome(nomeDoRelato);
-  if (alvo === "") return false;
+  const alvo = palavrasDoNome(nomeDoRelato);
+  if (alvo.length === 0) return false;
   return nomesDoOcupante.some((n) => {
-    const o = normalizarNome(n ?? "");
-    return o !== "" && o.includes(alvo);
+    const doOcupante = new Set(palavrasDoNome(n ?? ""));
+    return alvo.every((p) => doOcupante.has(p));
   });
+}
+
+/**
+ * As PALAVRAS de um nome, normalizadas (sem acento, sem caixa), separadas por espaço ou pontuação. Comparar palavras
+ * inteiras, e não pedaços de texto: "Lia" não é "Avaliação", e "Ana" não é "Juliana" — um falso "mesmo paciente"
+ * esconderia da secretaria um conflito de verdade.
+ */
+function palavrasDoNome(nome: string): string[] {
+  return normalizarNome(nome)
+    .split(/[^a-z0-9]+/)
+    .filter((p) => p !== "");
 }
 
 export interface PlanoDeSincronizacao {

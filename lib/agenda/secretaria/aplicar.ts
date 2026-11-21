@@ -141,21 +141,22 @@ export async function aplicarRelato(
   // O nome do contato (quando o compromisso tem contato, como os da IA de vendas): é por ele que se reconhece que o
   // ocupante é o MESMO paciente que o relato lista — aí não há conflito a avisar.
   const idsDeContato = [...new Set(linhasDeOutros.map((l) => l.contact_id).filter((id): id is string => id !== null))];
-  const nomeDoContato = new Map<string, string>();
+  // Os DOIS nomes do contato (`name` e `display_name`): o contato pode ter só um deles preenchido.
+  const nomesDoContato = new Map<string, string[]>();
   if (idsDeContato.length > 0) {
     const { data: contatos, error: erroContatos } = await admin
       .from("contacts")
-      .select("id, display_name")
+      .select("id, name, display_name")
       .eq("organization_id", organizationId)
       .in("id", idsDeContato);
     if (erroContatos) falhou("ler os contatos dos compromissos fora do relato", erroContatos);
-    for (const c of (contatos ?? []) as Array<{ id: string; display_name: string | null }>) {
-      if (c.display_name) nomeDoContato.set(c.id, c.display_name);
+    for (const c of (contatos ?? []) as Array<{ id: string; name: string | null; display_name: string | null }>) {
+      nomesDoContato.set(c.id, [c.name ?? "", c.display_name ?? ""]);
     }
   }
   const ocupadosForaDoRelato = linhasDeOutros.map((l) => ({
     inicio: new Date(l.starts_at),
-    nomes: [l.title ?? "", l.contact_id ? (nomeDoContato.get(l.contact_id) ?? "") : ""],
+    nomes: [l.title ?? "", ...(l.contact_id ? (nomesDoContato.get(l.contact_id) ?? []) : [])],
   }));
 
   // 2. Os dias que um relato fechou, dentro da janela.
