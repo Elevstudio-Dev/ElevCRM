@@ -116,6 +116,15 @@ async function executar(req: NextRequest): Promise<Response> {
     // `needs_google_push` — então o filtro tem de estar AQUI, na leitura. E tem
     // de ser na consulta, não no loop: espelho que só fosse pulado depois de lido
     // gastaria o teto por rodada (TETO_POR_RODADA) e deixaria os compromissos reais esperando.
+    //
+    // ⚠️ RISCO RESIDUAL, e este filtro NÃO o cobre: `origem_relato_id` é
+    // `ON DELETE SET NULL` (migration 0228). Apagar um `agenda_relatos` anula o
+    // vínculo de TODOS os espelhos dele; esse UPDATE avança `updated_at`, religa
+    // `needs_google_push` e o espelho, já sem `origem_relato_id`, passa pelo
+    // filtro E pela defesa do loop como se fosse compromisso comum — com o nome
+    // do paciente no `title`. Por isso: NUNCA apagar `agenda_relatos` que ainda
+    // tenha espelho vivo (nenhum código do produto apaga hoje). Follow-up: uma
+    // migration que troque o FK para RESTRICT, ou que cancele os espelhos antes.
     .is("origem_relato_id", null)
     .order("starts_at", { ascending: true })
     .limit(TETO_POR_RODADA);
@@ -237,7 +246,7 @@ async function executar(req: NextRequest): Promise<Response> {
       continue;
     }
 
-    await admin
+    const { error: erroGravar } = await admin
       .from("calendar_appointments")
       .update({
         google_connection_id: conexao.id,
@@ -253,6 +262,23 @@ async function executar(req: NextRequest): Promise<Response> {
         google_sync_error: null,
       })
       .eq("id", linha.id);
+
+    if (erroGravar) {
+      // O Google já respondeu OK, mas o CRM não conseguiu anotar: a linha segue
+      // na fila e volta na próxima rodada. Era silêncio total — o laço do DELETE
+      // a cada 5 minutos viveu escondido exatamente aqui. Só ids e a mensagem do
+      // banco no log: nada do compromisso (o `title` pode ser nome de paciente).
+      resumo.falhas += 1;
+      motivos.push("gravacao_falhou");
+      logger.warn("[agenda-google-push] não gravou o resultado da ida", {
+        agendamento: linha.id,
+        organizacao: linha.organization_id,
+        operacao: cancelado ? "apagar" : "publicar",
+        codigo: erroGravar.code,
+        erro: erroGravar.message,
+      });
+      continue;
+    }
 
     if (cancelado) resumo.apagados += 1;
     else resumo.publicados += 1;

@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import pg from "pg";
 
+import { logger } from "@/lib/logger";
+
 import { pgComoSupabase } from "../pg-como-supabase";
 
 /**
@@ -43,6 +45,8 @@ const retido = vi.hoisted(() => ({
   db: null as unknown,
   /** Quando ligado, a consulta do cron IGNORA `.is(...)`: simula quem reintroduz a query sem o filtro. */
   ignorarFiltroDeNulo: false,
+  /** Quando ligado, o UPDATE que anota a ida (traz `google_synced_at`) volta com erro, como num banco que recusa. */
+  falharAnotacaoDaIda: false,
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -55,6 +59,15 @@ vi.mock("@/lib/supabase/admin", () => ({
         if (tabela !== "calendar_appointments") return t;
         return {
           ...t,
+          update: (patch: Record<string, unknown>) =>
+            retido.falharAnotacaoDaIda && "google_synced_at" in patch
+              ? {
+                  eq: () => ({
+                    then: (r: (v: unknown) => unknown) =>
+                      r({ data: null, error: { message: "falha simulada ao gravar", code: "XX000" } }),
+                  }),
+                }
+              : (t as unknown as { update: (p: unknown) => unknown }).update(patch),
           select: (colunas: string) => {
             const consulta = t.select(colunas);
             if (retido.ignorarFiltroDeNulo) consulta.is = () => consulta;
@@ -207,6 +220,7 @@ beforeEach(async () => {
   chamadas = [];
   respostaDoGoogle = respostaPadrao;
   retido.ignorarFiltroDeNulo = false;
+  retido.falharAnotacaoDaIda = false;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -241,11 +255,43 @@ describe("CONTROLE DO INSTRUMENTO: o cron publica quando deve", () => {
 
     expect(chamadas.map((c) => c.metodo)).toEqual(["DELETE"]);
     expect(resumo).toMatchObject({ candidatos: 1, apagados: 1, falhas: 0 });
-    const [linha] = await sql<{ google_event_id: string | null }>(
-      `select google_event_id from calendar_appointments where id = $1`,
+    const [linha] = await sql<{ google_event_id: string | null; n: boolean }>(
+      `select google_event_id, needs_google_push as n from calendar_appointments where id = $1`,
       [comum],
     );
     expect(linha?.google_event_id).toBeNull();
+    expect(linha?.n, "apagou lá mas a linha ficou na fila: o DELETE sairia a cada rodada").toBe(false);
+
+    chamadas = [];
+    expect(await rodarOCron()).toMatchObject({ candidatos: 0 });
+    expect(chamadas, "a segunda rodada apagou de novo").toEqual([]);
+  });
+});
+
+describe("quando o CRM não consegue anotar a ida, o cron conta e registra — não engole", () => {
+  it("UPDATE final com erro: falhas = 1, nada de publicados, log sem o título do compromisso", async () => {
+    const avisos = vi.spyOn(logger, "warn");
+    const comum = await criarComum(70);
+    await sql(`update calendar_appointments set title = 'Titulo Sensivel Sintetico' where id = $1`, [comum]);
+    retido.falharAnotacaoDaIda = true;
+
+    const resumo = await rodarOCron();
+
+    expect(chamadas.map((c) => c.metodo)).toEqual(["POST"]);
+    expect(resumo).toMatchObject({ candidatos: 1, publicados: 0, apagados: 0, falhas: 1 });
+    const registro = avisos.mock.calls.find((c) => String(c[0]).includes("não gravou o resultado"));
+    expect(registro, "o erro de gravação não foi registrado no log").toBeDefined();
+    expect(JSON.stringify(registro)).not.toContain("Titulo Sensivel Sintetico");
+    expect(JSON.stringify(registro)).toContain("falha simulada ao gravar");
+    expect(await precisaIr(comum), "sem anotar, a linha continua na fila para a próxima rodada").toBe(true);
+    avisos.mockRestore();
+  });
+
+  it("CONTROLE: sem a falha simulada, o mesmo caso conta publicado e sai da fila", async () => {
+    const comum = await criarComum(71);
+    const resumo = await rodarOCron();
+    expect(resumo).toMatchObject({ publicados: 1, falhas: 0 });
+    expect(await precisaIr(comum)).toBe(false);
   });
 });
 
