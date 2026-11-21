@@ -50,9 +50,19 @@ const JOB_MORTO = "4e940000-0000-4000-8000-0000000000d1";
 
 const t = (min: number) => new Date(Date.UTC(2026, 10, 18, 20, 0) + min * 60_000); // 17h em Brasília + min
 
-function reprocessar(v: { org?: string; msg?: string; relato?: string; job?: string; aplicar?: boolean }) {
+/** O relógio injetado do script: 48 h depois do resumo (o "sim" de anteontem que ficou para trás). */
+const AGORA_DO_SCRIPT = () => t(48 * 60).toISOString();
+
+function reprocessar(v: { org?: string; msg?: string; relato?: string; job?: string; aplicar?: boolean; agora?: string }) {
   const args = ["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-q"];
-  for (const [k, val] of Object.entries({ org: v.org ?? ORG, msg: v.msg ?? "", relato: v.relato ?? "", job: v.job ?? "", aplicar: v.aplicar ? "1" : "0" })) {
+  for (const [k, val] of Object.entries({
+    org: v.org ?? ORG,
+    msg: v.msg ?? "",
+    relato: v.relato ?? "",
+    job: v.job ?? "",
+    aplicar: v.aplicar ? "1" : "0",
+    agora: v.agora ?? AGORA_DO_SCRIPT(),
+  })) {
     args.push("-v", `${k}=${val}`);
   }
   args.push("-f", "-");
@@ -212,17 +222,65 @@ describe("a prévia (padrão): mostra e NÃO escreve nada", () => {
     expect(await jobs()).toEqual(antes);
   });
 
-  it("a frescura usa as validades CONFIGURADAS da clínica (aqui, uma semana para os próximos dias → sem_hoje)", async () => {
-    await pool.query(
-      `update organizations set settings = jsonb_set(settings, '{secretaria,validade_futuro_horas}', to_jsonb(24 * 365)) where id = $1`,
-      [ORG],
-    );
+  const comConfig = async (caminho: string, valor: unknown, rodar: () => Promise<void>) => {
+    await pool.query(`update organizations set settings = jsonb_set(settings, $2::text[], $3::jsonb) where id = $1`, [
+      ORG,
+      `{${caminho}}`,
+      JSON.stringify(valor),
+    ]);
     try {
-      const r = reprocessar({ job: JOB_MORTO });
-      expect(r.saida).toMatch(/agora: sem_hoje \(validades da clínica: hoje 6 h, próximos dias 8760 h\) → a IA de vendas só oferece de amanhã em diante/);
+      await rodar();
     } finally {
-      await pool.query(`update organizations set settings = settings #- '{secretaria,validade_futuro_horas}' where id = $1`, [ORG]);
+      await pool.query(
+        `update organizations set settings = jsonb_build_object('secretaria', jsonb_build_object('ativa', true, 'dono_da_agenda_user_id', $2::text)) where id = $1`,
+        [ORG, DONO],
+      );
     }
+  };
+
+  it("a frescura usa as validades CONFIGURADAS da clínica (uma semana — o teto — para os próximos dias → sem_hoje)", async () => {
+    await comConfig("secretaria,validade_futuro_horas", 168, async () => {
+      const r = reprocessar({ job: JOB_MORTO });
+      expect(r.saida).toMatch(/agora: sem_hoje \(validades da clínica: hoje 6 h, próximos dias 168 h\) → a IA de vendas só oferece de amanhã em diante/);
+    });
+  });
+
+  it("validade FORA DA FAIXA do app (o app lê como desligada): recusa, sem escrever", async () => {
+    await comConfig("secretaria,validade_futuro_horas", 8760, async () => {
+      const r = reprocessar({ job: JOB_MORTO, aplicar: true });
+      expect(r.ok).toBe(false);
+      expect(r.erro).toMatch(/Recusado: a configuração da secretaria tem valor fora da faixa/);
+    });
+    await comConfig("secretaria,validade_hoje_horas", 0.25, async () => {
+      expect(reprocessar({ job: JOB_MORTO }).erro).toMatch(/fora da faixa/);
+    });
+    expect((await jobs()).filter((j) => j.status === "pending")).toHaveLength(0);
+  });
+
+  it("secretaria DESLIGADA na organização: recusa", async () => {
+    await comConfig("secretaria,ativa", false, async () => {
+      const r = reprocessar({ job: JOB_MORTO, aplicar: true });
+      expect(r.ok).toBe(false);
+      expect(r.erro).toMatch(/Recusado: a agenda da secretaria não está ligada/);
+    });
+  });
+
+  it("I2 por palavras inteiras na prévia: contato só com `name` casa; 'Paciente C' NÃO casa com 'Paciente Cesar'", async () => {
+    const soNome = "4e940000-0000-4000-8000-0000000000e2";
+    await pool.query(
+      `insert into contacts (id, organization_id, name, display_name) values ($1, $2, 'Paciente C Sintetico', null) on conflict (id) do nothing`,
+      [soNome, ORG],
+    );
+    await pool.query(`delete from calendar_appointments where organization_id = $1 and title = 'Paciente A'`, [ORG]);
+    await pool.query(
+      `insert into calendar_appointments (organization_id, title, starts_at, ends_at, owner_user_id, contact_id, created_by_kind, source)
+       values ($1, 'Avaliação', '2026-11-19T11:30:00Z', '2026-11-19T12:00:00Z', $2, $3, 'ai', 'mcp')`,
+      [ORG, DONO, soNome],
+    );
+    expect(reprocessar({ job: JOB_MORTO }).saida).toContain("19/11 08:30 Paciente C → já está na agenda");
+
+    await pool.query(`update calendar_appointments set contact_id = null, title = 'Paciente Cesar' where organization_id = $1 and title = 'Avaliação'`, [ORG]);
+    expect(reprocessar({ job: JOB_MORTO }).saida).toContain("19/11 08:30 Paciente C → NÃO cria");
   });
 
   it("I2: o MESMO paciente já marcado pela IA de vendas no horário aparece como 'já está na agenda', não como conflito", async () => {

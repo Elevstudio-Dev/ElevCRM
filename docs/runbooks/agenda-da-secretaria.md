@@ -50,10 +50,21 @@ nada. Em alguns segundos o worker processa, ela recebe "Pronto, agenda atualizad
 
 **4. Confira** a conversa dela e a agenda. O aviso antigo da Central pode ser resolvido.
 
+**Avisos da Central sobre a agenda.** Se o resumo continua sem "sim" duas horas depois do lembrete de confirmar (e ela
+não escreveu nada depois do resumo), abre um aviso *"A secretária ainda não confirmou o resumo da agenda"*. Ele fecha
+sozinho quando o resumo é confirmado, corrigido, descartado ou vence (12 h).
+
+**Risco aceito: uma instância do cron.** As guardas "uma pergunta por horário", "um lembrete por resumo" e "um aviso
+por resumo" contam com o cron das perguntas rodando numa instância só (é como a VPS roda). Duas instâncias ao mesmo
+tempo poderiam, numa corrida de milissegundos, abrir dois avisos iguais para o mesmo resumo — fechar isso exigiria
+um índice único (migration), o que não foi feito.
+
 **O que o script recusa** (e, recusando, não escreve nada): relato que não está `lido` (já conferido, corrigido ou
 descartado); um resumo mais novo dela; resposta dada mais de 12 horas depois do resumo (aí o resumo venceu de
 verdade — peça a agenda de novo); resposta nossa ou da equipe depois do sim (o turno não leria o sim); turno dela já na
-fila; organização que não é a da mensagem; agenda sem dono configurado.
+fila; organização que não é a da mensagem; agenda sem dono configurado; agenda da secretaria desligada ou com
+configuração fora da faixa (`validade_hoje_horas` 0,5–24, `validade_futuro_horas` 1–168, `duracao_min` 5–240 — o
+sistema lê uma configuração assim como desligada).
 
 O SQL do script é `hostgator-setup-kit/reprocessar-resposta-da-secretaria.sql`, provado contra um Postgres de
 verdade em `tests/invariants/reprocessar-resposta-da-secretaria.test.ts` (inclusive o job enfileirado aplicando a

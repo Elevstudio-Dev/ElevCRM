@@ -22,12 +22,18 @@
 \set QUIET 1
 \pset tuples_only on
 \pset format unaligned
+-- `agora` (opcional): o relógio injetado do teste. Em operação fica vazio e vale o `now()` do banco.
+\if :{?agora}
+\else
+\set agora ''
+\endif
 \o /dev/null
 select set_config('reprocessar.org', :'org', false),
        set_config('reprocessar.msg', :'msg', false),
        set_config('reprocessar.relato', :'relato', false),
        set_config('reprocessar.job', :'job', false),
-       set_config('reprocessar.aplicar', :'aplicar', false);
+       set_config('reprocessar.aplicar', :'aplicar', false),
+       set_config('reprocessar.agora', :'agora', false);
 \o
 create temp table reprocessar_relatorio (n serial primary key, linha text not null);
 
@@ -38,6 +44,7 @@ declare
   v_relato_id    uuid    := nullif(current_setting('reprocessar.relato'), '')::uuid;
   v_job_id       uuid    := nullif(current_setting('reprocessar.job'), '')::uuid;
   v_aplicar      boolean := current_setting('reprocessar.aplicar') = '1';
+  v_agora        timestamptz := coalesce(nullif(current_setting('reprocessar.agora'), '')::timestamptz, now());
   -- As mesmas regras do turno (lib/bastidor/secretaria/turno.ts e lib/agent-engine/agent/bastidor-mensagens.ts).
   c_validade     constant interval := interval '12 hours';
   c_automaticas  constant text[]   := array['perguntar', 'lembrar', 'lembrar_conferencia'];
@@ -66,6 +73,7 @@ declare
   v_fim_janela   timestamptz;
   v_carimbo      timestamptz;
   v_ultima_conf  timestamptz;
+  v_cfg          jsonb;
   v_hoje_h       numeric;
   v_futuro_h     numeric;
   v_idade        interval;
@@ -194,6 +202,24 @@ begin
   end if;
 
   -- ── 4. Configuração da agenda ──────────────────────────────────────────────────────────────────────────────────
+  -- As MESMAS faixas de lib/agenda/secretaria/config.ts. Lá, um valor fora da faixa faz a leitura inteira cair na
+  -- configuração PADRÃO — que tem `ativa = false`, e então o turno da secretaria nem roda. Por isso aqui: valor fora
+  -- da faixa, ou secretaria desligada, é recusa (enfileirar um turno que o worker ignoraria só confundiria).
+  v_cfg := coalesce(v_settings->'secretaria', '{}'::jsonb);
+  if not (
+    (v_cfg->'validade_hoje_horas' is null or (jsonb_typeof(v_cfg->'validade_hoje_horas') = 'number'
+       and (v_cfg->>'validade_hoje_horas')::numeric between 0.5 and 24))
+    and (v_cfg->'validade_futuro_horas' is null or (jsonb_typeof(v_cfg->'validade_futuro_horas') = 'number'
+       and (v_cfg->>'validade_futuro_horas')::numeric between 1 and 168))
+    and (v_cfg->'duracao_min' is null or (jsonb_typeof(v_cfg->'duracao_min') = 'number'
+       and (v_cfg->>'duracao_min')::numeric between 5 and 240
+       and (v_cfg->>'duracao_min')::numeric = trunc((v_cfg->>'duracao_min')::numeric)))
+  ) then
+    raise exception 'Recusado: a configuração da secretaria tem valor fora da faixa (validade_hoje_horas 0,5–24, validade_futuro_horas 1–168, duracao_min 5–240) e o sistema a lê como DESLIGADA. Corrija e rode de novo.';
+  end if;
+  if (v_cfg->'ativa') is distinct from 'true'::jsonb then
+    raise exception 'Recusado: a agenda da secretaria não está ligada nesta organização — o turno não rodaria.';
+  end if;
   v_dono := nullif(v_settings->'secretaria'->>'dono_da_agenda_user_id', '')::uuid;
   if v_dono is null then
     raise exception 'Recusado: a agenda da secretaria não tem dono configurado (Configurações → Secretaria). Configure e rode de novo.';
@@ -216,14 +242,13 @@ begin
 
   -- ── 5b. O carimbo e a frescura (a mesma regra de lib/agenda/secretaria/relatos.ts e atualidade.ts) ────────────
   -- O carimbo é min(agora, resposta dela). A frescura usa a conferência MAIS RECENTE da organização depois disso.
-  v_carimbo := least(now(), v_ultima.quando);
+  v_carimbo := least(v_agora, v_ultima.quando);
   select max(r.conferido_em) into v_ultima_conf
     from agenda_relatos r where r.organization_id = v_org and r.estado = 'conferido';
-  v_hoje_h := case when jsonb_typeof(v_settings->'secretaria'->'validade_hoje_horas') = 'number'
-                   then (v_settings->'secretaria'->>'validade_hoje_horas')::numeric else 6 end;
-  v_futuro_h := case when jsonb_typeof(v_settings->'secretaria'->'validade_futuro_horas') = 'number'
-                     then (v_settings->'secretaria'->>'validade_futuro_horas')::numeric else 24 end;
-  v_idade := greatest(now() - greatest(v_carimbo, coalesce(v_ultima_conf, v_carimbo)), interval '0');
+  -- Já validadas (seção 4); ausentes = os padrões de config.ts.
+  v_hoje_h := coalesce((v_cfg->>'validade_hoje_horas')::numeric, 6);
+  v_futuro_h := coalesce((v_cfg->>'validade_futuro_horas')::numeric, 24);
+  v_idade := greatest(v_agora - greatest(v_carimbo, coalesce(v_ultima_conf, v_carimbo)), interval '0');
   v_estado := case when v_idade <= v_hoje_h * interval '1 hour' then 'atual'
                    when v_idade <= v_futuro_h * interval '1 hour' then 'sem_hoje'
                    else 'desatualizada' end;
@@ -259,7 +284,8 @@ begin
   -- Os horários do relato, cada um com o que vai acontecer.
   for x in
     with marcados as (
-      select distinct on (k.inicio, k.chave) k.nome, k.inicio, k.chave
+      select distinct on (k.inicio, k.chave) k.nome, k.inicio, k.chave,
+             array_remove(regexp_split_to_array(k.chave, '[^a-z0-9]+'), '') as palavras
         from (
           select e->>'nome' as nome, (e->>'inicio')::timestamptz as inicio,
                  translate(lower(regexp_replace(btrim(e->>'nome'), '\s+', ' ', 'g')), c_acentos, c_sem_acento) as chave
@@ -269,8 +295,14 @@ begin
     vivos as (
       select a.title, a.starts_at, a.origem_relato_id is not null as do_relato,
              translate(lower(regexp_replace(btrim(a.title), '\s+', ' ', 'g')), c_acentos, c_sem_acento) as chave,
-             translate(lower(regexp_replace(btrim(coalesce(ct.display_name, '')), '\s+', ' ', 'g')), c_acentos, c_sem_acento)
-               as chave_contato
+             -- As palavras de cada nome do ocupante: título, `name` e `display_name` do contato (a mesma regra de
+             -- `mesmoPaciente` em lib/agenda/secretaria/sincronizar.ts: palavras INTEIRAS, sem acento nem caixa).
+             array_remove(regexp_split_to_array(
+               translate(lower(coalesce(a.title, '')), c_acentos, c_sem_acento), '[^a-z0-9]+'), '') as palavras_titulo,
+             array_remove(regexp_split_to_array(
+               translate(lower(coalesce(ct.name, '')), c_acentos, c_sem_acento), '[^a-z0-9]+'), '') as palavras_nome,
+             array_remove(regexp_split_to_array(
+               translate(lower(coalesce(ct.display_name, '')), c_acentos, c_sem_acento), '[^a-z0-9]+'), '') as palavras_exibido
         from calendar_appointments a
         left join contacts ct on ct.organization_id = v_org and ct.id = a.contact_id
        where a.organization_id = v_org and a.owner_user_id = v_dono
@@ -282,10 +314,11 @@ begin
              when exists (select 1 from vivos v where v.do_relato and v.starts_at = mk.inicio and v.chave = mk.chave)
                then 'mantém'
              -- O MESMO paciente já marcado por outro caminho (IA de vendas): nada a fazer, nada a avisar.
-             when mk.chave <> '' and exists (
+             when cardinality(mk.palavras) > 0 and exists (
                select 1 from vivos v
                 where not v.do_relato and v.starts_at = mk.inicio
-                  and (position(mk.chave in v.chave) > 0 or position(mk.chave in v.chave_contato) > 0))
+                  and (mk.palavras <@ v.palavras_titulo or mk.palavras <@ v.palavras_nome
+                       or mk.palavras <@ v.palavras_exibido))
                then 'já está na agenda (marcado por outro caminho)'
              when exists (select 1 from vivos v where not v.do_relato and v.starts_at = mk.inicio)
                then 'NÃO cria (já há outro compromisso nesse horário — vai na resposta a ela)'
@@ -306,7 +339,7 @@ begin
       from calendar_appointments a
      where a.organization_id = v_org and a.owner_user_id = v_dono and a.origem_relato_id is not null
        and a.status in ('pending', 'confirmed')
-       and a.starts_at >= v_ini_janela and a.starts_at < v_fim_janela and a.ends_at >= now()
+       and a.starts_at >= v_ini_janela and a.starts_at < v_fim_janela and a.ends_at >= v_agora
        and not exists (
          select 1 from jsonb_array_elements(coalesce(v_rel.lido->'marcados', '[]'::jsonb)) e
           where (e->>'inicio')::timestamptz = a.starts_at
