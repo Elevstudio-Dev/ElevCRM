@@ -37,7 +37,9 @@ import {
 import { coletarEsperasAdaptativas, type EsperaAdaptativa, type TimingPlan } from "./timing-plan";
 import { interpolarDestino, persistirRespostaFollowupSupabase } from "./persistir-resposta";
 
-const MAX_STEPS = 80;
+// 160: o motor conta também as re-checagens de cada envio (~7 por toque); com 8 toques
+// e a pergunta de saída depois de cada um, 80 mataria o enrollment no meio da sequência.
+const MAX_STEPS = 160;
 const CLAIM_LEASE_SECONDS = 120;
 const DEFAULT_CLAIM_LIMIT = 20;
 const MAX_ERROR_LEN = 300;

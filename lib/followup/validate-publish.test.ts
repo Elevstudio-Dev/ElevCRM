@@ -250,38 +250,71 @@ describe('validateFlowForPublish', () => {
     }
   });
 
-  it('does not flag max_steps_exceeded for a path of exactly 30 nodes', () => {
+  it('does not flag max_steps_exceeded for a path of exactly 48 nodes', () => {
     const waitNodes: FlowNode[] = [];
     const edges: FlowEdge[] = [];
     let prev = 't1';
-    for (let i = 1; i <= 28; i++) {
+    for (let i = 1; i <= 46; i++) {
       const id = `w${i}`;
       waitNodes.push(wait(id, { mode: 'fixed', duration_ms: 300_000 }));
       edges.push(edge(prev, id, always()));
       prev = id;
     }
     edges.push(edge(prev, 'e1', always()));
-    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges); // 1 + 28 + 1 = 30 nodes
+    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges); // 1 + 46 + 1 = 48 nodes
     expect(validateFlowForPublish(g).ok).toBe(true);
   });
 
-  it('flags max_steps_exceeded for a path of exactly 31 nodes', () => {
+  it('flags max_steps_exceeded for a path of exactly 49 nodes', () => {
     const waitNodes: FlowNode[] = [];
     const edges: FlowEdge[] = [];
     let prev = 't1';
-    for (let i = 1; i <= 29; i++) {
+    for (let i = 1; i <= 47; i++) {
       const id = `w${i}`;
       waitNodes.push(wait(id, { mode: 'fixed', duration_ms: 300_000 }));
       edges.push(edge(prev, id, always()));
       prev = id;
     }
     edges.push(edge(prev, 'e1', always()));
-    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges); // 1 + 29 + 1 = 31 nodes
+    const g = graph([trigger('t1'), ...waitNodes, end('e1')], edges); // 1 + 47 + 1 = 49 nodes
     const result = validateFlowForPublish(g);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors.map((e) => e.code)).toEqual(['max_steps_exceeded']);
     }
+  });
+
+  // Sequência real de reativação: 8 toques, cada um com a pergunta de saída
+  // ("posso continuar? responda PARAR") logo depois da mensagem. Cada toque custa
+  // 4 nós (condição, mensagem, pergunta, espera) — 33 no total, o que estourava o
+  // teto antigo de 30 e fazia a publicação do fluxo voltar 422.
+  it('aceita 8 toques com a pergunta de saída depois de cada um (33 nós)', () => {
+    const nodes: FlowNode[] = [trigger('t1'), end('fim_ok', 'converted'), end('fim')];
+    const edges: FlowEdge[] = [];
+    let prev = 't1';
+    for (let i = 1; i <= 8; i++) {
+      nodes.push(condition(`c${i}`), actionAiMessage(`a${i}`, { fallback: TEMPLATE_ID }));
+      nodes.push({
+        id: `q${i}`,
+        type: 'action',
+        label: `q${i}`,
+        position: pos,
+        config: { mode: 'text', body: 'Posso continuar? Se preferir parar, responda PARAR.' },
+      });
+      edges.push(edge(prev, `c${i}`, always()));
+      edges.push(edge(`c${i}`, 'fim_ok', condResult(true)));
+      edges.push(edge(`c${i}`, `a${i}`, condResult(false)));
+      edges.push(edge(`a${i}`, `q${i}`, always()));
+      if (i < 8) {
+        nodes.push(wait(`w${i}`, { mode: 'fixed', duration_ms: i === 1 ? 259_200_000 : 604_800_000 }));
+        edges.push(edge(`q${i}`, `w${i}`, always()));
+        prev = `w${i}`;
+      } else {
+        edges.push(edge(`q${i}`, 'fim', always()));
+      }
+    }
+    expect(nodes.length).toBe(34); // o caminho mais longo passa por 33 deles
+    expect(validateFlowForPublish(graph(nodes, edges)).ok).toBe(true);
   });
 
   // Regression for the old per-path DFS: a width-2 "diamond" DAG re-converges

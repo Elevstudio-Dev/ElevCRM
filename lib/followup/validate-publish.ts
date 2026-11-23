@@ -37,7 +37,9 @@ export type PublishValidationResult =
 
 const LONG_WAIT_THRESHOLD_MS = 86_400_000; // 24h
 const MIN_CYCLE_WAIT_MS = 300_000; // 5min
-const MAX_PATH_STEPS = 30;
+// 48: cabem 8 follow-ups com a pergunta de saída (condição + mensagem + pergunta + espera
+// por toque) sem perder o freio contra grafo gigante.
+const MAX_PATH_STEPS = 48;
 
 function waitMs(config: Extract<FlowNode, { type: 'wait' }>['config']): number {
   return config.mode === 'fixed' ? config.duration_ms : config.max_ms;
