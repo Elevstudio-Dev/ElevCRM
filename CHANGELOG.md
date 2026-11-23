@@ -8,6 +8,16 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.3] — 2026-11-23
+
+### Corrigido
+
+- **Agenda: compromisso cancelado deixa de ser apagado do Google a cada 5 minutos** Quando um compromisso cancelado era apagado do Google Agenda, o CRM não conseguia gravar que a exclusão tinha terminado (a coluna de sequência não aceita vazio) e o erro era ignorado. O compromisso continuava na fila e o pedido de exclusão saía de novo a cada 5 minutos, sem aparecer erro em lugar nenhum. Agora a exclusão é registrada e o compromisso sai da fila. Há testes contra o banco real.
+
+- **Agenda da secretária: o "sim" dela volta a atualizar a agenda** Na clínica, a agenda ficou mais de 24 horas sem atualizar e a IA de vendas parou de oferecer horários. Três defeitos em cadeia: quando a secretária trocava o paciente de um mesmo horário, gravar a agenda falhava por "horário repetido" e a tentativa morria; a pergunta do fim do dia e o lembrete do sistema chegavam por cima do resumo, e o "sim" que ela tinha dado antes deixava de ser lido; e um "sim" dado a tempo passava a contar como resumo vencido se fosse processado no dia seguinte. Agora a troca de paciente no mesmo horário é aplicada (o antigo sai antes de o novo entrar, e volta se a gravação falhar); um horário já ocupado por uma consulta marcada pela IA ou pela equipe não é tocado (se é o mesmo paciente, nada é dito; se é outra pessoa, a secretária é avisada na confirmação); o "sim" vale mesmo com mensagens automáticas no meio, com as 12 horas contadas até a hora em que ela respondeu; a agenda conta como conferida na hora da resposta dela, não na hora em que o sistema processou (um "sim" antigo atualiza a agenda, mas a IA só oferece horários enquanto essa conferência estiver dentro da validade); um resumo vencido de verdade é avisado como vencido; e, com um resumo esperando o "sim", o sistema não pergunta a agenda de novo, só lembra uma vez de confirmar, e avisa a Central se duas horas depois ainda não houver confirmação. Se o "sim" ainda assim não puder ser aplicado, a Central de avisos diz isso com o motivo e o que fazer. Para reaplicar uma resposta que já ficou para trás, há um script de operação descrito em `docs/runbooks/agenda-da-secretaria.md`. Há testes contra o banco real reproduzindo o caso de produção.
+
+- **Agenda: compromisso criado pelo relato da secretária nunca vai ao Google Agenda** Os compromissos que a secretária conta pelo WhatsApp entram na agenda com o nome do paciente e nunca devem ir para o Google Agenda do profissional. Eles já nasciam marcados como "não enviar", mas editar o compromisso pela tela, ou o cancelamento feito pelo próprio relato, desfazia essa marca, e com o Google conectado o nome do paciente seria publicado no calendário. Agora a rotina que envia ao Google ignora esses compromissos, e ainda recusa e registra no log qualquer um que chegue até a hora de publicar por outro caminho. Nenhum caso foi encontrado em produção: a correção é preventiva. Há testes contra o banco real.
+
 ## [1.34.2] — 2026-11-19
 
 ### Corrigido
@@ -3295,7 +3305,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.2...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.3...HEAD
+[1.34.3]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.2...v1.34.3
 [1.34.2]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.1...v1.34.2
 [1.34.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.0...v1.34.1
 [1.34.0]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.33.0...v1.34.0
