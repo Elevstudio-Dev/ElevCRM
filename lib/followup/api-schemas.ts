@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 import { flowGraphSchema } from "./graph-schema";
+import { regraDeAnuncioSchema } from "./regra-de-anuncio";
 import { ritmoDeEntradaSchema } from "./ritmo-de-entrada";
 
 /** Vocabulário da coluna `surface` (0167). A UI não recorta mais por ela. */
@@ -40,6 +41,9 @@ export const triggerConfigSchema = z.discriminatedUnion("kind", [
       // Ritmo de entrada na fila (intervalo entre pacientes + limite por dia).
       // Ausente = comportamento antigo: todos os parados entram de uma vez.
       ritmo: ritmoDeEntradaSchema.optional(),
+      // Lead que veio de anúncio só entra no automático depois da avaliação (etapas liberadas).
+      // Ausente = sem restrição. Ver `regra-de-anuncio.ts`.
+      leads_de_anuncio: regraDeAnuncioSchema.optional(),
     }),
     ...CANCEL_ON_REPLY,
   }),
