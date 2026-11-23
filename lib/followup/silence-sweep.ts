@@ -306,6 +306,7 @@ async function carregaLeadMaisRecente(
       .from("crm_leads")
       .select("contact_id, source, created_at, etapa:stage_id(slug)")
       .eq("organization_id", orgId)
+      .eq("fora_do_funil", false)
       .in("contact_id", lote)
       .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);

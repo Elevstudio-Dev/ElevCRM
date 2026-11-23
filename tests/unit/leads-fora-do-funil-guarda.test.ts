@@ -37,6 +37,7 @@ const FILTRAM: Record<string, string> = {
   "lib/leads/risk-seed.ts": "a semente do risco não cria estado para quem está fora",
   "app/api/v1/contacts/[id]/crm-summary/route.ts": "o resumo do CRM na ficha do contato mostra os negócios que contam",
   "lib/followup/retorno-crm.ts": "o retorno do follow-up só escolhe negócio que aparece",
+  "lib/followup/silence-sweep.ts": "a regra de anúncio olha o negócio mais recente que aparece (quem está fora do funil não conta)",
   "lib/escalacao/retomada.ts": "a volta do atendimento só se registra em negócio que aparece",
   "lib/inbox/atividade-de-comando.ts": "a troca de comando só se registra em negócio que aparece",
   "hooks/notifications/useCrmAlerts.ts": "avisos em tempo real: o espelho muda em massa e não pode virar aviso",
