@@ -38,6 +38,7 @@ const CONFERIDO: ResultadoDaConferencia = {
   cancelados: 0,
   diasFechados: 0,
   diasReabertos: 0,
+  conflitos: [],
 };
 
 function portas(over: Partial<Portas> = {}) {
@@ -46,6 +47,8 @@ function portas(over: Partial<Portas> = {}) {
     agora: AGORA,
     fuso: FUSO,
     texto: "terça 14h Maria",
+    respondeuEm: null,
+    ultimaRespostaNossa: "bastidor",
     pendente: null,
     jaRegistrado: null,
     lerComModelo: vi.fn(async () => RESPOSTA_DO_MODELO),
@@ -103,6 +106,21 @@ describe("o 'sim' — o único que mexe na agenda", () => {
     expect(enviados[0]).toContain("1 horário anotado");
   });
 
+  it("horário que não coube (já havia outro compromisso nele): a confirmação DIZ qual foi, no fuso da agenda", async () => {
+    const { p, enviados } = portas({
+      texto: "sim",
+      pendente: pendente(),
+      conferir: vi.fn(async () => ({
+        ...CONFERIDO,
+        conflitos: [{ inicio: "2026-11-19T19:00:00.000Z", nome: "Beltrano", porque: "outro_compromisso" as const }],
+      })),
+    });
+    expect((await executarTurnoDaSecretaria(p)).acao).toBe("agenda_conferida");
+    expect(enviados[0]).toContain("agenda atualizada");
+    expect(enviados[0]).toContain("não anotei este horário");
+    expect(enviados[0]).toContain("qui 19/11 16h Beltrano");
+  });
+
   it.each(["Sim!", "isso mesmo", "ok", "👍", "certo, obrigada"])("'%s' confirma", async (texto) => {
     const { p } = portas({ texto, pendente: pendente() });
     expect((await executarTurnoDaSecretaria(p)).acao).toBe("agenda_conferida");
@@ -125,13 +143,31 @@ describe("o 'sim' — o único que mexe na agenda", () => {
     expect(enviados[0]).toMatch(/nenhuma agenda esperando/i);
   });
 
-  it("o resumo está VELHO (mais de 12h): descarta e trata o 'sim' como sem nada esperando", async () => {
+  it("o resumo está VELHO (ela respondeu mais de 12h depois): descarta e DIZ que venceu — não 'não tenho nada esperando'", async () => {
     const velho = pendente(new Date(AGORA.getTime() - (VALIDADE_DO_RESUMO_HORAS + 1) * 3_600_000));
-    const { p } = portas({ texto: "sim", pendente: velho });
+    const { p, enviados } = portas({ texto: "sim", pendente: velho });
     const r = await executarTurnoDaSecretaria(p);
     expect(p.descartar).toHaveBeenCalledWith("pend");
     expect(p.conferir).not.toHaveBeenCalled();
-    expect(r).toEqual({ acao: "perguntou", motivo: "sem_nada_para_conferir" });
+    expect(r).toEqual({ acao: "perguntou", motivo: "resumo_vencido" });
+    expect(enviados[0]).toMatch(/já venceu/);
+    expect(enviados[0]).toMatch(/manda a agenda de novo/i);
+    expect(enviados[0]).not.toMatch(/nenhuma agenda esperando/i);
+  });
+
+  it("'não' a um resumo vencido também diz que venceu (e não pergunta o que corrigir num resumo que já não vale)", async () => {
+    const velho = pendente(new Date(AGORA.getTime() - (VALIDADE_DO_RESUMO_HORAS + 1) * 3_600_000));
+    const { p, enviados } = portas({ texto: "não", pendente: velho });
+    expect(await executarTurnoDaSecretaria(p)).toEqual({ acao: "perguntou", motivo: "resumo_vencido" });
+    expect(enviados[0]).toMatch(/já venceu/);
+  });
+
+  it("texto livre depois de um resumo vencido é relato NOVO (o vencido não vira 'relato anterior')", async () => {
+    const velho = pendente(new Date(AGORA.getTime() - (VALIDADE_DO_RESUMO_HORAS + 1) * 3_600_000));
+    const { p } = portas({ texto: "terça 14h Maria", pendente: velho });
+    const r = await executarTurnoDaSecretaria(p);
+    expect(r).toMatchObject({ acao: "resumo_enviado", corrigiu: false });
+    expect(p.marcarCorrigido).not.toHaveBeenCalled();
   });
 
   it("o resumo está no limite (12h): ainda vale", async () => {
@@ -162,6 +198,65 @@ describe("o 'sim' — o único que mexe na agenda", () => {
     });
     await expect(executarTurnoDaSecretaria(p)).rejects.toThrow("banco fora do ar");
     expect(enviados).toEqual([]);
+  });
+});
+
+describe("a validade do resumo é medida até quando ELA RESPONDEU (não até o job rodar)", () => {
+  const criado = new Date("2026-11-17T12:00:00Z");
+  const horas = (h: number) => new Date(criado.getTime() + h * 3_600_000);
+
+  it("'sim' 11h depois do resumo, job rodando 30h depois (fila parada, reprocessamento): CONFIRMA", async () => {
+    const { p } = portas({ texto: "sim", agora: horas(30), respondeuEm: horas(11), pendente: pendente(criado) });
+    expect((await executarTurnoDaSecretaria(p)).acao).toBe("agenda_conferida");
+    expect(p.descartar).not.toHaveBeenCalled();
+  });
+
+  it("o caso de produção: 'Sim' 8 minutos depois do resumo, job rodando no dia seguinte: CONFIRMA", async () => {
+    const { p } = portas({ texto: "Sim", agora: horas(26), respondeuEm: horas(8 / 60), pendente: pendente(criado) });
+    expect((await executarTurnoDaSecretaria(p)).acao).toBe("agenda_conferida");
+  });
+
+  it("'sim' 13h depois do resumo: venceu, mesmo que o job rode na hora", async () => {
+    const { p, enviados } = portas({ texto: "sim", agora: horas(13), respondeuEm: horas(13), pendente: pendente(criado) });
+    expect(await executarTurnoDaSecretaria(p)).toEqual({ acao: "perguntou", motivo: "resumo_vencido" });
+    expect(p.conferir).not.toHaveBeenCalled();
+    expect(enviados[0]).toMatch(/já venceu/);
+  });
+
+  it("sem o instante da resposta (nenhuma mensagem lida), mede até agora — o comportamento de antes", async () => {
+    const { p } = portas({ texto: "sim", agora: horas(13), respondeuEm: null, pendente: pendente(criado) });
+    expect((await executarTurnoDaSecretaria(p)).acao).toBe("perguntou");
+  });
+});
+
+describe("o 'sim' que veio depois de uma mensagem HUMANA (não do agente)", () => {
+  it("não aplica no escuro: reenvia o resumo e pergunta se o 'sim' é para ele — o relato continua esperando", async () => {
+    const { p, enviados } = portas({ texto: "sim", ultimaRespostaNossa: "humana", pendente: pendente() });
+    expect(await executarTurnoDaSecretaria(p)).toEqual({ acao: "perguntou", motivo: "confirmar_resumo" });
+    expect(p.conferir).not.toHaveBeenCalled();
+    expect(p.descartar).not.toHaveBeenCalled();
+    expect(p.marcarCorrigido).not.toHaveBeenCalled();
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]).toMatch(/esse \*sim\* é para este resumo/i);
+    expect(enviados[0]).toContain("Entendi assim:");
+    expect(enviados[0]).toContain("14h Maria");
+  });
+
+  it("sem resposta nossa nenhuma antes (o resumo nem saiu): mesma pergunta de volta", async () => {
+    const { p } = portas({ texto: "sim", ultimaRespostaNossa: "nenhuma", pendente: pendente() });
+    expect(await executarTurnoDaSecretaria(p)).toEqual({ acao: "perguntou", motivo: "confirmar_resumo" });
+    expect(p.conferir).not.toHaveBeenCalled();
+  });
+
+  it("o 'sim' seguinte (agora depois da pergunta do AGENTE) confirma", async () => {
+    const { p } = portas({ texto: "sim", ultimaRespostaNossa: "bastidor", pendente: pendente() });
+    expect((await executarTurnoDaSecretaria(p)).acao).toBe("agenda_conferida");
+  });
+
+  it("'não' depois de mensagem humana segue o caminho de sempre (pergunta o que corrigir; nada é gravado)", async () => {
+    const { p } = portas({ texto: "não", ultimaRespostaNossa: "humana", pendente: pendente() });
+    expect(await executarTurnoDaSecretaria(p)).toEqual({ acao: "perguntou", motivo: "nao" });
+    expect(p.conferir).not.toHaveBeenCalled();
   });
 });
 

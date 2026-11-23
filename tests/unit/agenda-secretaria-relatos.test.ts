@@ -151,6 +151,28 @@ describe("conferirEAplicarRelato", () => {
     expect(marca.filtros).toContainEqual(["eq", "organization_id", ORG]);
   });
 
+  it("o carimbo é a hora em que ELA RESPONDEU (um 'sim' processado 20 h depois não faz a agenda parecer fresca)", async () => {
+    const { admin, chamadas } = mundo();
+    const respondeuEm = new Date(AGORA.getTime() - 20 * 3_600_000);
+    await conferirEAplicarRelato(admin, { organizationId: ORG, relatoId: "r1", agora: AGORA, respondeuEm });
+    const marca = chamadas.find((c) => c.tabela === "agenda_relatos" && c.op === "update")!;
+    expect(marca.payload).toEqual({ estado: "conferido", conferido_em: respondeuEm.toISOString() });
+    // A agenda É aplicada mesmo assim (o espelho entra; só a "frescura" é honesta).
+    expect(chamadas.some((c) => c.tabela === "calendar_appointments" && c.op === "insert")).toBe(true);
+  });
+
+  it("resposta 'no futuro' (relógio torto) nunca vira carimbo no futuro: fica em agora", async () => {
+    const { admin, chamadas } = mundo();
+    await conferirEAplicarRelato(admin, {
+      organizationId: ORG,
+      relatoId: "r1",
+      agora: AGORA,
+      respondeuEm: new Date(AGORA.getTime() + 60_000),
+    });
+    const marca = chamadas.find((c) => c.tabela === "agenda_relatos" && c.op === "update")!;
+    expect(marca.payload).toEqual({ estado: "conferido", conferido_em: AGORA.toISOString() });
+  });
+
   it("usa a duração configurada para quem só disse a hora de início", async () => {
     const { admin, chamadas } = mundo({
       settings: { secretaria: { ativa: true, dono_da_agenda_user_id: DONO, duracao_min: 45 } },

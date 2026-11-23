@@ -26,6 +26,11 @@ export const TOLERANCIA_DA_PERGUNTA_MIN = 120;
 export const ESPERA_ANTES_DO_LEMBRETE_MIN = 30;
 /** Quanto esperar, depois do lembrete, antes de avisar o administrador. */
 export const ESPERA_ANTES_DO_AVISO_MIN = 30;
+/**
+ * Quanto esperar, depois do lembrete "falta só você confirmar o resumo", antes de avisar o administrador que o resumo
+ * continua sem confirmação (a IA de vendas está sem horários para oferecer).
+ */
+export const ESPERA_ANTES_DO_AVISO_DO_RESUMO_MIN = 120;
 /** Agenda conferida há menos que isto antes do horário: a pergunta seria repetição, e é dispensada. */
 export const DISPENSA_SE_CONFERIDA_HA_MIN = 60;
 

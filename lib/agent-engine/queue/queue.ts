@@ -277,6 +277,36 @@ export async function completeJob<T = void>(
 }
 
 /**
+ * O começo da mensagem de erro que o turno da secretaria (`bastidor-turn.ts`) lança quando o "sim" dela NÃO pôde
+ * ser aplicado na agenda. É por ele que o aviso de job morto deixa de ser o genérico "Job descartado após esgotar
+ * tentativas / kind=bastidor_turn; attempts=5" — que o dono do negócio não entende — e passa a dizer o que aconteceu
+ * e o que fazer. Mora aqui (e não no bastidor) porque este módulo não tem imports de runtime (ver o cabeçalho).
+ * SEM aspa simples: entra literal no SQL abaixo.
+ */
+export const PREFIXO_DA_AGENDA_NAO_APLICADA = 'A agenda que a secretária confirmou não foi aplicada.';
+
+const E_A_AGENDA_NAO_APLICADA = `(kind = 'bastidor_turn' and starts_with(coalesce(last_error, ''), '${PREFIXO_DA_AGENDA_NAO_APLICADA}'))`;
+
+/** O título do aviso `job_dead`. Lê as colunas devolvidas pelo `update ... returning` (kind, last_error). */
+const TITULO_DO_JOB_MORTO = `case when ${E_A_AGENDA_NAO_APLICADA}
+         then 'A agenda que a secretária confirmou não foi aplicada'
+         else 'Job descartado após esgotar tentativas' end`;
+
+/**
+ * O corpo do aviso `job_dead`. O erro que matou o job vai JUNTO. Antes o corpo era só 'kind=...; attempts=5' e
+ * jogava fora a única informação que resolveria: o aviso existia, e não dizia nada. Caso real desta VPS: 16 alertas
+ * críticos idênticos enquanto o erro guardado em last_error dizia exatamente o que configurar. Para a agenda da
+ * secretaria, o texto diz o efeito (a IA para de oferecer horários e ela acha que está tudo certo) e o que fazer.
+ */
+const CORPO_DO_JOB_MORTO = `case when ${E_A_AGENDA_NAO_APLICADA}
+         then left(last_error, 400)
+           || chr(10) || 'Enquanto isso a IA não oferece horários aos pacientes, e a secretária acha que a agenda foi atualizada.'
+           || chr(10) || 'O que fazer: peça para ela mandar a agenda de novo, ou reprocesse a resposta dela (docs/runbooks/agenda-da-secretaria.md).'
+           || chr(10) || 'Detalhe técnico: kind=' || kind || '; attempts=' || attempts
+         else 'kind=' || kind || '; attempts=' || attempts
+           || coalesce(chr(10) || 'Motivo: ' || left(last_error, 400), '') end`;
+
+/**
  * Devolve o job à fila após falha (attempts já foi incrementado no claim). Excedeu
  * `max_attempts` → 'dead' + escalação humana em agent_inbox_items (kind='job_dead'), no
  * MESMO statement (atômico). Devolve null se o lease já não era deste worker.
@@ -311,14 +341,8 @@ export async function failJob(
      alert as (
        insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
        select organization_id, 'job_dead', 'critical',
-              'Job descartado após esgotar tentativas',
-              -- O erro que matou o job vai JUNTO. Antes o corpo era só
-              -- 'kind=...; attempts=5' e jogava fora a única informação que
-              -- resolveria: o aviso existia, e não dizia nada. Caso real desta
-              -- VPS: 16 alertas críticos idênticos enquanto o erro guardado em
-              -- last_error dizia exatamente o que configurar.
-              'kind=' || kind || '; attempts=' || attempts
-                || coalesce(chr(10) || 'Motivo: ' || left(last_error, 400), ''),
+              ${TITULO_DO_JOB_MORTO},
+              ${CORPO_DO_JOB_MORTO},
               'job_queue', id
        from updated
        where status = 'dead'
@@ -402,14 +426,8 @@ export async function reapExpiredJobs(
      alert as (
        insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
        select organization_id, 'job_dead', 'critical',
-              'Job descartado após esgotar tentativas',
-              -- O erro que matou o job vai JUNTO. Antes o corpo era só
-              -- 'kind=...; attempts=5' e jogava fora a única informação que
-              -- resolveria: o aviso existia, e não dizia nada. Caso real desta
-              -- VPS: 16 alertas críticos idênticos enquanto o erro guardado em
-              -- last_error dizia exatamente o que configurar.
-              'kind=' || kind || '; attempts=' || attempts
-                || coalesce(chr(10) || 'Motivo: ' || left(last_error, 400), ''),
+              ${TITULO_DO_JOB_MORTO},
+              ${CORPO_DO_JOB_MORTO},
               'job_queue', id
        from expired
        where status = 'dead'

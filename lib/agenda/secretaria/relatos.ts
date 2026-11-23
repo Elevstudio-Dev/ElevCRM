@@ -73,7 +73,14 @@ export interface ResultadoDaConferencia extends ResultadoDaAplicacao {
   jaConferido: boolean;
 }
 
-const SEM_MUDANCA: ResultadoDaAplicacao = { criados: 0, mantidos: 0, cancelados: 0, diasFechados: 0, diasReabertos: 0 };
+const SEM_MUDANCA: ResultadoDaAplicacao = {
+  criados: 0,
+  mantidos: 0,
+  cancelados: 0,
+  diasFechados: 0,
+  diasReabertos: 0,
+  conflitos: [],
+};
 
 /**
  * A secretaria disse "sim": aplica o relato na agenda e só DEPOIS o marca como conferido. Se a aplicação falhar no
@@ -81,9 +88,23 @@ const SEM_MUDANCA: ResultadoDaAplicacao = { criados: 0, mantidos: 0, cancelados:
  */
 export async function conferirEAplicarRelato(
   admin: SupabaseClient,
-  args: { organizationId: string; relatoId: string; agora: Date },
+  args: {
+    organizationId: string;
+    relatoId: string;
+    agora: Date;
+    /**
+     * Quando ELA respondeu "sim". O carimbo `conferido_em` é o que decide se a IA de vendas pode oferecer horário
+     * (`atualidade.ts`: 6 h para hoje, 24 h para os próximos dias) — e a agenda é tão fresca quanto a resposta dela,
+     * não quanto a hora em que o job rodou. Um "sim" processado 20 h depois (worker parado, reprocessamento) não pode
+     * fazer uma agenda velha parecer "conferida agora". Ausente = `agora` (o comportamento de antes).
+     */
+    respondeuEm?: Date | null;
+  },
 ): Promise<ResultadoDaConferencia> {
   const { organizationId, relatoId, agora } = args;
+  // Nunca no futuro e nunca depois da resposta.
+  const conferidoEm =
+    args.respondeuEm != null && args.respondeuEm.getTime() < agora.getTime() ? args.respondeuEm : agora;
 
   const { data: linha, error: erroRelato } = await admin
     .from("agenda_relatos")
@@ -139,7 +160,7 @@ export async function conferirEAplicarRelato(
 
   const { error: erroMarca } = await admin
     .from("agenda_relatos")
-    .update({ estado: "conferido", conferido_em: agora.toISOString() })
+    .update({ estado: "conferido", conferido_em: conferidoEm.toISOString() })
     .eq("organization_id", organizationId)
     .eq("id", relatoId)
     .in("estado", ["lido"]);

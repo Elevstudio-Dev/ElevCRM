@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RelatoLido } from "@/lib/agenda/secretaria/relato";
 import {
   conflitosComFechamento,
+  mesmoPaciente,
   motivoDoFechamento,
   planejarSincronizacao,
   PREFIXO_DO_MOTIVO,
@@ -55,6 +56,8 @@ describe("planejarSincronizacao — compromissos", () => {
     expect(p.criar[0]!.fim.getTime() - p.criar[0]!.inicio.getTime()).toBe(30 * 60_000);
     expect(p.cancelarIds).toEqual([]);
     expect(p.manterIds).toEqual([]);
+    expect(p.substituirIds).toEqual([]);
+    expect(p.conflitos).toEqual([]);
   });
 
   it("usa o fim que a secretaria deu, quando deu", () => {
@@ -143,7 +146,9 @@ describe("planejarSincronizacao — compromissos", () => {
     expect(p.criar).toHaveLength(1);
   });
 
-  it("duas pessoas no MESMO horário são dois compromissos (a agenda da franquia pode ter dois atendentes)", () => {
+  it("duas pessoas no MESMO horário: o banco só aceita UM compromisso por horário do mesmo dono — cria um e devolve o outro como conflito (nada some calado)", () => {
+    // Antes o plano mandava criar os dois e o índice `calendar_appointments_sem_duplicata_idx` derrubava o lote
+    // inteiro. A hora fica tomada de qualquer jeito; quem não coube volta para a secretaria saber.
     const p = plano({
       relato: relato({
         marcados: [
@@ -152,7 +157,153 @@ describe("planejarSincronizacao — compromissos", () => {
         ],
       }),
     });
-    expect(p.criar).toHaveLength(2);
+    expect(p.criar).toHaveLength(1);
+    expect(p.conflitos).toHaveLength(1);
+    expect(p.conflitos[0]).toMatchObject({ porque: "horario_ja_ocupado" });
+    expect([p.criar[0]!.nome, p.conflitos[0]!.nome].sort()).toEqual(["João", "Maria"]);
+  });
+});
+
+describe("planejarSincronizacao — o MESMO horário (a falha de produção)", () => {
+  it("o relato novo troca o paciente de um horário: o antigo entra em `substituirIds` (cancelado ANTES do insert)", () => {
+    const p = plano({
+      relato: relato({
+        marcados: [
+          { nome: "Beltrano", inicio: "2026-11-18T08:30:00-03:00" },
+          { nome: "Ana", inicio: "2026-11-18T10:00:00-03:00" },
+        ],
+      }),
+      existentes: [
+        existente("fulano", "Fulano", "2026-11-18T11:30:00Z"), // 08h30: trocado
+        existente("sumiu", "Zé", "2026-11-18T15:00:00Z"), // 12h: sumiu
+      ],
+    });
+    expect(p.criar.map((c) => c.nome)).toEqual(["Beltrano", "Ana"]);
+    expect(p.cancelarIds.sort()).toEqual(["fulano", "sumiu"]);
+    // Só o que ocupa o horário de um compromisso a criar é cancelado antes; o resto segue "criar antes de cancelar".
+    expect(p.substituirIds).toEqual(["fulano"]);
+    expect(p.conflitos).toEqual([]);
+  });
+
+  it("horário ocupado por compromisso que NÃO é de relato (IA de vendas, marcação à mão): não cria o espelho, devolve o conflito e não cancela nada dele", () => {
+    const p = plano({
+      relato: relato({ marcados: [{ nome: "Beltrano", inicio: "2026-11-18T16:00:00-03:00" }] }),
+      ocupadosForaDoRelato: [{ inicio: new Date("2026-11-18T19:00:00Z"), nomes: ["Avaliação - Sicrano", "Sicrano Souza"] }],
+    });
+    expect(p.criar).toEqual([]);
+    expect(p.jaNaAgenda).toEqual([]);
+    expect(p.cancelarIds).toEqual([]);
+    expect(p.substituirIds).toEqual([]);
+    expect(p.conflitos).toEqual([
+      { inicio: new Date("2026-11-18T19:00:00Z"), nome: "Beltrano", porque: "outro_compromisso" },
+    ]);
+  });
+
+  describe("o ocupante que não é de relato é o MESMO paciente (ex.: a IA de vendas marcou) — I2", () => {
+    const BELTRANO = { nome: "Beltrano", inicio: "2026-11-18T16:00:00-03:00" };
+    const as16h = new Date("2026-11-18T19:00:00Z");
+
+    it("título do compromisso contém o nome do relato: 'já está na agenda' — sem espelho e SEM conflito", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Avaliação - Beltrano Silva", ""] }],
+      });
+      expect(p.criar).toEqual([]);
+      expect(p.conflitos).toEqual([]);
+      expect(p.jaNaAgenda.map((c) => c.nome)).toEqual(["Beltrano"]);
+    });
+
+    it("o nome do CONTATO casa mesmo com título genérico", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Avaliação", "Beltrano"] }],
+      });
+      expect(p.conflitos).toEqual([]);
+      expect(p.jaNaAgenda).toHaveLength(1);
+    });
+
+    it("acento e caixa não importam ('JOÃO' no relato, 'joao pedro' no contato)", () => {
+      const p = plano({
+        relato: relato({ marcados: [{ nome: "JOÃO", inicio: "2026-11-18T16:00:00-03:00" }] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Consulta", "joao pedro"] }],
+      });
+      expect(p.conflitos).toEqual([]);
+      expect(p.jaNaAgenda).toHaveLength(1);
+    });
+
+    it("ocupante sem título nem contato: é OUTRA pessoa até prova em contrário — conflito avisado", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["", ""] }],
+      });
+      expect(p.jaNaAgenda).toEqual([]);
+      expect(p.conflitos).toMatchObject([{ nome: "Beltrano", porque: "outro_compromisso" }]);
+    });
+
+    it.each([
+      ["Lia", ["Avaliação"], false], // "lia" é pedaço de "avaliacao", não palavra
+      ["Ana", ["Juliana Souza"], false], // "ana" dentro de "juliana" não é a Ana
+      ["Ana", ["Avaliação - Ana Souza"], true],
+      ["Ana Paula", ["Ana Paula Souza"], true],
+      ["Ana Paula", ["Ana Souza"], false], // falta "paula": não é garantido que seja ela
+      ["Paula Ana", ["Ana Paula Souza"], true], // a ordem das palavras não importa
+      ["D'Avila-Souza", ["Avaliação - Maria D'Ávila Souza"], true], // hífen e apóstrofo separam palavras
+    ])("palavras INTEIRAS: relato '%s' contra ocupante %j → mesmo paciente = %s", (nome, nomes, mesmo) => {
+      expect(mesmoPaciente(nome, nomes)).toBe(mesmo);
+    });
+
+    it("outra pessoa no horário continua conflito avisado", () => {
+      const p = plano({
+        relato: relato({ marcados: [BELTRANO] }),
+        ocupadosForaDoRelato: [{ inicio: as16h, nomes: ["Avaliação - Fulano", "Fulano"] }],
+      });
+      expect(p.conflitos).toHaveLength(1);
+      expect(p.jaNaAgenda).toEqual([]);
+    });
+  });
+
+  it("horário de um compromisso de relato que JÁ PASSOU (histórico, não é cancelado): o novo do mesmo horário é conflito, não erro", () => {
+    const p = plano({
+      relato: relato({ marcados: [{ nome: "Beltrano", inicio: "2026-11-18T08:00:00-03:00" }] }),
+      existentes: [existente("passado", "Fulano", "2026-11-18T11:00:00Z")], // 08h–08h30, antes das 09h de AGORA
+    });
+    expect(p.cancelarIds).toEqual([]);
+    expect(p.criar).toEqual([]);
+    expect(p.conflitos).toMatchObject([{ nome: "Beltrano", porque: "horario_ja_ocupado" }]);
+  });
+
+  it("horário de um compromisso MANTIDO + outra pessoa no mesmo horário: mantém o que está, a outra vira conflito", () => {
+    const p = plano({
+      relato: relato({
+        marcados: [
+          { nome: "Maria", inicio: "2026-11-18T14:00:00-03:00" },
+          { nome: "João", inicio: "2026-11-18T14:00:00-03:00" },
+        ],
+      }),
+      existentes: [existente("maria", "Maria", "2026-11-18T17:00:00Z")],
+    });
+    expect(p.manterIds).toEqual(["maria"]);
+    expect(p.criar).toEqual([]);
+    expect(p.conflitos).toMatchObject([{ nome: "João", porque: "horario_ja_ocupado" }]);
+  });
+
+  it("reprocessar o plano depois de aplicado não gera conflito novo (idempotente com o conflito)", () => {
+    const r = relato({
+      marcados: [
+        { nome: "Maria", inicio: "2026-11-18T14:00:00-03:00" },
+        { nome: "Beltrano", inicio: "2026-11-18T16:00:00-03:00" },
+      ],
+    });
+    const ocupadosForaDoRelato = [{ inicio: new Date("2026-11-18T19:00:00Z"), nomes: ["Outra Pessoa"] }];
+    const primeiro = plano({ relato: r, ocupadosForaDoRelato });
+    const segundo = plano({
+      relato: r,
+      ocupadosForaDoRelato,
+      existentes: primeiro.criar.map((c, i) => ({ id: `c${i}`, ...c })),
+    });
+    expect(segundo.criar).toEqual([]);
+    expect(segundo.cancelarIds).toEqual([]);
+    expect(segundo.conflitos).toEqual(primeiro.conflitos);
   });
 });
 

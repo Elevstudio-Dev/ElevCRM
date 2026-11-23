@@ -26,6 +26,7 @@
 import { z } from 'zod';
 import type pg from 'pg';
 
+import { RelatoIncoerente } from '@/lib/agenda/secretaria/aplicar';
 import { lerConfigDaSecretaria } from '@/lib/agenda/secretaria/config';
 import {
   conferirEAplicarRelato,
@@ -37,15 +38,20 @@ import { relatoLidoSchema } from '@/lib/agenda/secretaria/relato';
 import { reservaEmPerguntaAberta } from '@/lib/agenda/secretaria/reservas';
 import { TOLERANCIA_DA_PERGUNTA_MIN } from '@/lib/bastidor/secretaria/perguntas';
 import { interpretarRespostaDeConferencia } from '@/lib/bastidor/secretaria/resposta';
-import { TEXTO_DO_LEMBRETE_DA_PERGUNTA, textoDaPergunta } from '@/lib/bastidor/secretaria/textos';
-import { executarTurnoDaSecretaria, type Portas } from '@/lib/bastidor/secretaria/turno';
+import {
+  TEXTO_DO_LEMBRETE_DA_CONFERENCIA,
+  TEXTO_DO_LEMBRETE_DA_PERGUNTA,
+  textoDaPergunta,
+} from '@/lib/bastidor/secretaria/textos';
+import { executarTurnoDaSecretaria, VALIDADE_DO_RESUMO_HORAS, type Portas } from '@/lib/bastidor/secretaria/turno';
 
 import type { ChannelAdapter } from '../channel-adapter';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 import { runModelCall } from '../edge/llm/run-model-call';
 import { withFields } from '../obs/logger';
-import type { JobRow } from '../queue/queue';
+import { PREFIXO_DA_AGENDA_NAO_APLICADA, type JobRow } from '../queue/queue';
 import { enviarAoBastidor, fusoDaAgenda } from './bastidor-envio';
+import { haResumoEsperandoOSim, lerMensagensDesdeAUltimaResposta, resumoAindaEsperaOSim } from './bastidor-mensagens';
 import {
   executarTrabalhoDaReserva,
   tratarRespostaDaReserva,
@@ -78,11 +84,22 @@ export const perguntaDaAgendaPayloadSchema = z
   })
   .passthrough();
 
+/**
+ * O job do cron que LEMBRA a secretaria de confirmar um resumo que espera o "sim" (no lugar da pergunta diária;
+ * `perguntas-tick.ts`). Um por resumo: o cron o enfileira com `source_event_id` = id do relato.
+ */
+export const lembreteDaConferenciaPayloadSchema = z
+  .object({
+    conversation_id: z.string().uuid(),
+    contact_id: z.string().uuid(),
+    channel_session_id: z.string().uuid(),
+    acao: z.literal('lembrar_conferencia'),
+    relato_id: z.string().uuid(),
+  })
+  .passthrough();
+
 /** Pergunta que esperou na fila mais que isto (worker parado) não vale mais: "bom dia" às 15h é fora de propósito. */
 const VALIDADE_DO_PEDIDO_DE_PERGUNTA_MS = TOLERANCIA_DA_PERGUNTA_MIN * 60_000;
-
-/** Quantas mensagens em rajada entram num turno. Mais que isso é conversa, não rajada. */
-const MAXIMO_DE_MENSAGENS_POR_TURNO = 15;
 
 interface LinhaDoContato {
   papel_interno: string | null;
@@ -101,11 +118,16 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
     if (leadId === null) {
       throw new Error('bastidor_turn sem contact_id — o CHECK da fila deveria impedir');
     }
-    // Três formatos de job: o que nasce de uma mensagem dela, o do cron das perguntas diárias e o da reserva de horário.
+    // Quatro formatos de job: o que nasce de uma mensagem dela, o do cron das perguntas diárias, o lembrete de
+    // confirmar o resumo (também do cron) e o da reserva de horário.
     const pedidoDePergunta = perguntaDaAgendaPayloadSchema.safeParse(job.payload);
     const trabalhoDeReserva = pedidoDePergunta.success ? null : trabalhoDaReservaPayloadSchema.safeParse(job.payload);
-    const payloadDeMensagem =
+    const lembreteDaConferencia =
       pedidoDePergunta.success || trabalhoDeReserva?.success === true
+        ? null
+        : lembreteDaConferenciaPayloadSchema.safeParse(job.payload);
+    const payloadDeMensagem =
+      pedidoDePergunta.success || trabalhoDeReserva?.success === true || lembreteDaConferencia?.success === true
         ? null
         : bastidorTurnPayloadSchema.parse(job.payload);
     const log = withFields(deps.log, { job_id: job.id, tenant_id: tenantId, contact_id: leadId });
@@ -150,6 +172,20 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
+    if (lembreteDaConferencia?.success === true) {
+      await tratarLembreteDaConferencia({
+        pool,
+        deps,
+        log,
+        tenantId,
+        leadId,
+        jobId: job.id,
+        jobCriadoEm: new Date(job.created_at),
+        pedido: lembreteDaConferencia.data,
+        agora,
+      });
+      return;
+    }
     // Contexto da reserva de horário: o mesmo para o trabalho enfileirado e para a resposta dela.
     const contextoDaReserva = (conversationId: string, channelSessionId: string): ContextoDaReserva => ({
       pool,
@@ -176,7 +212,14 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
     if (payload === null) throw new Error('bastidor_turn: payload nem de pergunta nem de mensagem — inalcançável');
 
     const fuso = await fusoDaAgenda(pool, tenantId, config.dono_da_agenda_user_id, orgRows[0]?.timezone ?? null);
-    const texto = await lerMensagensDesdeAUltimaResposta(pool, tenantId, payload.conversation_id);
+    // Rajada junta ("terça 14h Maria" / "e 15h João"): o drain pula o evento superado e o turno da última lê as duas.
+    // A fronteira ignora as mensagens AUTOMÁTICAS de agenda (ver `bastidor-mensagens.ts`): o "sim" dado antes de um
+    // lembrete do cron não se perde.
+    const { texto, respondeuEm, ultimaRespostaNossa } = await lerMensagensDesdeAUltimaResposta(
+      pool,
+      tenantId,
+      payload.conversation_id,
+    );
     const pendente = await lerResumoPendente(pool, tenantId, leadId);
     const jaRegistrado = await lerRelatoDestaMensagem(pool, tenantId, payload.inbound_message_id);
 
@@ -205,6 +248,8 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
       agora,
       fuso,
       texto,
+      respondeuEm,
+      ultimaRespostaNossa,
       pendente,
       jaRegistrado,
       lerComModelo: async (prompt) => {
@@ -231,7 +276,26 @@ export function createBastidorTurnHandler(deps: InboundTurnDeps) {
           texto: textoBruto,
           lido,
         }),
-      conferir: (relatoId) => conferirEAplicarRelato(admin, { organizationId: tenantId, relatoId, agora }),
+      // A falha ao aplicar o "sim" PROPAGA (o job tenta de novo), mas com a mensagem que o dono entende: se as
+      // tentativas acabarem, o aviso da Central diz "A agenda que a secretária confirmou não foi aplicada. Motivo: …"
+      // (ver `PREFIXO_DA_AGENDA_NAO_APLICADA` em queue.ts). "Dono não definido" segue cru: o turno responde a ela.
+      conferir: async (relatoId) => {
+        try {
+          // `respondeuEm`: o carimbo de conferência é o instante da resposta dela, não o do job (ver relatos.ts).
+          return await conferirEAplicarRelato(admin, { organizationId: tenantId, relatoId, agora, respondeuEm });
+        } catch (err) {
+          if (err instanceof Error && err.message === 'dono_da_agenda_nao_definido') throw err;
+          log.warn('bastidor: a agenda confirmada não foi aplicada — o job vai tentar de novo', {
+            motivo: motivoDaFalhaDaConferencia(err),
+          });
+          // Sem `cause` para o relato incoerente: a mensagem DELE cita nomes de paciente, e a causa viaja junto com o
+          // erro (Sentry, log estruturado). Os outros erros são técnicos e a causa ajuda a investigar.
+          throw new Error(
+            `${PREFIXO_DA_AGENDA_NAO_APLICADA} Motivo: ${motivoDaFalhaDaConferencia(err)}`,
+            err instanceof RelatoIncoerente ? undefined : { cause: err },
+          );
+        }
+      },
       marcarCorrigido: (relatoId) => marcarRelatoCorrigido(admin, { organizationId: tenantId, relatoId }),
       descartar: (relatoId) => descartarRelato(admin, { organizationId: tenantId, relatoId }),
       // Veto da cadeia não é erro (ver `enviarAoBastidor`): o desfecho do envio não muda o roteiro do turno.
@@ -287,6 +351,15 @@ async function tratarPerguntaDaAgenda(a: PerguntaDaAgenda): Promise<void> {
     return;
   }
 
+  // Um resumo dela esperando o "sim": a pergunta (ou o lembrete dela) não sai por cima — a mesma regra do cron,
+  // rechecada aqui porque o pedido pode ter entrado na fila logo ANTES de o resumo nascer.
+  if (
+    await haResumoEsperandoOSim(pool, { tenantId, contactId: leadId, agora, validadeHoras: VALIDADE_DO_RESUMO_HORAS })
+  ) {
+    log.info('bastidor: pergunta da agenda dispensada — há um resumo esperando o "sim"', { acao: pedido.acao });
+    return;
+  }
+
   if (pedido.acao === 'lembrar') {
     const { rows } = await pool.query<{ respondeu: boolean }>(
       `select (p.respondida_em is not null) or exists (
@@ -321,35 +394,73 @@ async function tratarPerguntaDaAgenda(a: PerguntaDaAgenda): Promise<void> {
   });
 }
 
+interface LembreteDaConferencia extends Omit<PerguntaDaAgenda, 'pedido'> {
+  pedido: z.infer<typeof lembreteDaConferenciaPayloadSchema>;
+}
+
 /**
- * O que ela escreveu desde a última coisa que NÓS enviamos nesta conversa, em ordem. É o que faz duas mensagens
- * seguidas ("terça 14h Maria" / "e 15h João") serem lidas juntas: o drain pula o evento superado e o turno da
- * última lê as duas. Áudio entra pela transcrição.
+ * LEMBRAR de confirmar o resumo (job do cron, um por resumo). Só sai se o resumo AINDA espera o "sim": o relato é
+ * desta secretaria e desta organização, está `lido`, tem menos de 12 h, e ela não escreveu nada depois dele (se
+ * escreveu — inclusive um "sim" cujo turno falhou —, lembrar seria cobrar o que ela já fez; quem cobre a falha é o
+ * aviso na Central). Pedido velho na fila não sai, como a pergunta.
  */
-async function lerMensagensDesdeAUltimaResposta(
-  pool: pg.Pool,
-  tenantId: string,
-  conversationId: string,
-): Promise<string> {
-  const { rows } = await pool.query<{ body: string | null; media_derived_text: string | null }>(
-    `select body, media_derived_text from (
-       select body, media_derived_text, coalesce(sent_at, created_at) as quando, created_at
-         from messages
-        where organization_id = $1 and conversation_id = $2 and direction = 'inbound'
-          and coalesce(sent_at, created_at) > coalesce(
-                (select max(coalesce(sent_at, created_at)) from messages
-                  where organization_id = $1 and conversation_id = $2 and direction = 'outbound'),
-                'epoch'::timestamptz)
-        order by quando desc, created_at desc
-        limit $3
-     ) recentes
-     order by quando asc, created_at asc`,
-    [tenantId, conversationId, MAXIMO_DE_MENSAGENS_POR_TURNO],
-  );
-  return rows
-    .map((r) => (r.body ?? '').trim() || (r.media_derived_text ?? '').trim())
-    .filter((t) => t !== '')
-    .join('\n');
+async function tratarLembreteDaConferencia(a: LembreteDaConferencia): Promise<void> {
+  const { pool, deps, log, tenantId, leadId, pedido, agora } = a;
+
+  if (agora.getTime() - a.jobCriadoEm.getTime() > VALIDADE_DO_PEDIDO_DE_PERGUNTA_MS) {
+    log.info('bastidor: lembrete do resumo velho demais na fila — não enviado');
+    return;
+  }
+
+  const aguardando = await resumoAindaEsperaOSim(pool, {
+    tenantId,
+    contactId: leadId,
+    relatoId: pedido.relato_id,
+    conversationId: pedido.conversation_id,
+    agora,
+    validadeHoras: VALIDADE_DO_RESUMO_HORAS,
+  });
+  if (!aguardando) {
+    log.info('bastidor: lembrete do resumo dispensado — o resumo não espera mais o "sim"');
+    return;
+  }
+
+  const channel: ChannelAdapter = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool);
+  await enviarAoBastidor({
+    pool,
+    channel,
+    deps,
+    log,
+    tenantId,
+    leadId,
+    jobId: a.jobId,
+    conversationId: pedido.conversation_id,
+    channelSessionId: pedido.channel_session_id,
+    corpo: TEXTO_DO_LEMBRETE_DA_CONFERENCIA,
+    // O tipo AUTOMÁTICO: a leitura das mensagens dela não conta este lembrete como fronteira do turno.
+    tipo: 'agenda_lembrete',
+    agora,
+  });
+}
+
+/**
+ * Por que a agenda confirmada não foi aplicada, em português do dono do negócio. NUNCA leva nome de paciente: a
+ * mensagem vai para `job_queue.last_error`, para o log e para a Central — por isso o relato incoerente (cuja mensagem
+ * cita nomes) vira uma frase fixa, e o erro técnico entra só pela primeira linha, curta.
+ */
+export function motivoDaFalhaDaConferencia(err: unknown): string {
+  if (err instanceof RelatoIncoerente) return 'o resumo tem horários contraditórios (ex.: alguém marcado num dia fechado).';
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/sem_duplicata|duplicate key/i.test(msg)) {
+    return 'a agenda recusou dois compromissos no mesmo horário do mesmo profissional.';
+  }
+  if (msg === 'relato_descartado' || msg === 'relato_corrigido') {
+    return 'o resumo já tinha sido descartado ou corrigido antes do "sim" ser aplicado.';
+  }
+  if (msg === 'relato_nao_encontrado') return 'o resumo não foi encontrado.';
+  if (msg === 'relato_ilegivel') return 'o resumo gravado está ilegível.';
+  const primeira = (msg.split('\n', 1)[0] ?? '').slice(0, 160);
+  return `erro ao gravar na agenda (${primeira}).`;
 }
 
 /** O resumo mais recente que ainda espera o "sim" (estado `lido`). */

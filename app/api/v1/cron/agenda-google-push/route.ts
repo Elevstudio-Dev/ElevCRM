@@ -54,6 +54,8 @@ interface LinhaParaIda {
   location_kind: string;
   location_details: string | null;
   google_event_id: string | null;
+  /** Não nulo = espelho de relato da secretária (carrega nome de paciente). Nunca vai ao Google. */
+  origem_relato_id: string | null;
 }
 
 function autorizado(req: NextRequest): boolean {
@@ -72,7 +74,7 @@ async function executar(req: NextRequest): Promise<Response> {
   }
 
   const admin = createAdminClient();
-  const resumo = { candidatos: 0, publicados: 0, apagados: 0, falhas: 0, semConexao: 0 };
+  const resumo = { candidatos: 0, publicados: 0, apagados: 0, falhas: 0, semConexao: 0, espelhosRecusados: 0 };
   /**
    * POR QUE as falhas falharam — e não só quantas.
    *
@@ -93,7 +95,7 @@ async function executar(req: NextRequest): Promise<Response> {
   const { data: pendentes, error: erroLeitura } = await admin
     .from("calendar_appointments")
     .select(
-      "id, organization_id, owner_user_id, title, description, starts_at, ends_at, time_zone, status, location_kind, location_details, google_event_id",
+      "id, organization_id, owner_user_id, title, description, starts_at, ends_at, time_zone, status, location_kind, location_details, google_event_id, origem_relato_id",
     )
     // ⚠️ NÃO volte a `.or("…,updated_at.gt.google_synced_at")`.
     //
@@ -107,6 +109,23 @@ async function executar(req: NextRequest): Promise<Response> {
     // exatamente a mesma pergunta, num filtro que o PostgREST sabe fazer.
     .eq("needs_google_push", true)
     .not("owner_user_id", "is", null)
+    // PRIVACIDADE: o espelho de relato (`origem_relato_id` não nulo) tem como
+    // `title` o NOME DE UM PACIENTE e nunca vai ao Google Agenda de ninguém.
+    // Ele nasce com `google_synced_at` carimbado, mas qualquer update depois
+    // (editar pela tela, ou o cancelamento do próprio aplicador) religa
+    // `needs_google_push` — então o filtro tem de estar AQUI, na leitura. E tem
+    // de ser na consulta, não no loop: espelho que só fosse pulado depois de lido
+    // gastaria o teto por rodada (TETO_POR_RODADA) e deixaria os compromissos reais esperando.
+    //
+    // ⚠️ RISCO RESIDUAL, e este filtro NÃO o cobre: `origem_relato_id` é
+    // `ON DELETE SET NULL` (migration 0228). Apagar um `agenda_relatos` anula o
+    // vínculo de TODOS os espelhos dele; esse UPDATE avança `updated_at`, religa
+    // `needs_google_push` e o espelho, já sem `origem_relato_id`, passa pelo
+    // filtro E pela defesa do loop como se fosse compromisso comum — com o nome
+    // do paciente no `title`. Por isso: NUNCA apagar `agenda_relatos` que ainda
+    // tenha espelho vivo (nenhum código do produto apaga hoje). Follow-up: uma
+    // migration que troque o FK para RESTRICT, ou que cancele os espelhos antes.
+    .is("origem_relato_id", null)
     .order("starts_at", { ascending: true })
     .limit(TETO_POR_RODADA);
 
@@ -115,7 +134,18 @@ async function executar(req: NextRequest): Promise<Response> {
     return NextResponse.json({ error: { code: "internal_error", message: erroLeitura.message } }, { status: 500 });
   }
 
-  const linhas = (pendentes ?? []) as LinhaParaIda[];
+  // DEFESA EM PROFUNDIDADE: o `.is("origem_relato_id", null)` acima já os exclui.
+  // Se alguém reescrever a consulta sem ele, o espelho chegaria aqui — e este é o
+  // último ponto antes de `publicarNoGoogle`/`apagarNoGoogle`. Recusa e conta;
+  // nunca publica o nome de um paciente por descuido de consulta.
+  const lidas = (pendentes ?? []) as LinhaParaIda[];
+  const linhas = lidas.filter((l) => !l.origem_relato_id);
+  resumo.espelhosRecusados = lidas.length - linhas.length;
+  if (resumo.espelhosRecusados > 0) {
+    logger.warn("[agenda-google-push] espelho de relato chegou ao loop e foi recusado", {
+      recusados: resumo.espelhosRecusados,
+    });
+  }
   resumo.candidatos = linhas.length;
   if (linhas.length === 0) {
     // Rodada vazia NÃO audita: o repo já pagou 95% do audit log em batida de
@@ -216,17 +246,39 @@ async function executar(req: NextRequest): Promise<Response> {
       continue;
     }
 
-    await admin
+    const { error: erroGravar } = await admin
       .from("calendar_appointments")
       .update({
         google_connection_id: conexao.id,
         google_calendar_id: calendario,
         google_event_id: cancelado ? null : efeito.eventoId,
-        google_sequence: efeito.sequence,
+        // `google_sequence` é NOT NULL (default 0) e `apagarNoGoogle` devolve
+        // `sequence: null`. Gravar esse null violava a constraint e o UPDATE
+        // inteiro falhava SEM ninguém olhar o erro: a linha cancelada ficava na
+        // fila e o DELETE saía de novo a cada 5 minutos, para sempre (404 conta
+        // como sucesso, então nem erro aparecia). Sem sequência nova, não escreve.
+        ...(efeito.sequence === null ? {} : { google_sequence: efeito.sequence }),
         google_synced_at: new Date().toISOString(),
         google_sync_error: null,
       })
       .eq("id", linha.id);
+
+    if (erroGravar) {
+      // O Google já respondeu OK, mas o CRM não conseguiu anotar: a linha segue
+      // na fila e volta na próxima rodada. Era silêncio total — o laço do DELETE
+      // a cada 5 minutos viveu escondido exatamente aqui. Só ids e a mensagem do
+      // banco no log: nada do compromisso (o `title` pode ser nome de paciente).
+      resumo.falhas += 1;
+      motivos.push("gravacao_falhou");
+      logger.warn("[agenda-google-push] não gravou o resultado da ida", {
+        agendamento: linha.id,
+        organizacao: linha.organization_id,
+        operacao: cancelado ? "apagar" : "publicar",
+        codigo: erroGravar.code,
+        erro: erroGravar.message,
+      });
+      continue;
+    }
 
     if (cancelado) resumo.apagados += 1;
     else resumo.publicados += 1;

@@ -73,7 +73,8 @@ const job = {
 interface Mundo {
   contato?: { papel_interno: string | null; is_blocked: boolean; is_anonymized: boolean } | null;
   settings?: unknown;
-  mensagens?: Array<{ body: string | null; media_derived_text: string | null }>;
+  mensagens?: Array<{ body: string | null; media_derived_text: string | null; quando?: Date }>;
+  fronteira?: { quando: Date; job_kind: string | null } | null;
   pendente?: { id: string; lido: unknown; created_at: Date } | null;
   jaRegistrado?: { id: string; estado: string; lido: unknown } | null;
   fusoDaJornada?: string | null;
@@ -98,8 +99,14 @@ function poolFalso(m: Mundo = {}) {
     if (sql.includes("from attendant_availability")) {
       return { rows: m.fusoDaJornada ? [{ tz: m.fusoDaJornada }] : [] };
     }
+    if (sql.includes("from messages") && sql.includes("direction = 'outbound'")) {
+      // A fronteira (última resposta nossa): por padrão, o resumo do agente.
+      const f = m.fronteira === undefined ? { quando: new Date(AGORA.getTime() - 3_600_000), job_kind: "bastidor_turn" } : m.fronteira;
+      return { rows: f ? [f] : [] };
+    }
     if (sql.includes("from messages") && sql.includes("direction = 'inbound'")) {
-      return { rows: m.mensagens ?? [{ body: "terça 14h Maria", media_derived_text: null }] };
+      const rows = m.mensagens ?? [{ body: "terça 14h Maria", media_derived_text: null }];
+      return { rows: rows.map((r) => ({ quando: AGORA, ...r })) };
     }
     if (sql.includes("from agenda_relatos") && sql.includes("estado = 'lido'")) {
       return { rows: m.pendente ? [m.pendente] : [] };
@@ -257,9 +264,38 @@ describe("bastidor_turn — o 'sim' e a correção", () => {
 
   it("'sim' aplica o relato na agenda e confirma — sem chamar o modelo", async () => {
     await rodar({ mensagens: [{ body: "sim", media_derived_text: null }], pendente: PENDENTE });
-    expect(conferirEAplicarRelato).toHaveBeenCalledWith({ fake: true }, { organizationId: ORG, relatoId: "pend", agora: AGORA });
+    expect(conferirEAplicarRelato).toHaveBeenCalledWith(
+      { fake: true },
+      { organizationId: ORG, relatoId: "pend", agora: AGORA, respondeuEm: AGORA },
+    );
     expect(runModelCall).not.toHaveBeenCalled();
     expect(runBeforeSend.mock.calls[0]?.[0].body).toContain("agenda atualizada");
+  });
+
+  it("o 'sim' dado 10 min depois do resumo vale mesmo com o job rodando 20 h depois (validade medida até a RESPOSTA)", async () => {
+    const criado = new Date(AGORA.getTime() - 20 * 3_600_000);
+    await rodar({
+      mensagens: [{ body: "Sim", media_derived_text: null, quando: new Date(criado.getTime() + 10 * 60_000) }],
+      pendente: { ...PENDENTE, created_at: criado },
+    });
+    expect(descartarRelato).not.toHaveBeenCalled();
+    expect(conferirEAplicarRelato).toHaveBeenCalledTimes(1);
+    // O carimbo da conferência vai ser o instante da RESPOSTA, não o do job (I1: agenda velha não parece fresca).
+    expect(conferirEAplicarRelato.mock.calls[0]?.[1]).toMatchObject({
+      agora: AGORA,
+      respondeuEm: new Date(criado.getTime() + 10 * 60_000),
+    });
+  });
+
+  it("'sim' depois de mensagem HUMANA: não aplica, reenvia o resumo perguntando (o relato continua esperando)", async () => {
+    await rodar({
+      mensagens: [{ body: "sim", media_derived_text: null }],
+      pendente: PENDENTE,
+      fronteira: { quando: new Date(AGORA.getTime() - 60_000), job_kind: null },
+    });
+    expect(conferirEAplicarRelato).not.toHaveBeenCalled();
+    expect(descartarRelato).not.toHaveBeenCalled();
+    expect(runBeforeSend.mock.calls[0]?.[0].body).toMatch(/esse \*sim\* é para este resumo/);
   });
 
   it("correção: registra o novo resumo e marca o antigo como corrigido", async () => {
@@ -384,6 +420,58 @@ describe("bastidor_turn — falhas", () => {
     runModelCall.mockRejectedValue(new Error("provedor fora"));
     await expect(rodar()).rejects.toThrow("provedor fora");
     expect(runBeforeSend).not.toHaveBeenCalled();
+  });
+
+  describe("o 'sim' que não pôde ser aplicado: o erro que vai para a Central diz o que aconteceu", () => {
+    const PENDENTE = {
+      id: "pend",
+      lido: { janela: { de: "2026-11-18", ate: "2026-11-18" }, marcados: [], dias_fechados: [], duvidas: [] },
+      created_at: new Date(AGORA.getTime() - 5 * 60_000),
+    };
+    const sim = { mensagens: [{ body: "sim", media_derived_text: null }], pendente: PENDENTE };
+
+    it("duplicidade de horário: PROPAGA (o job tenta de novo) com a frase do dono, e nada é enviado a ela", async () => {
+      conferirEAplicarRelato.mockRejectedValue(
+        new Error('criar compromissos do relato: duplicate key value violates unique constraint "calendar_appointments_sem_duplicata_idx"'),
+      );
+      const erro = await rodar(sim).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(erro?.message).toMatch(/^A agenda que a secretária confirmou não foi aplicada\. Motivo: /);
+      expect(erro?.message).toMatch(/mesmo horário/);
+      expect(runBeforeSend).not.toHaveBeenCalled();
+    });
+
+    it("relato incoerente: o motivo é uma frase fixa — o nome do paciente NUNCA vai para o erro (last_error, Central, log)", async () => {
+      const { RelatoIncoerente } = await import("@/lib/agenda/secretaria/aplicar");
+      conferirEAplicarRelato.mockRejectedValue(new RelatoIncoerente(["Fulano Sintetico está marcado(a) num dia que o mesmo relato fecha."]));
+      const erro = await rodar(sim).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(erro?.message).toMatch(/horários contraditórios/);
+      expect(erro?.message).not.toMatch(/Fulano/);
+      // Nem pela CAUSA: ela viaja com o erro (Sentry, log estruturado) e a mensagem do relato incoerente cita nomes.
+      expect(erro?.cause).toBeUndefined();
+      expect(JSON.stringify(erro, Object.getOwnPropertyNames(erro ?? {}))).not.toMatch(/Fulano/);
+    });
+
+    it("erro técnico (não-incoerente) mantém a causa, para quem investiga", async () => {
+      const original = new Error("criar compromissos do relato: duplicate key value");
+      conferirEAplicarRelato.mockRejectedValue(original);
+      const erro = await rodar(sim).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(erro?.cause).toBe(original);
+    });
+
+    it("dono da agenda não definido NÃO vira erro: o turno responde a ela o que falta", async () => {
+      conferirEAplicarRelato.mockRejectedValue(new Error("dono_da_agenda_nao_definido"));
+      await expect(rodar(sim)).resolves.toBeDefined();
+      expect(runBeforeSend.mock.calls[0]?.[0].body).toMatch(/falta uma configuração/);
+    });
   });
 
   it("payload fora do contrato: falha alto (não processa lixo)", async () => {

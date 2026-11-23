@@ -219,6 +219,152 @@ export function portasDoTickNoSupabase(
           erro("job_queue", e);
         },
 
+        async resumoPendente() {
+          const { data: linhas, error: e } = await admin
+            .from("agenda_relatos")
+            .select("id, created_at")
+            .match(chave)
+            // `.in` e não `.eq`: `lido` também é o NOME de uma coluna de `agenda_relatos` (o jsonb), e o guarda
+            // `postgrest-nao-compara-coluna-com-coluna` lê `.eq("estado", "lido")` como comparação entre colunas.
+            // Mesma forma de `relatos.ts`.
+            .in("estado", ["lido"])
+            .order("created_at", { ascending: false })
+            .limit(1);
+          erro("agenda_relatos", e);
+          const r = linhas?.[0] as { id: string; created_at: string } | undefined;
+          return r ? { relatoId: r.id, criadoEm: new Date(r.created_at) } : null;
+        },
+
+        async enfileirarLembreteDaConferencia(relatoId, conversa) {
+          // `source_event_id` = o relato: o índice único (organização, source_event_id) da fila é a idempotência de
+          // "no máximo UM lembrete por resumo" — duas instâncias do cron, ou dois horários do dia, não mandam dois.
+          // A coluna existe para deduplicar evento → job; o relato É o evento que origina este job.
+          const { error: e } = await admin.from("job_queue").insert({
+            organization_id: organizationId,
+            contact_id: contactId,
+            kind: "bastidor_turn",
+            source_event_id: relatoId,
+            payload: {
+              conversation_id: conversa.conversationId,
+              contact_id: contactId,
+              channel_session_id: conversa.channelSessionId,
+              acao: "lembrar_conferencia",
+              relato_id: relatoId,
+            },
+          });
+          if ((e as { code?: string } | null)?.code === "23505") return false;
+          erro("job_queue", e);
+          return true;
+        },
+
+        async lembreteDaConferenciaEnviadoEm(relatoId) {
+          // A prova é a MENSAGEM que saiu, não o job concluído: o handler conclui o job também quando DISPENSA o
+          // lembrete (ela já respondeu, o resumo venceu). Caminho real do envio: job (único por resumo,
+          // `source_event_id` = relato) → `send_ledger` aceito → `messages` (não falhada). A espera de 2 h conta a
+          // partir do envio real.
+          const { data: jobs, error: eJob } = await admin
+            .from("job_queue")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("source_event_id", relatoId)
+            .eq("kind", "bastidor_turn")
+            .limit(1);
+          erro("job_queue", eJob);
+          const jobId = (jobs?.[0] as { id: string } | undefined)?.id;
+          if (!jobId) return null;
+
+          const { data: ledger, error: eLedger } = await admin
+            .from("send_ledger")
+            .select("crm_message_id")
+            .eq("organization_id", organizationId)
+            .eq("job_id", jobId)
+            .eq("status", "accepted")
+            .limit(1);
+          erro("send_ledger", eLedger);
+          const mensagemId = (ledger?.[0] as { crm_message_id: string | null } | undefined)?.crm_message_id;
+          if (!mensagemId) return null;
+
+          const { data: msgs, error: eMsg } = await admin
+            .from("messages")
+            .select("sent_at, created_at, status")
+            .eq("organization_id", organizationId)
+            .eq("id", mensagemId)
+            .limit(1);
+          erro("messages", eMsg);
+          const m = msgs?.[0] as { sent_at: string | null; created_at: string; status: string } | undefined;
+          if (!m || m.status === "failed") return null;
+          return new Date(m.sent_at ?? m.created_at);
+        },
+
+        async fecharAvisosDeResumoResolvidos(agora, validadeHoras) {
+          // Aviso "resumo sem confirmação" ABERTO cujo relato já não espera o "sim" (conferido, corrigido,
+          // descartado, ou passou da validade): o problema acabou, o aviso fecha sozinho.
+          const { data: abertos, error: eAbertos } = await admin
+            .from("agent_inbox_items")
+            .select("id, ref_id")
+            .eq("organization_id", organizationId)
+            .eq("kind", "agenda_sem_resposta")
+            .eq("ref_kind", "agenda_relatos")
+            .eq("status", "open")
+            .limit(50);
+          erro("agent_inbox_items", eAbertos);
+          const itens = (abertos ?? []) as Array<{ id: string; ref_id: string }>;
+          if (itens.length === 0) return 0;
+
+          const { data: relatos, error: eRel } = await admin
+            .from("agenda_relatos")
+            .select("id, estado, created_at")
+            .eq("organization_id", organizationId)
+            .in(
+              "id",
+              itens.map((i) => i.ref_id),
+            );
+          erro("agenda_relatos", eRel);
+          const limite = agora.getTime() - validadeHoras * 3_600_000;
+          const aindaEspera = new Set(
+            ((relatos ?? []) as Array<{ id: string; estado: string; created_at: string }>)
+              .filter((r) => r.estado === "lido" && new Date(r.created_at).getTime() > limite)
+              .map((r) => r.id),
+          );
+          const fechar = itens.filter((i) => !aindaEspera.has(i.ref_id)).map((i) => i.id);
+          if (fechar.length === 0) return 0;
+          const { error: eFecha } = await admin
+            .from("agent_inbox_items")
+            .update({ status: "resolved" })
+            .eq("organization_id", organizationId)
+            .eq("status", "open")
+            .in("id", fechar);
+          erro("agent_inbox_items", eFecha);
+          return fechar.length;
+        },
+
+        async avisarResumoSemConfirmacao(relatoId) {
+          // Um aviso por RESUMO (aberto ou já resolvido): `ref` aponta para o relato, não para o contato.
+          const { data: ja, error: eJa } = await admin
+            .from("agent_inbox_items")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("kind", "agenda_sem_resposta")
+            .eq("ref_kind", "agenda_relatos")
+            .eq("ref_id", relatoId)
+            .limit(1);
+          erro("agent_inbox_items", eJa);
+          if ((ja ?? []).length > 0) return false;
+          const { error: e } = await admin.from("agent_inbox_items").insert({
+            organization_id: organizationId,
+            kind: "agenda_sem_resposta",
+            severity: "warn",
+            title: "A secretária ainda não confirmou o resumo da agenda",
+            // Sem nome de ninguém no texto (nem da secretária, nem de paciente): o aviso diz o que fazer, e o resumo
+            // está na conversa dela.
+            body: `A secretária recebeu o resumo da agenda e o lembrete, mas ainda não respondeu "sim" nem corrigiu. Enquanto a agenda não for confirmada, a IA não oferece horários aos pacientes e chama a equipe. O que fazer: peça para ela conferir o resumo no WhatsApp e responder "sim" (ou dizer o que corrigir), ou mandar a agenda de novo.`,
+            ref_kind: "agenda_relatos",
+            ref_id: relatoId,
+          });
+          erro("agent_inbox_items", e);
+          return true;
+        },
+
         async avisarAdmin(motivo: MotivoDoAviso, dia, horario) {
           // Um aviso ABERTO por pergunta: o mesmo tick não empilha cartões iguais na Central de avisos.
           const refId = contactId;
