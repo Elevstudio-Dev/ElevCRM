@@ -1,6 +1,6 @@
 ---
 impacto: nada_mudou
-secao: novo
+secao: adicionado
 titulo: "Follow-up automático: lead de anúncio só entra depois da avaliação"
 ---
 
