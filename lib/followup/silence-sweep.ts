@@ -41,6 +41,7 @@ import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
+import { podeEntrarNoAutomatico, type RegraDeAnuncio } from "./regra-de-anuncio";
 import {
   decidirEntrada,
   previsaoDeEntrada,
@@ -56,6 +57,11 @@ export interface SilencePointer {
   segments: string[];
   /** `null` = sem ritmo: todos os parados entram de uma vez (comportamento original). */
   ritmo: RitmoDeEntrada | null;
+  /**
+   * Lead de anúncio só entra depois da avaliação (etapas liberadas). Ausente/`null` = sem restrição
+   * (comportamento de sempre). Ver `regra-de-anuncio.ts`.
+   */
+  leads_de_anuncio?: RegraDeAnuncio | null;
 }
 
 /** As inscrições deste fluxo que ainda contam no limite das 24h, da mais antiga para a mais nova. */
@@ -70,8 +76,16 @@ export interface InscricoesRecentes {
 export interface SilenceSweepDb {
   /** Pointers ativos com trigger_config.kind='silence', de TODAS as orgs. */
   loadActiveSilencePointers(): Promise<SilencePointer[]>;
-  /** Contact ids da org sem inbound desde `cutoffIso` (inclusive); `segments` vazio = todos. */
-  loadSilentContactIds(orgId: string, cutoffIso: string, segments: string[]): Promise<string[]>;
+  /**
+   * Contact ids da org sem inbound desde `cutoffIso` (inclusive); `segments` vazio = todos.
+   * `regraAnuncio` (quando o fluxo tem): lead que veio de anúncio só é devolvido se já passou da avaliação.
+   */
+  loadSilentContactIds(
+    orgId: string,
+    cutoffIso: string,
+    segments: string[],
+    regraAnuncio?: RegraDeAnuncio | null,
+  ): Promise<string[]>;
   /** Contatos da org com follow-up VIVO (active / waiting_reply / paused_handoff) em qualquer fluxo. */
   loadLiveContactIds(orgId: string): Promise<Set<string>>;
   /** Inscrições deste fluxo desde `sinceIso` + a mais recente de todas. Só é chamada quando o fluxo tem ritmo. */
@@ -145,7 +159,12 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     if (!triggerNodeId) continue;
 
     const cutoffIso = new Date(clock().getTime() - pointer.threshold_minutes * 60_000).toISOString();
-    const contactIds = await db.loadSilentContactIds(pointer.organization_id, cutoffIso, pointer.segments);
+    const contactIds = await db.loadSilentContactIds(
+      pointer.organization_id,
+      cutoffIso,
+      pointer.segments,
+      pointer.leads_de_anuncio ?? null,
+    );
     const nextEvalAt = clock().toISOString();
 
     // Fluxo COM ritmo: entra no máximo UM por varredura, e só se o intervalo
@@ -236,7 +255,7 @@ export async function proximosDaFila(
   const agora = clock();
   const cutoffIso = new Date(agora.getTime() - pointer.threshold_minutes * 60_000).toISOString();
   const [silentes, vivos, recentes] = await Promise.all([
-    db.loadSilentContactIds(pointer.organization_id, cutoffIso, pointer.segments),
+    db.loadSilentContactIds(pointer.organization_id, cutoffIso, pointer.segments, pointer.leads_de_anuncio ?? null),
     db.loadLiveContactIds(pointer.organization_id),
     db.loadInscricoesRecentes(pointer.id, new Date(agora.getTime() - 24 * 60 * 60_000).toISOString()),
   ]);
@@ -260,8 +279,50 @@ export async function proximosDaFila(
 }
 
 type ContactEmbed =
-  | { tags: string[] | null; is_blocked: boolean | null; ai_authorized_at: string | null }
+  | {
+      tags: string[] | null;
+      is_blocked: boolean | null;
+      ai_authorized_at: string | null;
+      source: string | null;
+      source_metadata: Record<string, unknown> | null;
+    }
   | null;
+
+const LOTE_DE_CONTATOS = 200;
+
+/**
+ * Para cada contato, o lead MAIS RECENTE: de onde veio (`source`) e em que etapa está (`slug`).
+ * Só roda quando o fluxo tem a regra de anúncio, e só para os candidatos já filtrados.
+ */
+async function carregaLeadMaisRecente(
+  admin: SupabaseClient,
+  orgId: string,
+  contactIds: string[],
+): Promise<Map<string, { source: string | null; etapaSlug: string | null }>> {
+  const porContato = new Map<string, { source: string | null; etapaSlug: string | null }>();
+  for (let i = 0; i < contactIds.length; i += LOTE_DE_CONTATOS) {
+    const lote = contactIds.slice(i, i + LOTE_DE_CONTATOS);
+    const { data, error } = await admin
+      .from("crm_leads")
+      .select("contact_id, source, created_at, etapa:stage_id(slug)")
+      .eq("organization_id", orgId)
+      .eq("fora_do_funil", false)
+      .in("contact_id", lote)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as unknown as Array<{
+      contact_id: string;
+      source: string | null;
+      etapa: { slug: string | null } | null;
+    }>) {
+      // Ordem decrescente: a primeira linha de cada contato é o lead mais recente.
+      if (!porContato.has(row.contact_id)) {
+        porContato.set(row.contact_id, { source: row.source, etapaSlug: row.etapa?.slug ?? null });
+      }
+    }
+  }
+  return porContato;
+}
 
 /** Production adapter: `SilenceSweepDb` sobre o client service-role real. */
 export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSweepDb {
@@ -291,12 +352,13 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           threshold_minutes: parsed.data.params.threshold_minutes,
           segments: parsed.data.params.segments ?? [],
           ritmo: parsed.data.params.ritmo ?? null,
+          leads_de_anuncio: parsed.data.params.leads_de_anuncio ?? null,
         });
       }
       return pointers;
     },
 
-    async loadSilentContactIds(orgId, cutoffIso, segments) {
+    async loadSilentContactIds(orgId, cutoffIso, segments, regraAnuncio) {
       // last_inbound_at é POR CONVERSA; o enrollment é POR CONTATO — reduz
       // client-side pro MAIS RECENTE `last_inbound_at` entre as conversas do
       // contato (um contato com 2+ channel_sessions não pode ser marcado
@@ -311,7 +373,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const { data, error } = await admin
         .from("conversations")
         .select(
-          "contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, ai_authorized_at), sessao:channel_session_id(metadata)",
+          "contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, ai_authorized_at, source, source_metadata), sessao:channel_session_id(metadata)",
         )
         .eq("organization_id", orgId)
         .not("last_inbound_at", "is", null)
@@ -327,7 +389,15 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const cutoff = new Date(cutoffIso).getTime();
       const latest = new Map<
         string,
-        { at: number; tags: string[]; blocked: boolean; gateAllowlist: boolean; autorizado: boolean }
+        {
+          at: number;
+          tags: string[];
+          blocked: boolean;
+          gateAllowlist: boolean;
+          autorizado: boolean;
+          source: string | null;
+          metadata: Record<string, unknown> | null;
+        }
       >();
       for (const row of (data ?? []) as unknown as Row[]) {
         const at = new Date(row.last_inbound_at).getTime();
@@ -339,11 +409,20 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
             blocked: row.contacts?.is_blocked ?? false,
             gateAllowlist: row.sessao?.metadata?.ai_gate === "allowlist",
             autorizado: row.contacts?.ai_authorized_at != null,
+            source: row.contacts?.source ?? null,
+            metadata: row.contacts?.source_metadata ?? null,
           });
         }
       }
 
       const silentes: Array<{ id: string; at: number }> = [];
+      const doAnuncio = new Map<string, { source: string | null; etapaSlug: string | null }>();
+      if (regraAnuncio) {
+        // Só os contatos que passariam pelos demais filtros precisam do lead — mas a lista é pequena
+        // (conversas abertas da org) e uma consulta em lotes é mais simples que adivinhar quem sobra.
+        const ids = [...latest.keys()];
+        for (const [id, lead] of await carregaLeadMaisRecente(admin, orgId, ids)) doAnuncio.set(id, lead);
+      }
       for (const [contactId, v] of latest) {
         if (v.blocked) continue;
         // Gate `allowlist`: o follow-up automático também respeita a
@@ -351,6 +430,21 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         if (v.gateAllowlist && !v.autorizado) continue;
         if (v.at > cutoff) continue; // conversou depois do corte — não é silêncio
         if (segments.length > 0 && !segments.some((s) => v.tags.includes(s))) continue;
+        // Lead de anúncio só entra no automático depois da avaliação (regra do fluxo, se houver).
+        const lead = doAnuncio.get(contactId);
+        if (
+          !podeEntrarNoAutomatico(
+            {
+              contatoSource: v.source,
+              contatoMetadata: v.metadata,
+              leadSource: lead?.source ?? null,
+              etapaSlug: lead?.etapaSlug ?? null,
+            },
+            regraAnuncio,
+          )
+        ) {
+          continue;
+        }
         silentes.push({ id: contactId, at: v.at });
       }
       // O parado HÁ MAIS TEMPO primeiro: é a ordem da fila (e do ritmo de

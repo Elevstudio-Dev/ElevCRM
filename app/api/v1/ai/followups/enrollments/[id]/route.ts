@@ -41,7 +41,7 @@ const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * Teto de eventos lidos. O motor escreve ~1 por passo e para em `MAX_STEPS`
- * (80); reactivity e intervenção manual somam poucos. 500 cobre o pior caso com
+ * (160); reactivity e intervenção manual somam poucos. 500 cobre o pior caso com
  * folga — e o `truncado` abaixo existe para que, se algum dia não cobrir, a tela
  * DIGA que está mostrando um pedaço, em vez de mentir por omissão.
  */

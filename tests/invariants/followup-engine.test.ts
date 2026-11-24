@@ -516,7 +516,7 @@ describe("runFollowupTick — backoff progride e esgota em 'dead' + inbox item",
       versionId,
       contactId,
       currentNodeId: "t1",
-      stepsTaken: 81,
+      stepsTaken: 161,
     });
 
     const jobs: FollowupJobRequest[] = [];
@@ -559,7 +559,7 @@ describe("runFollowupTick — backoff progride e esgota em 'dead' + inbox item",
 // ---- 6. max_steps ---------------------------------------------------------
 
 describe("runFollowupTick — max_steps", () => {
-  it("steps_taken > 80 mata o enrollment sem sequer carregar o grafo", async () => {
+  it("steps_taken > 160 mata o enrollment sem sequer carregar o grafo", async () => {
     const org = "aaaaaaa5-0000-4000-8000-000000000001";
     await seedOrg(org);
     const contactId = await seedContact(org);
@@ -570,7 +570,7 @@ describe("runFollowupTick — max_steps", () => {
       versionId,
       contactId,
       currentNodeId: "t1",
-      stepsTaken: 81,
+      stepsTaken: 161,
     });
 
     const jobs: FollowupJobRequest[] = [];
