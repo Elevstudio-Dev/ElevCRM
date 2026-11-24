@@ -8,6 +8,16 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.4] — 2026-11-24
+
+### Adicionado
+
+- **Follow-up automático: lead de anúncio só entra depois da avaliação** O gatilho de silêncio de um fluxo de follow-up ganhou um parâmetro opcional, `leads_de_anuncio`, com a lista de etapas do funil (pelo identificador da etapa) em que um contato que veio de anúncio passa a poder entrar no follow-up automático. Enquanto o lead de anúncio não chega a uma dessas etapas, o varredor não o inscreve; quem não veio de anúncio segue como sempre. O follow-up agendado por uma pessoa da equipe (botão "Agendar follow-up" e inscrição manual) não passa por essa regra. Sem o parâmetro o comportamento é o de antes, então outras organizações e outros fluxos não mudam. A tela "Próximos a entrar na fila" usa a mesma regra.
+
+### Corrigido
+
+- **Follow-up: cabe uma sequência de 8 toques, cada um com a pergunta de saída** O limite de tamanho de um fluxo de follow-up (30 passos no caminho mais longo) e o freio do motor (80 passos por paciente) eram curtos para uma sequência de 8 toques em que cada mensagem é seguida por uma pergunta fixa ("posso continuar? responda PARAR"). Os dois limites subiram (48 passos no desenho do fluxo, 160 no motor), para que o fluxo possa ser publicado e a sequência não seja cortada no meio. Há teste do fluxo de 8 toques e a cerca do limite continua valendo.
+
 ## [1.34.3] — 2026-11-23
 
 ### Corrigido
@@ -3305,7 +3315,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.3...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.4...HEAD
+[1.34.4]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.3...v1.34.4
 [1.34.3]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.2...v1.34.3
 [1.34.2]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.1...v1.34.2
 [1.34.1]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.0...v1.34.1
