@@ -77,6 +77,8 @@ export interface SendMessageInput {
    * colidirem no ledger e o segundo virar `already_sent` sem ter saído.
    */
   template?: { name: string; language: string; values: Record<string, string> };
+  /** Presente = envio de IMAGEM do Storage; `body` é a legenda. O caminho entra no hash de idempotência. */
+  imagem?: { storagePath: string; mime: string };
 }
 
 /** Fallback do ator ai_agent quando não há agente publicado (cfg.agentActorId). */
@@ -92,7 +94,10 @@ export async function sendTurnMessage(
   cfg: CrmEdgeConfig,
   input: SendMessageInput,
 ): Promise<SendOutcome> {
-  const bodyHash = createHash('sha256').update(input.body).digest('hex');
+  // Imagem: a legenda sozinha (quase sempre vazia) colidiria entre duas imagens diferentes.
+  const bodyHash = createHash('sha256')
+    .update(input.imagem ? `imagem:${input.imagem.storagePath}\n${input.body}` : input.body)
+    .digest('hex');
   const ledger = await claimLedgerRow(db, input, bodyHash);
   if (ledger.shortCircuit) {
     return ledger.shortCircuit;
@@ -132,7 +137,13 @@ export async function sendTurnMessage(
               template_language: input.template.language,
               template_values: input.template.values,
             }
-          : { type: 'text' as const }),
+          : input.imagem
+            ? {
+                type: 'image' as const,
+                media_storage_path: input.imagem.storagePath,
+                media_mime: input.imagem.mime,
+              }
+            : { type: 'text' as const }),
         body: input.body,
         metadata: { idempotency_key: idempotencyKey },
       },

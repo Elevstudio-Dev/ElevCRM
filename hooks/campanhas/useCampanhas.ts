@@ -72,6 +72,30 @@ export function useCriarCampanha() {
   });
 }
 
+export interface ImagemEnviada {
+  storage_path: string;
+  mime: "image/jpeg" | "image/png";
+  previa_url: string | null;
+}
+
+/** Sobe a arte (multipart). O servidor converte WEBP e reduz; devolve o caminho guardado. */
+export function useEnviarImagemDaCampanha() {
+  return useMutation({
+    mutationFn: async (arquivo: File): Promise<ImagemEnviada> => {
+      const corpo = new FormData();
+      corpo.append("arquivo", arquivo);
+      const r = await fetch("/api/v1/campanhas/imagem", { method: "POST", body: corpo, credentials: "same-origin" });
+      const json = (await r.json().catch(() => null)) as
+        | { data?: ImagemEnviada; error?: { message?: string } }
+        | null;
+      if (!r.ok || !json?.data) {
+        throw new Error(json?.error?.message ?? "Não foi possível enviar a imagem.");
+      }
+      return json.data;
+    },
+  });
+}
+
 export function useAcaoDaCampanha(id: string) {
   const qc = useQueryClient();
   return useMutation({

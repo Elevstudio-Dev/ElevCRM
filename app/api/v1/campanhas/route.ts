@@ -55,6 +55,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         etiquetas: parsed.data.etiquetas,
         canal_id: parsed.data.canal_id,
         inscritos: criada.inscritos,
+        com_imagem: parsed.data.imagem !== undefined,
         ritmo: parsed.data.ritmo,
       },
     });

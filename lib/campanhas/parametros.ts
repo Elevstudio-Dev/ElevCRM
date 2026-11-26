@@ -14,12 +14,25 @@ export type EstadoDaCampanha = (typeof ESTADOS_DA_CAMPANHA)[number];
 
 const etiquetasSchema = z.array(z.string().trim().min(1).max(60)).min(1).max(10);
 
+/** A arte da campanha, já guardada pela rota de upload em `{org}/campanhas/…`. */
+export const imagemDaCampanhaSchema = z.strictObject({
+  storage_path: z.string().min(1).max(300),
+  mime: z.string().regex(/^image\/(jpeg|png)$/),
+});
+export type ImagemDaCampanha = z.infer<typeof imagemDaCampanhaSchema>;
+
+/** Formatos que a tela aceita no upload (webp vira jpg no servidor). */
+export const MIMES_DE_IMAGEM_ACEITOS = ["image/jpeg", "image/png", "image/webp"] as const;
+/** O WhatsApp recusa imagem acima de 5 MB. */
+export const MAX_BYTES_DA_IMAGEM = 5 * 1024 * 1024;
+
 export const campanhaParamsSchema = z.strictObject({
   etiquetas: etiquetasSchema,
   canal_id: z.string().uuid(),
   objetivo: z.string().trim().min(10).max(800),
   ritmo: ritmoDaCampanhaSchema,
   estado: z.enum(ESTADOS_DA_CAMPANHA),
+  imagem: imagemDaCampanhaSchema.optional(),
 });
 export type CampanhaParams = z.infer<typeof campanhaParamsSchema>;
 
@@ -34,5 +47,6 @@ export const criarCampanhaSchema = z.strictObject({
   canal_id: z.string().uuid(),
   objetivo: z.string().trim().min(10).max(800),
   ritmo: ritmoDaCampanhaSchema,
+  imagem: imagemDaCampanhaSchema.optional(),
 });
 export type CriarCampanha = z.infer<typeof criarCampanhaSchema>;

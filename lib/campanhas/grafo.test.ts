@@ -25,6 +25,16 @@ describe("grafo da campanha", () => {
     expect(acao?.config).toMatchObject({ mode: "ai_message", canal_id: CANAL, abertura: "campanha" });
   });
 
+  it("com arte: a imagem vai no nó da IA e o grafo continua válido", () => {
+    const imagem = { storage_path: "org/campanhas/arte.jpg", mime: "image/jpeg" };
+    const grafo = grafoDaCampanha("Convidar para a limpeza", CANAL, imagem);
+    expect(flowGraphSchema.safeParse(grafo).success).toBe(true);
+    expect(grafo.nodes.find((n) => n.type === "action")?.config).toMatchObject({ imagem });
+    // WEBP nunca chega ao grafo: a rota de upload converte antes
+    const webp = grafoDaCampanha("Convidar para a limpeza", CANAL, { ...imagem, mime: "image/webp" });
+    expect(flowGraphSchema.safeParse(webp).success).toBe(false);
+  });
+
   it("o trigger_config de campanha parseia (senão o cancel_on_reply some em silêncio)", () => {
     const cfg = {
       kind: "campanha",
