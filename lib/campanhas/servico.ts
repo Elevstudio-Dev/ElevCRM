@@ -25,6 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { capabilitiesOf } from "@/lib/channels/capabilities";
 import { listSelectableChannels } from "@/lib/channels/selectable";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import type { ChannelProvider } from "@/lib/channels/types";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
@@ -622,7 +623,7 @@ export async function detalharCampanha(
     const c = contatos.get(l.inscricao.contact_id);
     return {
       contact_id: l.inscricao.contact_id,
-      nome: c?.display_name || c?.name || "Sem nome",
+      nome: rotuloDoContato(c),
       telefone: c?.phone_number ?? null,
       situacao: l.situacao,
       agendado_para: agendado,

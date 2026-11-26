@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAcaoDaCampanha, useCampanha } from "@/hooks/campanhas/useCampanhas";
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import type { Situacao } from "@/lib/campanhas/situacao";
 import { ArrowLeft } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ const ORDEM_DOS_FILTROS: Situacao[] = [
 
 export function CampanhaClient({ id }: { id: string }) {
   const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
   const campanha = useCampanha(id);
   const acao = useAcaoDaCampanha(id);
   const [filtro, setFiltro] = useState<Situacao | null>(null);
@@ -73,7 +75,7 @@ export function CampanhaClient({ id }: { id: string }) {
     <div className="space-y-4 p-6">
       <Link
         href="/app/campanhas"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowLeft size={14} aria-hidden />
         {t("Campanhas")}
@@ -118,7 +120,7 @@ export function CampanhaClient({ id }: { id: string }) {
         </div>
         {c.estado === "enviando" && c.proximo_envio ? (
           <p className="text-xs text-muted-foreground">
-            {t("Próximo envio")}: {dataHora(c.proximo_envio)}
+            {t("Próximo envio")}: {dataHora(c.proximo_envio, tagDoIdioma)}
           </p>
         ) : null}
         <details className="text-sm">
@@ -166,7 +168,7 @@ export function CampanhaClient({ id }: { id: string }) {
                   <td className="px-3 py-2">
                     <Link
                       href={`/app/contacts/${d.contact_id}`}
-                      className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="font-medium hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {d.nome}
                     </Link>
@@ -176,7 +178,7 @@ export function CampanhaClient({ id }: { id: string }) {
                     <Badge variant={s.variante}>{t(s.texto)}</Badge>
                     {d.erro ? <div className="mt-1 max-w-xs truncate text-xs text-error-fg">{d.erro}</div> : null}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-muted-foreground">{dataHora(quando)}</td>
+                  <td className="px-3 py-2 tabular-nums text-muted-foreground">{dataHora(quando, tagDoIdioma)}</td>
                 </tr>
               );
             })}
@@ -221,7 +223,7 @@ function FiltroBotao({ ativo, onClick, children }: { ativo: boolean; onClick: ()
       aria-pressed={ativo}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
         ativo ? "border-accent bg-accent-soft text-accent" : "border-border text-muted-foreground hover:bg-surface-elevated",
       )}
     >

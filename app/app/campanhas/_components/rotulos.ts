@@ -26,16 +26,16 @@ export const ROTULO_DO_ESTADO: Record<ResumoDaCampanha["estado"], { texto: strin
   concluida: { texto: "Concluída", variante: "success" },
 };
 
-const formatoDataHora = new Intl.DateTimeFormat("pt-BR", {
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-export function dataHora(iso: string | null): string {
-  return iso ? formatoDataHora.format(new Date(iso)) : "—";
+/** `tagDoIdioma` vem de `useTagDeIdioma()`: a data segue o idioma escolhido pela pessoa. */
+export function dataHora(iso: string | null, tagDoIdioma: string): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat(tagDoIdioma, {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
 /** Quantos já receberam a mensagem (inclui quem respondeu e quem pediu para sair depois). */

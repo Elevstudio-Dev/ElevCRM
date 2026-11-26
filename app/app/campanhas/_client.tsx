@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCampanhas } from "@/hooks/campanhas/useCampanhas";
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { Megaphone, Plus } from "@/lib/ui/icons";
 
 import { NovaCampanhaDialog } from "./_components/NovaCampanhaDialog";
@@ -15,6 +16,7 @@ import { ROTULO_DO_ESTADO, dataHora, jaReceberam, totalDaCampanha } from "./_com
 
 export function CampanhasClient() {
   const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
   const campanhas = useCampanhas();
   const [nova, setNova] = useState(false);
 
@@ -64,7 +66,7 @@ export function CampanhasClient() {
               <li key={c.id}>
                 <Link
                   href={`/app/campanhas/${c.id}`}
-                  className="block rounded-lg border border-border bg-surface p-4 transition-colors hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="block rounded-lg border border-border bg-surface p-4 transition-colors hover:bg-surface-elevated focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
@@ -73,8 +75,8 @@ export function CampanhasClient() {
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {c.estado === "enviando" && c.proximo_envio
-                        ? `${t("Próximo envio")}: ${dataHora(c.proximo_envio)}`
-                        : `${t("Criada em")} ${dataHora(c.criada_em)}`}
+                        ? `${t("Próximo envio")}: ${dataHora(c.proximo_envio, tagDoIdioma)}`
+                        : `${t("Criada em")} ${dataHora(c.criada_em, tagDoIdioma)}`}
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1">

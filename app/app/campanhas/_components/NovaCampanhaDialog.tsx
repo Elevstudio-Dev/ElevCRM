@@ -21,6 +21,7 @@ import {
   usePreviaDaCampanha,
 } from "@/hooks/campanhas/useCampanhas";
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { RITMO_PADRAO, ritmoDaCampanhaSchema, type RitmoDaCampanha } from "@/lib/campanhas/horarios";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +69,7 @@ function NumeroCampo(props: { id: string; rotulo: string; valor: number; onChang
 
 export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const t = useT();
+  const tagDoIdioma = useTagDeIdioma();
   const router = useRouter();
   const opcoes = useOpcoesDaCampanha(open);
   const criar = useCriarCampanha();
@@ -189,7 +191,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
                     key={e}
                     type="button"
                     onClick={() => alternarEtiqueta(e)}
-                    className="rounded-full border border-accent bg-accent-soft px-2.5 py-0.5 text-xs text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-full border border-accent bg-accent-soft px-2.5 py-0.5 text-xs text-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label={`${t("Tirar")} ${e}`}
                   >
                     {e} ×
@@ -220,7 +222,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
                           onClick={() => alternarEtiqueta(e.etiqueta)}
                           aria-pressed={marcada}
                           className={cn(
-                            "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-elevated focus-visible:bg-surface-elevated focus-visible:outline-none",
+                            "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-elevated focus-visible:bg-surface-elevated focus-visible:outline-hidden",
                             marcada && "font-medium text-accent",
                           )}
                         >
@@ -325,7 +327,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
                     aria-pressed={ligado}
                     onClick={() => alternarDia(d.n)}
                     className={cn(
-                      "min-w-11 rounded-md border px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "min-w-11 rounded-md border px-2 py-1 text-xs focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                       ligado ? "border-accent bg-accent-soft text-accent" : "border-border text-muted-foreground",
                     )}
                   >
@@ -363,8 +365,8 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
                 ) : null}
                 {previa.data.primeiro_envio ? (
                   <p className="text-xs text-muted-foreground">
-                    {t("Primeiro envio")}: {dataHora(previa.data.primeiro_envio)} · {t("último")}:{" "}
-                    {dataHora(previa.data.ultimo_envio)}
+                    {t("Primeiro envio")}: {dataHora(previa.data.primeiro_envio, tagDoIdioma)} · {t("último")}:{" "}
+                    {dataHora(previa.data.ultimo_envio, tagDoIdioma)}
                   </p>
                 ) : null}
               </div>
