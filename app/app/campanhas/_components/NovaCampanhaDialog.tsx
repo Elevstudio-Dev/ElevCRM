@@ -23,6 +23,7 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { RITMO_PADRAO, ritmoDaCampanhaSchema, type RitmoDaCampanha } from "@/lib/campanhas/horarios";
+import { STATUS_DE_CANAL_PARADO } from "@/lib/campanhas/parametros";
 import { cn } from "@/lib/utils";
 
 import { dataHora } from "./rotulos";
@@ -245,7 +246,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
               </SelectTrigger>
               <SelectContent>
                 {(opcoes.data?.canais ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
+                  <SelectItem key={c.id} value={c.id} disabled={STATUS_DE_CANAL_PARADO.has(c.status)}>
                     {c.nome}
                     {c.telefone ? ` · ${c.telefone}` : ""}
                     {c.status !== "WORKING" ? ` (${t("desconectado")})` : ""}

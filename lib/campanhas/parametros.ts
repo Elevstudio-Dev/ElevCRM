@@ -6,6 +6,9 @@ import { z } from "zod";
 
 import { ritmoDaCampanhaSchema } from "./horarios";
 
+/** Estados de `channel_sessions.status` em que o número não envia nada (tela e servidor). */
+export const STATUS_DE_CANAL_PARADO: ReadonlySet<string> = new Set(["STOPPED", "FAILED"]);
+
 export const ESTADOS_DA_CAMPANHA = ["enviando", "pausada", "cancelada"] as const;
 export type EstadoDaCampanha = (typeof ESTADOS_DA_CAMPANHA)[number];
 

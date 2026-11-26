@@ -33,7 +33,7 @@ import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
 
 import { contarPorDia, planejarHorarios, type RitmoDaCampanha } from "./horarios";
-import { campanhaParamsSchema, type CampanhaParams, type CriarCampanha, type EstadoDaCampanha } from "./parametros";
+import { STATUS_DE_CANAL_PARADO, campanhaParamsSchema, type CampanhaParams, type CriarCampanha, type EstadoDaCampanha } from "./parametros";
 import { montarPublico, type ContatoCandidato, type MotivoDeFora } from "./publico";
 import {
   MOTIVO_CANCELAMENTO,
@@ -273,8 +273,17 @@ export async function criarCampanha(
   agora: Date,
 ): Promise<CampanhaCriada> {
   const canais = await listSelectableChannels(admin, organizationId);
-  if (!canais.some((c) => c.id === pedido.canal_id)) {
+  const canal = canais.find((c) => c.id === pedido.canal_id);
+  if (!canal) {
     throw new ErroDeCampanha("canal_invalido", "O número escolhido não está conectado nesta organização.", 422);
+  }
+  // Número parado ou com falha: cada envio da fila morreria um por um, e cada morte vira um aviso.
+  if (STATUS_DE_CANAL_PARADO.has(canal.status)) {
+    throw new ErroDeCampanha(
+      "canal_desconectado",
+      "Este número está desconectado. Reconecte-o em Conexões ou escolha outro.",
+      422,
+    );
   }
   if (!(await canalAceitaTextoLivre(admin, organizationId, pedido.canal_id))) {
     throw new ErroDeCampanha(
@@ -325,11 +334,26 @@ export async function criarCampanha(
     graph: grafo,
     createdBy: criadoPor,
   });
-  if (!publicado.ok) throw new Error(publicado.message);
+  if (!publicado.ok) {
+    // Sem versão publicada a campanha não tem como enviar: apagar, e não deixar
+    // na lista uma campanha "concluída" com zero destinatários.
+    await admin.from("followup_flow_pointers").delete().eq("organization_id", organizationId).eq("id", pointer.id);
+    throw new Error(publicado.message);
+  }
 
   const fuso = await fusoDaOrganizacao(admin, organizationId);
   const horarios = planejarHorarios(agora, publico.recebem.length, pedido.ritmo, fuso, pointer.id);
-  const inscritos = await inscrever(admin, organizationId, pointer.id, publicado.version_id, publico.recebem, horarios);
+  let inscritos: number;
+  try {
+    inscritos = await inscrever(admin, organizationId, pointer.id, publicado.version_id, publico.recebem, horarios);
+  } catch (err) {
+    // Parte entrou e parte não: tira da fila quem entrou (ninguém recebe uma
+    // campanha pela metade sem a equipe saber) e marca cancelada — o erro sobe.
+    await tirarDaFila(admin, organizationId, pointer.id, MOTIVO_CANCELAMENTO);
+    const p = await carregarPointer(admin, organizationId, pointer.id);
+    await gravarEstado(admin, organizationId, p, "cancelada");
+    throw err;
+  }
 
   return {
     id: pointer.id,
