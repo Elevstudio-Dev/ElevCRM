@@ -218,6 +218,10 @@ export const actionConfigSchema = z.discriminatedUnion('mode', [
     mode: z.literal('ai_message'),
     prompt_hint: z.string().min(1).max(1000),
     fallback_template_id: z.string().uuid().optional(),
+    /** Número de saída fixo (campanha). Ausente = o da conversa mais recente do contato. */
+    canal_id: z.string().uuid().optional(),
+    /** `campanha` = 1ª mensagem ativa para quem não escreveu, não retomada de conversa. */
+    abertura: z.enum(['campanha']).optional(),
   }),
   z.strictObject({
     mode: z.literal('template'),

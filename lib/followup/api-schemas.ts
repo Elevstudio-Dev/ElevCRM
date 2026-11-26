@@ -8,6 +8,7 @@ import { z } from "zod";
 import { flowGraphSchema } from "./graph-schema";
 import { regraDeAnuncioSchema } from "./regra-de-anuncio";
 import { ritmoDeEntradaSchema } from "./ritmo-de-entrada";
+import { campanhaParamsSchema } from "@/lib/campanhas/parametros";
 
 /** Vocabulário da coluna `surface` (0167). A UI não recorta mais por ela. */
 export const FOLLOWUP_FLOW_SURFACES = ["followup", "crm_automation"] as const;
@@ -60,6 +61,15 @@ export const triggerConfigSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("conversation_end"),
     params: z.strictObject({}),
+    ...CANCEL_ON_REPLY,
+  }),
+  // Campanha (lib/campanhas): o pointer é criado já publicado pela tela de
+  // Campanhas, e as inscrições nascem todas de uma vez com a hora de cada envio.
+  // Nenhum motor "arma" este kind — por isso ele fica FORA do allowlist do publish
+  // manual e fora da lista de fluxos de follow-up.
+  z.strictObject({
+    kind: z.literal("campanha"),
+    params: campanhaParamsSchema,
     ...CANCEL_ON_REPLY,
   }),
 ]);
