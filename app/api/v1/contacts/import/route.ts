@@ -11,7 +11,9 @@
  *   - contato que já existe (telefone/e-mail/CPF da org) é contado como
  *     duplicado, não como erro;
  *   - as demais linhas seguem mesmo se uma falhar — uma planilha de 400 nomes
- *     não pode morrer inteira pelo telefone malformado da linha 7.
+ *     não pode morrer inteira pelo telefone malformado da linha 7;
+ *   - linha com CPF cuja cifra falhou é recusada com motivo legível
+ *     (`MOTIVO_CPF_SEM_CIFRA`), nunca gravada só com o hash nem sem o CPF.
  *
  * Insert é linha a linha de propósito: `contacts` tem índices únicos parciais
  * (org+phone/org+email/org+cpf) e um insert em lote viraria tudo-ou-nada —
@@ -23,7 +25,7 @@ import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { audit } from "@/lib/audit";
-import { encryptCpfSql, hashCpf } from "@/lib/contacts/cpf";
+import { camposDoCpf } from "@/lib/contacts/cpf";
 import {
   CSV_MAX_BYTES,
   CSV_MAX_DATA_ROWS,
@@ -228,11 +230,18 @@ export async function POST(req: NextRequest): Promise<Response> {
       consent: {},
     };
     if (contato.cpf) {
-      insertRow.cpf_hash = hashCpf(contato.cpf as string);
-      // LGPD: além do hash (dedupe), grava a versão cifrada — igual ao create
-      // unitário, senão o contato importado nasce sem CPF recuperável.
-      const enc = await encryptCpfSql(supabase, contato.cpf as string);
-      if (enc) insertRow.cpf_encrypted = enc;
+      // Hash e cifra andam JUNTOS (CHECK contacts_cpf_consistency). Se a cifra
+      // falhar, a LINHA falha com motivo legível — não entra sem o CPF. Entrar
+      // sem CPF parece mais gentil, mas o contato passaria a existir pelo
+      // telefone/e-mail e o reimport da mesma planilha (depois de consertada a
+      // cifra) o contaria como DUPLICADO: o CPF nunca mais entraria. Falhando,
+      // reimportar a mesma planilha traz exatamente as linhas que faltaram.
+      const cpf = await camposDoCpf(supabase, contato.cpf as string);
+      if (!cpf.ok) {
+        errors.push({ linha, motivo: cpf.motivo });
+        continue;
+      }
+      Object.assign(insertRow, cpf.campos);
     }
 
     const { data: criado, error: insErr } = await supabase

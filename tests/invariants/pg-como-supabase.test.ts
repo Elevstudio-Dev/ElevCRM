@@ -364,6 +364,25 @@ describe("rpc — argumentos NOMEADOS, como o PostgREST", () => {
     );
     expect(r.error?.message).toMatch(/does not exist|não existe/i);
   });
+
+  it("`bytea` volta como o PostgREST entrega — texto `\\x<hex>`, não Buffer", async () => {
+    // Nasceu com `encrypt_cpf` (0234): o app guarda esse texto e o devolve no insert. Se o adaptador
+    // entregasse Buffer, o teste do handler mediria um formato que produção nunca vê.
+    await pool.query(
+      `create or replace function public.fn_sonda_bytea_adaptador() returns bytea
+         language sql as $f$ select '\\x0a0bff'::bytea $f$`,
+    );
+    try {
+      const r = await (db.rpc as unknown as (n: string, a: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
+        "fn_sonda_bytea_adaptador",
+        {},
+      );
+      expect(r.error).toBeNull();
+      expect(r.data).toBe("\\x0a0bff");
+    } finally {
+      await pool.query("drop function if exists public.fn_sonda_bytea_adaptador()");
+    }
+  });
 });
 
 describe("`in`, `is null`, `not is null`, `like` — nasceram com o aplicador da agenda da secretaria", () => {

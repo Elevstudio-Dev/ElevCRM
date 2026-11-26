@@ -13,7 +13,7 @@ import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
 import { roleAtLeast } from "@/lib/auth/types";
 import { canonicalPhoneBR, phoneLookupVariants } from "@/lib/channels/phone-variants";
-import { hashCpf, encryptCpfSql } from "@/lib/contacts/cpf";
+import { camposDoCpf, hashCpf } from "@/lib/contacts/cpf";
 import type { Contact } from "@/lib/types/contacts";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
 import type {
@@ -362,9 +362,13 @@ export async function createContactHandler(
   };
 
   if (input.cpf) {
-    insertRow.cpf_hash = hashCpf(input.cpf);
-    const enc = await encryptCpfSql(supabase, input.cpf);
-    if (enc) insertRow.cpf_encrypted = enc;
+    // Hash e cifra JUNTOS (CHECK contacts_cpf_consistency); sem cifra, recusa
+    // com motivo legível em vez do erro cru da constraint.
+    const cpf = await camposDoCpf(supabase, input.cpf);
+    if (!cpf.ok) {
+      throw new ApiError(503, "cpf_cipher_unavailable", undefined, ctx.requestId, cpf.motivo);
+    }
+    Object.assign(insertRow, cpf.campos);
   }
 
   const { data: created, error: insErr } = await supabase
@@ -495,9 +499,14 @@ export async function patchContactHandler(
     patch.consent = { ...anterior, ...input.consent };
   }
   if (input.cpf !== undefined) {
-    patch.cpf_hash = hashCpf(input.cpf);
-    const enc = await encryptCpfSql(supabase, input.cpf);
-    if (enc) patch.cpf_encrypted = enc;
+    // O PAR inteiro: trocar só o hash deixaria a cifra do CPF ANTIGO na linha
+    // (hash de um, cifra de outro) — ou, sem cifra anterior, o erro cru da
+    // constraint. Sem cifra, nada do CPF muda e o motivo volta legível.
+    const cpf = await camposDoCpf(supabase, input.cpf);
+    if (!cpf.ok) {
+      throw new ApiError(503, "cpf_cipher_unavailable", undefined, ctx.requestId, cpf.motivo);
+    }
+    Object.assign(patch, cpf.campos);
   }
 
   if (Object.keys(patch).length === 0) {

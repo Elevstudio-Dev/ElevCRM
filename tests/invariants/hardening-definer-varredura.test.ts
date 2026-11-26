@@ -73,6 +73,14 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "(app/actions/settings/updateProfile.ts, updateTenant.ts).",
   },
   {
+    fn: "encrypt_cpf(text)",
+    razao:
+      "Create/PATCH de contato e importação por planilha chamam com a sessão do " +
+      "usuário (app/api/v1/contacts/_handler.ts, app/api/v1/contacts/import/route.ts, " +
+      "via lib/contacts/cpf.ts). Não escreve nada: só cifra, e só aceita os 11 " +
+      "dígitos do CPF — não é oráculo genérico da chave mestra (migration 0234).",
+  },
+  {
     fn: "fn_conversation_assign(uuid,uuid,uuid,text,uuid,boolean)",
     razao:
       "Rotas de claim/release/transfer chamam com a sessão do usuário " +

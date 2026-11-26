@@ -462,7 +462,12 @@ async function chamarRpc(
   const nomeados = chaves.map((k, i) => `${k} => $${i + 1}`).join(", ");
   try {
     const r = await pool.query(`select public."${nome}"(${nomeados}) as valor`, valores);
-    return { data: (r.rows[0] as { valor: unknown } | undefined)?.valor ?? null, error: null };
+    const valor = (r.rows[0] as { valor: unknown } | undefined)?.valor ?? null;
+    // `bytea`: o driver `pg` devolve Buffer; o PostgREST devolve o TEXTO `\x<hex>` (bytea_output = hex) — e é
+    // esse texto que o app guarda e devolve no insert. Nasceu com `encrypt_cpf` (0234): sem isto o teste do
+    // handler mediria um formato que produção nunca entrega.
+    if (Buffer.isBuffer(valor)) return { data: `\\x${valor.toString("hex")}`, error: null };
+    return { data: valor, error: null };
   } catch (e) {
     return { data: null, error: erroDe(e) };
   }
