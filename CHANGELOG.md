@@ -8,6 +8,14 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.5] — 2026-11-26
+
+### Adicionado
+
+- **Campanhas: uma mensagem da IA para cada pessoa de uma lista por etiqueta** Nova tela "Campanhas" (menu do CRM e botão "Campanha" em Contatos, só para gestor ou acima). A equipe escolhe as etiquetas do público (recebe quem tiver todas), o número de WhatsApp de saída, o objetivo da mensagem e o ritmo: quantos por dia, intervalo entre um envio e outro, horário e dias da semana, no fuso da organização. Antes de agendar, a prévia mostra quantos recebem e quantos ficam de fora, e por quê: pediram para não receber, telefone fixo, sem celular válido, já em outro follow-up, equipe ou anonimizados. Ela mostra também quando sai o primeiro e o último envio.
+
+  A IA escreve uma mensagem diferente para cada pessoa, sem inventar preço nem promoção, e termina com a opção de responder PARAR. Quem responde cai na conversa normal; quem escreve antes da própria vez sai da fila. A campanha usa o motor de follow-up, com a mesma cadeia de envio (bloqueio de quem pediu para sair, janela anti-bloqueio, LGPD). Cada campanha tem uma tela de acompanhamento por destinatário (agendado, enviado, respondeu, pediu para sair, falhou) e botões para pausar, retomar e cancelar. Número da API oficial é recusado, porque lá a primeira mensagem precisa de modelo aprovado. Campanhas não aparecem na lista de fluxos de follow-up.
+
 ## [1.34.4] — 2026-11-24
 
 ### Adicionado
@@ -3315,7 +3323,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.4...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.5...HEAD
+[1.34.5]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.4...v1.34.5
 [1.34.4]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.3...v1.34.4
 [1.34.3]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.2...v1.34.3
 [1.34.2]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.1...v1.34.2
