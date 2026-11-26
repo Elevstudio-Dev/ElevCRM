@@ -222,6 +222,13 @@ export const actionConfigSchema = z.discriminatedUnion('mode', [
     canal_id: z.string().uuid().optional(),
     /** `campanha` = 1ª mensagem ativa para quem não escreveu, não retomada de conversa. */
     abertura: z.enum(['campanha']).optional(),
+    /** Campanha: arte enviada ANTES da mensagem da IA (`{org}/campanhas/…` no bucket whatsapp-media). */
+    imagem: z
+      .strictObject({
+        storage_path: z.string().min(1).max(300),
+        mime: z.string().regex(/^image\/(jpeg|png)$/),
+      })
+      .optional(),
   }),
   z.strictObject({
     mode: z.literal('template'),

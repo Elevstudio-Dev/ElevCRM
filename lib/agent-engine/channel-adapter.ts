@@ -36,6 +36,13 @@ export interface ChannelSendInput {
     /** Valor por slot, chaveado por `slotKey` — a mesma chave da tela. */
     values: Record<string, string>;
   };
+  /**
+   * Presente = este envio é uma IMAGEM já guardada no Storage, e `body` é a legenda
+   * (pode ser vazia). Usado pela campanha (a arte vai antes da mensagem da IA).
+   * `storagePath` precisa estar sob `{org}/{conversa}/` — o handler de envio recusa
+   * o resto, e é essa trava que impede mandar o arquivo de outra conversa.
+   */
+  imagem?: { storagePath: string; mime: string };
 }
 
 /**

@@ -7279,6 +7279,14 @@ export const DICIONARIO: Traducoes = {
   Respondeu: { es: "Respondió" },
   "Pediu para sair": { es: "Pidió salir" },
   "Conversou antes da vez": { es: "Conversó antes de su turno" },
+  "Imagem (opcional)": { es: "Imagen (opcional)" },
+  "Prévia da imagem da campanha": { es: "Vista previa de la imagen de la campaña" },
+  "Tirar imagem": { es: "Quitar imagen" },
+  "Enviando a imagem…": { es: "Enviando la imagen…" },
+  "A arte vai antes da mensagem da IA, para cada pessoa. JPG, PNG ou WEBP, até 20 MB.": {
+    es: "La imagen va antes del mensaje de la IA, para cada persona. JPG, PNG o WEBP, hasta 20 MB.",
+  },
+  "Imagem da campanha": { es: "Imagen de la campaña" },
 };
 
 /**

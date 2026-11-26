@@ -73,6 +73,8 @@ export interface FollowupJobRequest {
     channel_session_id?: string;
     /** action (mode 'ai_message') de campanha — abre como 1ª mensagem ativa, não como retomada. */
     abertura?: "campanha";
+    /** action (mode 'ai_message') de campanha — arte enviada antes da mensagem da IA. */
+    imagem?: { storage_path: string; mime: string };
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
     /** action (mode 'template') — id em `message_templates`; o turno carrega o corpo e envia sem modelo. */
@@ -229,6 +231,7 @@ function turnPayloadExtras(
       prompt_hint: interpolarVolta(node.config.prompt_hint, events),
       ...(node.config.canal_id !== undefined ? { channel_session_id: node.config.canal_id } : {}),
       ...(node.config.abertura !== undefined ? { abertura: node.config.abertura } : {}),
+      ...(node.config.imagem !== undefined ? { imagem: node.config.imagem } : {}),
     };
   }
   if (node.type === "action" && node.config.mode === "text") {

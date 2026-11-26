@@ -38,6 +38,7 @@ import { isLeadInHandoff } from './human-handoff';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
+import { enviarImagemDaCampanha, type DepsDaImagem, type ImagemDaCampanha } from './imagem-da-campanha';
 import {
   classifyFollowupReply,
   planFollowupTiming,
@@ -79,6 +80,10 @@ export const followupTurnPayloadSchema = z
     channel_session_id: z.string().uuid().optional(),
     /** Campanha: 1ª mensagem ativa para quem não escreveu (ver `buildCampaignOpeningMessage`). */
     abertura: z.enum(['campanha']).optional(),
+    /** Campanha: arte enviada antes da mensagem da IA (ver `imagem-da-campanha.ts`). */
+    imagem: z
+      .object({ storage_path: z.string().min(1).max(300), mime: z.string().regex(/^image\/(jpeg|png)$/) })
+      .optional(),
     /** action mode `text` — enviado pela cadeia de guardrails, sem LLM. */
     fixed_body: z.string().min(1).max(4000).optional(),
     /** action mode `template` — corpo em `message_templates`. */
@@ -220,10 +225,15 @@ function buildFollowupOpeningMessage(
  * protegem o número: uma mensagem só, curta, sem oferta inventada, com a saída
  * (PARAR) escrita — a detecção de opt-out da ingestão bloqueia quem responder.
  */
-export function buildCampaignOpeningMessage(objetivo: string, ritual: string[]): string {
+export function buildCampaignOpeningMessage(objetivo: string, ritual: string[], comImagem = false): string {
   return [
     'Mensagem de CAMPANHA: a equipe escolheu este contato numa lista para receber UMA mensagem ativa.',
     'Ele NÃO escreveu agora e pode não falar com a empresa há meses — não trate como continuação de conversa.',
+    ...(comImagem
+      ? [
+          'A ARTE da campanha (uma imagem) acabou de ser enviada a ele, logo antes desta mensagem. Escreva como o texto que acompanha a imagem; não descreva a imagem nem diga que vai mandá-la.',
+        ]
+      : []),
     '',
     '## Objetivo da campanha (escrito pela equipe — siga-o)',
     objetivo.trim() || 'Retomar o contato e convidar para voltar.',
@@ -237,6 +247,39 @@ export function buildCampaignOpeningMessage(objetivo: string, ritual: string[]):
     '- Na última linha, separada: "Se preferir não receber mensagens, é só responder PARAR."',
     '- Envie com a tool send_message, UMA vez — texto fora de tool é descartado pelo runtime.',
   ].join('\n');
+}
+
+/** As dependências reais da arte da campanha: Storage do CRM, banco e o canal do turno. */
+function depsDaImagem(deps: InboundTurnDeps, pool: pg.Pool, target: ReentrySendTarget): DepsDaImagem {
+  const channel = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool);
+  return {
+    async copiar(origem, destino) {
+      const { error } = await deps.crmCfg.supabase.storage.from('whatsapp-media').copy(origem, destino);
+      // Destino que já existe = cópia de uma tentativa anterior deste mesmo envio.
+      if (error && !/exist/i.test(error.message)) {
+        throw new Error(`campanha: não foi possível preparar a imagem (${error.message.slice(0, 80)})`);
+      }
+    },
+    async jaEnviada(conversationId, storagePath) {
+      const { rows } = await pool.query(
+        `select 1 from messages
+          where organization_id = $1 and conversation_id = $2 and media_storage_path = $3
+            and direction = 'outbound' and status <> 'failed'
+          limit 1`,
+        [target.tenantId, conversationId, storagePath],
+      );
+      return rows.length > 0;
+    },
+    async emHandoffOuBloqueado() {
+      if (await isLeadInHandoff(pool, target.tenantId, target.leadId)) return true;
+      const { rows } = await pool.query<{ is_blocked: boolean }>(
+        'select is_blocked from contacts where organization_id = $1 and id = $2',
+        [target.tenantId, target.leadId],
+      );
+      return rows[0]?.is_blocked === true;
+    },
+    enviar: (input) => channel.send(input),
+  };
 }
 
 /** Última mensagem inbound do contexto (a "última coisa que o lead disse" — Z). */
@@ -297,6 +340,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         purpose: payload.purpose,
         promptHint: payload.prompt_hint,
         abertura: payload.abertura,
+        imagem: payload.imagem,
         fixedBody: payload.fixed_body,
         templateId: payload.template_id,
         voltaIndex: payload.volta_index,
@@ -489,6 +533,7 @@ async function runFlowDrivenTurn(
     purpose: 'send_message' | 'classify' | 'plan_timing' | undefined;
     promptHint: string | undefined;
     abertura: 'campanha' | undefined;
+    imagem: ImagemDaCampanha | undefined;
     fixedBody: string | undefined;
     templateId: string | undefined;
     voltaIndex: number | undefined;
@@ -520,6 +565,15 @@ async function runFlowDrivenTurn(
       }
       return;
     }
+    // Campanha com arte: a imagem sai ANTES da mensagem da IA (ver imagem-da-campanha.ts).
+    if (input.abertura === 'campanha' && input.imagem !== undefined) {
+      const desfecho = await enviarImagemDaCampanha(
+        depsDaImagem(deps, pool, target),
+        { tenantId: target.tenantId, leadId: target.leadId, jobId: job.id, conversationId: target.conversationId },
+        input.imagem,
+      );
+      runLog.info('imagem da campanha', { desfecho });
+    }
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: target.channelSessionId,
       conversationId: target.conversationId,
@@ -528,6 +582,7 @@ async function runFlowDrivenTurn(
           return buildCampaignOpeningMessage(
             input.promptHint ?? '',
             ritualBlocks(previous, leadState, context, notesIndexBlock, projeta),
+            input.imagem !== undefined,
           );
         }
         const temporalBlock = buildTemporalBlock({ now: clock(), lastInbound: lastInboundOf(context) });

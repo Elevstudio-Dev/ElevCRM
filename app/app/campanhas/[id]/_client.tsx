@@ -126,6 +126,14 @@ export function CampanhaClient({ id }: { id: string }) {
         <details className="text-sm">
           <summary className="cursor-pointer text-muted-foreground">{t("Objetivo e público")}</summary>
           <p className="mt-2 whitespace-pre-wrap">{c.objetivo}</p>
+          {c.imagem_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- link assinado temporário do Storage
+            <img
+              src={c.imagem_url}
+              alt={t("Imagem da campanha")}
+              className="mt-2 max-h-64 w-auto rounded-md border border-border"
+            />
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-1">
             {c.etiquetas.map((e) => (
               <Badge key={e} variant="outline" className="font-normal">

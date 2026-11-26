@@ -33,7 +33,7 @@ import { validateFlowForPublish } from "@/lib/followup/validate-publish";
 import { FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
 
 import { contarPorDia, planejarHorarios, type RitmoDaCampanha } from "./horarios";
-import { STATUS_DE_CANAL_PARADO, campanhaParamsSchema, type CampanhaParams, type CriarCampanha, type EstadoDaCampanha } from "./parametros";
+import { STATUS_DE_CANAL_PARADO, campanhaParamsSchema, type ImagemDaCampanha, type CampanhaParams, type CriarCampanha, type EstadoDaCampanha } from "./parametros";
 import { montarPublico, type ContatoCandidato, type MotivoDeFora } from "./publico";
 import {
   MOTIVO_CANCELAMENTO,
@@ -91,6 +91,33 @@ async function canalAceitaTextoLivre(
   const provider = (data as { provider?: string } | null)?.provider;
   if (!provider) return false;
   return capabilitiesOf(provider as ChannelProvider).freeformOutsideWindow;
+}
+
+export const BUCKET_DA_IMAGEM = "whatsapp-media";
+
+export function pastaDeImagens(organizationId: string): string {
+  return `${organizationId}/campanhas/`;
+}
+
+/** A arte tem de estar na pasta de campanhas DESTA organização, e existir de fato. */
+async function conferirImagem(admin: SupabaseClient, organizationId: string, imagem: ImagemDaCampanha): Promise<void> {
+  const pasta = pastaDeImagens(organizationId);
+  const nome = imagem.storage_path.slice(pasta.length);
+  if (!imagem.storage_path.startsWith(pasta) || nome.length === 0 || nome.includes("/")) {
+    throw new ErroDeCampanha("imagem_invalida", "A imagem não pertence a esta organização. Envie a imagem de novo.", 422);
+  }
+  const { data, error } = await admin.storage.from(BUCKET_DA_IMAGEM).list(pasta.slice(0, -1), { search: nome, limit: 5 });
+  falha(error);
+  if (!(data ?? []).some((o) => o.name === nome)) {
+    throw new ErroDeCampanha("imagem_invalida", "A imagem não foi encontrada. Envie a imagem de novo.", 422);
+  }
+}
+
+/** Link temporário (10 min) só para a tela mostrar a arte. */
+async function linkDaImagem(admin: SupabaseClient, imagem: ImagemDaCampanha | undefined): Promise<string | null> {
+  if (!imagem) return null;
+  const { data } = await admin.storage.from(BUCKET_DA_IMAGEM).createSignedUrl(imagem.storage_path, 600);
+  return data?.signedUrl ?? null;
 }
 
 export async function fusoDaOrganizacao(admin: SupabaseClient, organizationId: string): Promise<string> {
@@ -194,7 +221,7 @@ export async function previaDaCampanha(
 }
 
 /** Gatilho → mensagem da IA (número e abertura de campanha) → fim. */
-export function grafoDaCampanha(objetivo: string, canalId: string): FlowGraph {
+export function grafoDaCampanha(objetivo: string, canalId: string, imagem?: ImagemDaCampanha): FlowGraph {
   const grafo: FlowGraph = {
     nodes: [
       { id: NO_GATILHO, type: "trigger", label: "Campanha", position: { x: 0, y: 0 }, config: {} },
@@ -203,7 +230,13 @@ export function grafoDaCampanha(objetivo: string, canalId: string): FlowGraph {
         type: "action",
         label: "Mensagem da IA",
         position: { x: 0, y: 160 },
-        config: { mode: "ai_message", prompt_hint: objetivo, canal_id: canalId, abertura: "campanha" },
+        config: {
+          mode: "ai_message",
+          prompt_hint: objetivo,
+          canal_id: canalId,
+          abertura: "campanha",
+          ...(imagem ? { imagem } : {}),
+        },
       },
       {
         id: "fim",
@@ -298,7 +331,9 @@ export async function criarCampanha(
     throw new ErroDeCampanha("publico_vazio", "Nenhum contato com essas etiquetas pode receber a campanha.", 422);
   }
 
-  const grafo = grafoDaCampanha(pedido.objetivo, pedido.canal_id);
+  if (pedido.imagem) await conferirImagem(admin, organizationId, pedido.imagem);
+
+  const grafo = grafoDaCampanha(pedido.objetivo, pedido.canal_id, pedido.imagem);
   const validacao = validateFlowForPublish(grafo);
   if (!validacao.ok) {
     throw new Error(`grafo da campanha reprovado: ${validacao.errors.map((e) => e.code).join(",")}`);
@@ -310,6 +345,7 @@ export async function criarCampanha(
     objetivo: pedido.objetivo,
     ritmo: pedido.ritmo,
     estado: "enviando",
+    ...(pedido.imagem ? { imagem: pedido.imagem } : {}),
   };
   const { data: pointer, error: insErr } = await admin
     .from("followup_flow_pointers")
@@ -624,6 +660,8 @@ export interface DetalheDaCampanha extends ResumoDaCampanha {
   objetivo: string;
   ritmo: RitmoDaCampanha;
   canal_nome: string | null;
+  /** Link temporário da arte, quando a campanha tem uma. */
+  imagem_url: string | null;
   destinatarios: DestinatarioDaTela[];
 }
 
@@ -669,6 +707,7 @@ export async function detalharCampanha(
     etiquetas: p.params.etiquetas,
     canal_id: p.params.canal_id,
     canal_nome: canais.find((c) => c.id === p.params.canal_id)?.display_name ?? null,
+    imagem_url: await linkDaImagem(admin, p.params.imagem),
     criada_em: p.created_at,
     objetivo: p.params.objetivo,
     ritmo: p.params.ritmo,

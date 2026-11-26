@@ -17,7 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   useCriarCampanha,
+  useEnviarImagemDaCampanha,
   useOpcoesDaCampanha,
+  type ImagemEnviada,
   usePreviaDaCampanha,
 } from "@/hooks/campanhas/useCampanhas";
 import { useT } from "@/hooks/i18n/useT";
@@ -74,6 +76,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
   const router = useRouter();
   const opcoes = useOpcoesDaCampanha(open);
   const criar = useCriarCampanha();
+  const enviarImagem = useEnviarImagemDaCampanha();
 
   const [nome, setNome] = useState("");
   const [etiquetas, setEtiquetas] = useState<string[]>([]);
@@ -81,6 +84,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
   const [canalId, setCanalId] = useState("");
   const [objetivo, setObjetivo] = useState("");
   const [ritmo, setRitmo] = useState<RitmoDaCampanha>(RITMO_PADRAO);
+  const [imagem, setImagem] = useState<ImagemEnviada | null>(null);
 
   const ritmoValido = ritmoDaCampanhaSchema.safeParse(ritmo).success;
   // Texto, e não objeto: um objeto novo a cada render reiniciaria o atraso para sempre.
@@ -115,6 +119,14 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
     setCanalId("");
     setObjetivo("");
     setRitmo(RITMO_PADRAO);
+    setImagem(null);
+    enviarImagem.reset();
+  }
+
+  function escolherImagem(arquivo: File | undefined) {
+    if (!arquivo) return;
+    setImagem(null);
+    enviarImagem.mutate(arquivo, { onSuccess: (r) => setImagem(r) });
   }
 
   const recebem = previa.data?.recebem ?? 0;
@@ -125,6 +137,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
     objetivo.trim().length >= 10 &&
     ritmoValido &&
     recebem > 0 &&
+    !enviarImagem.isPending &&
     !criar.isPending;
 
   async function confirmar() {
@@ -134,6 +147,7 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
       canal_id: canalId,
       objetivo: objetivo.trim(),
       ritmo,
+      ...(imagem ? { imagem: { storage_path: imagem.storage_path, mime: imagem.mime } } : {}),
     });
     limpar();
     onOpenChange(false);
@@ -271,6 +285,39 @@ export function NovaCampanhaDialog({ open, onOpenChange }: { open: boolean; onOp
             />
             <p className="text-xs text-muted-foreground">
               {t("É a orientação que a IA segue. Ela não inventa preço, data nem promoção que não estejam aqui.")}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="campanha-imagem">{t("Imagem (opcional)")}</Label>
+            {imagem?.previa_url ? (
+              <div className="flex items-start gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element -- link assinado temporário do Storage */}
+                <img
+                  src={imagem.previa_url}
+                  alt={t("Prévia da imagem da campanha")}
+                  className="h-28 w-28 rounded-md border border-border object-cover"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => setImagem(null)}>
+                  {t("Tirar imagem")}
+                </Button>
+              </div>
+            ) : (
+              <Input
+                id="campanha-imagem"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={enviarImagem.isPending}
+                onChange={(e) => escolherImagem(e.target.files?.[0])}
+                className="h-auto py-1.5"
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              {enviarImagem.isPending
+                ? t("Enviando a imagem…")
+                : enviarImagem.isError
+                  ? enviarImagem.error.message
+                  : t("A arte vai antes da mensagem da IA, para cada pessoa. JPG, PNG ou WEBP, até 20 MB.")}
             </p>
           </div>
 
