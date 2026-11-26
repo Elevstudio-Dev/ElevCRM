@@ -19793,6 +19793,42 @@ create policy "agenda_reservas_agent_read" on public.agenda_reservas_pendentes
   );
 -- Sem policy de INSERT/UPDATE/DELETE: quem grava é o backend (service role).
 
+-- ---- a cifra do CPF passa a existir (migration 0234) ----
+-- `contacts_cpf_consistency` exige `cpf_hash` e `cpf_encrypted` juntos; sem `encrypt_cpf` o app gravava o hash
+-- sozinho e o banco recusava a linha (importação de 25/11/2026: 408 linhas com CPF perdidas). Mesma cifra e mesma
+-- chave mestra do resto da base (private.fn_oauth_key, bloco da 0041 acima); só aceita os 11 dígitos; sem chave,
+-- recusa com motivo legível. EXECUTE para authenticated + service_role, nunca anon.
+-- Vigiado por `tests/invariants/cpf-cifrado-na-gravacao.test.ts`.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+
+create or replace function public.encrypt_cpf(p_plaintext text) returns bytea
+    language plpgsql volatile security definer
+    set search_path to 'public', 'private', 'extensions', 'pg_temp'
+    as $$
+declare
+  k text;
+begin
+  if p_plaintext is null or p_plaintext !~ '^[0-9]{11}$' then
+    raise exception 'encrypt_cpf: entrada recusada (esperado o CPF normalizado, 11 dígitos)'
+      using errcode = '22023';
+  end if;
+  k := private.fn_oauth_key();
+  if k is null or length(k) < 32 then
+    raise exception 'encrypt_cpf: chave de cifra ausente nesta instalação'
+      using errcode = '55000';
+  end if;
+  return pgp_sym_encrypt(p_plaintext, k, 'cipher-algo=aes256');
+end$$;
+
+comment on function public.encrypt_cpf(text) is
+  'Cifra o CPF normalizado (11 dígitos) com a chave mestra (pgp_sym AES-256). Par obrigatório de contacts.cpf_hash '
+  '(CHECK contacts_cpf_consistency). Migration 0234.';
+
+revoke all on function public.encrypt_cpf(text) from public;
+revoke all on function public.encrypt_cpf(text) from anon;
+grant execute on function public.encrypt_cpf(text) to authenticated, service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
