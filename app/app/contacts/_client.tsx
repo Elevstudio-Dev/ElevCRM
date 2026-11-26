@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
-import { Funnel, Plus, MagnifyingGlass, UploadSimple } from "@/lib/ui/icons";
+import Link from "next/link";
+import { Funnel, Plus, MagnifyingGlass, PaperPlaneTilt, UploadSimple } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -147,6 +148,12 @@ export function ContactsListClient() {
           uma linha de dois botões sem isso comprime os rótulos.
         */}
         <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/app/campanhas">
+              <PaperPlaneTilt size={16} weight="bold" aria-hidden />
+              <span>{t("Campanha")}</span>
+            </Link>
+          </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <UploadSimple size={16} weight="bold" aria-hidden />
             <span>{t("Importar CSV")}</span>

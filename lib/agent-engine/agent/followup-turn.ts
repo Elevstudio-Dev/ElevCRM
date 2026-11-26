@@ -75,6 +75,10 @@ export const followupTurnPayloadSchema = z
     node_id: z.string().min(1).optional(),
     purpose: z.enum(['send_message', 'classify', 'plan_timing']).optional(),
     prompt_hint: z.string().optional(),
+    /** Campanha: número de saída escolhido pela equipe. Validado contra a org em `resolveSendTarget`. */
+    channel_session_id: z.string().uuid().optional(),
+    /** Campanha: 1ª mensagem ativa para quem não escreveu (ver `buildCampaignOpeningMessage`). */
+    abertura: z.enum(['campanha']).optional(),
     /** action mode `text` — enviado pela cadeia de guardrails, sem LLM. */
     fixed_body: z.string().min(1).max(4000).optional(),
     /** action mode `template` — corpo em `message_templates`. */
@@ -208,6 +212,33 @@ function buildFollowupOpeningMessage(
   ].join('\n');
 }
 
+/**
+ * Abertura de CAMPANHA: a 1ª mensagem ativa para alguém que a equipe escolheu
+ * numa lista. A abertura de follow-up diz "você havia combinado retornar" — dita
+ * a um paciente de dois anos atrás, faz o modelo inventar uma promessa que nunca
+ * existiu. Aqui o objetivo é o da equipe, e as regras de escrita são as que
+ * protegem o número: uma mensagem só, curta, sem oferta inventada, com a saída
+ * (PARAR) escrita — a detecção de opt-out da ingestão bloqueia quem responder.
+ */
+export function buildCampaignOpeningMessage(objetivo: string, ritual: string[]): string {
+  return [
+    'Mensagem de CAMPANHA: a equipe escolheu este contato numa lista para receber UMA mensagem ativa.',
+    'Ele NÃO escreveu agora e pode não falar com a empresa há meses — não trate como continuação de conversa.',
+    '',
+    '## Objetivo da campanha (escrito pela equipe — siga-o)',
+    objetivo.trim() || 'Retomar o contato e convidar para voltar.',
+    '',
+    ...ritual,
+    '',
+    'Como escrever:',
+    '- UMA mensagem curta (2 a 4 frases), calorosa e pessoal. Chame pelo primeiro nome quando souber.',
+    '- Use o que o contexto mostra (as etiquetas proc-* dizem o tratamento feito: proc-limpeza = limpeza). Não invente datas, valores, descontos nem promoções que não estejam no objetivo.',
+    '- Termine com uma pergunta simples que convide a responder.',
+    '- Na última linha, separada: "Se preferir não receber mensagens, é só responder PARAR."',
+    '- Envie com a tool send_message, UMA vez — texto fora de tool é descartado pelo runtime.',
+  ].join('\n');
+}
+
 /** Última mensagem inbound do contexto (a "última coisa que o lead disse" — Z). */
 function lastInboundOf(context: LeadContext): { body: string; sentAt: string } | null {
   for (let i = context.messages.length - 1; i >= 0; i -= 1) {
@@ -253,7 +284,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
     }
     const payload = followupTurnPayloadSchema.parse(job.payload);
 
-    const target = await resolveSendTarget(pool, tenantId, leadId);
+    const target = await resolveSendTarget(pool, tenantId, leadId, payload.channel_session_id);
 
     const clock = deps.clock ?? ((): Date => new Date());
 
@@ -265,6 +296,7 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         nodeId: payload.node_id,
         purpose: payload.purpose,
         promptHint: payload.prompt_hint,
+        abertura: payload.abertura,
         fixedBody: payload.fixed_body,
         templateId: payload.template_id,
         voltaIndex: payload.volta_index,
@@ -323,11 +355,42 @@ interface ReentrySendTarget {
  * `to_jsonb(cs) ->> 'archived_at'` em vez de `cs.archived_at`: clone sem a
  * migration 0106 não pode tomar 42703 em todo follow-up.
  */
-async function resolveSendTarget(
-  pool: pg.Pool,
+export async function resolveSendTarget(
+  pool: Pick<pg.Pool, 'query'>,
   tenantId: string,
   contactId: string,
+  /**
+   * Campanha: o número que a equipe escolheu. Vem do grafo publicado, não do
+   * modelo — e ainda assim é conferido contra a organização aqui: um id de
+   * outra org ou de número arquivado nunca vira destino de envio.
+   */
+  canalEscolhido?: string,
 ): Promise<ReentrySendTarget> {
+  if (canalEscolhido !== undefined) {
+    const canal = await pool.query<{ id: string }>(
+      `select cs.id
+         from channel_sessions cs
+        where cs.organization_id = $1 and cs.id = $2
+          and (to_jsonb(cs) ->> 'archived_at') is null
+        limit 1`,
+      [tenantId, canalEscolhido],
+    );
+    if (canal.rows[0] === undefined) {
+      throw new Error('campanha: o número escolhido não existe mais nesta organização ou foi arquivado');
+    }
+    const existente = await pool.query<{ id: string }>(
+      `select id from conversations
+        where organization_id = $1 and contact_id = $2 and channel_session_id = $3 and is_group = false
+        order by last_message_at desc nulls last limit 1`,
+      [tenantId, contactId, canalEscolhido],
+    );
+    const conversa = existente.rows[0]?.id;
+    if (conversa !== undefined) {
+      return { tenantId, leadId: contactId, channelSessionId: canalEscolhido, conversationId: conversa };
+    }
+    return abrirConversa(pool, tenantId, contactId, canalEscolhido);
+  }
+
   const { rows } = await pool.query<{
     id: string;
     channel_session_id: string | null;
@@ -369,7 +432,16 @@ async function resolveSendTarget(
   if (channelSessionId === undefined) {
     throw new Error('followup_turn sem conversa/número do contato — impossível retomar o contato');
   }
+  return abrirConversa(pool, tenantId, contactId, channelSessionId);
+}
 
+/** Abre a conversa 1:1 do contato no número dado (corrida de 23505 = outra abriu antes). */
+async function abrirConversa(
+  pool: Pick<pg.Pool, 'query'>,
+  tenantId: string,
+  contactId: string,
+  channelSessionId: string,
+): Promise<ReentrySendTarget> {
   try {
     const inserted = await pool.query<{ id: string }>(
       `insert into conversations (organization_id, contact_id, channel_session_id, channel, status, is_group, metadata)
@@ -416,6 +488,7 @@ async function runFlowDrivenTurn(
     nodeId: string | undefined;
     purpose: 'send_message' | 'classify' | 'plan_timing' | undefined;
     promptHint: string | undefined;
+    abertura: 'campanha' | undefined;
     fixedBody: string | undefined;
     templateId: string | undefined;
     voltaIndex: number | undefined;
@@ -451,6 +524,12 @@ async function runFlowDrivenTurn(
       channelSessionId: target.channelSessionId,
       conversationId: target.conversationId,
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta }) => {
+        if (input.abertura === 'campanha') {
+          return buildCampaignOpeningMessage(
+            input.promptHint ?? '',
+            ritualBlocks(previous, leadState, context, notesIndexBlock, projeta),
+          );
+        }
         const temporalBlock = buildTemporalBlock({ now: clock(), lastInbound: lastInboundOf(context) });
         const opening = buildFollowupOpeningMessage(temporalBlock, previous, leadState, context, notesIndexBlock, projeta);
         if (!input.promptHint) return opening;

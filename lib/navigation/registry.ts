@@ -25,6 +25,7 @@ import {
   Lock,
   Megaphone,
   Palette,
+  PaperPlaneTilt,
   Plugs,
   PlugsConnected,
   PuzzlePiece,
@@ -252,6 +253,17 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     // Segunda aba, antes de Funis: é a ordem do WhatsApp (conversas, contatos),
     // que é de onde vem quem usa isto.
     principal: 2,
+  },
+  {
+    // Mensagem ativa para uma lista por etiqueta (lib/campanhas). Manager+: é
+    // envio em massa por um número de WhatsApp — quem dispara precisa poder
+    // responder pelo risco ao número.
+    href: "/app/campanhas",
+    label: "Campanhas",
+    description: "Uma mensagem da IA para cada pessoa de uma lista, no ritmo que protege o número.",
+    icon: PaperPlaneTilt,
+    group: "crm",
+    minRole: "manager",
   },
   {
     // ⚠️ Esta tela nasceu porque a FERRAMENTA já existia sem ela. O agente de IA

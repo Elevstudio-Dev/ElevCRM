@@ -489,4 +489,18 @@ export const GATILHOS: Record<TipoDeGatilho, string> = {
   // clínica, não quem escreveu o schema.
   case_opened: "Quando o agente pede ajuda de um humano",
   conversation_end: "Fim da conversa",
+  // Criado pela tela de Campanhas, não pelo editor de fluxo (lib/campanhas).
+  campanha: "Campanha",
+};
+
+/** Estado de uma campanha (`trigger_config.params.estado`), como a tela de Campanhas o chama. */
+export const ESTADOS_DA_CAMPANHA: Record<"enviando" | "pausada" | "cancelada", string> = {
+  enviando: "Enviando",
+  pausada: "Pausada",
+  cancelada: "Cancelada",
+};
+
+/** Como a mensagem da IA abre (`action.config.abertura`). Ausente = retomada de conversa. */
+export const ABERTURAS: Record<"campanha", string> = {
+  campanha: "Primeira mensagem de campanha",
 };

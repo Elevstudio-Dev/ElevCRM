@@ -464,6 +464,11 @@ export const AUDIT_ACTIONS = [
   "tipo_fora_do_funil.renomeado",
   "tipo_fora_do_funil.arquivado",
   "tipo_fora_do_funil.reativado",
+  // Campanhas (lib/campanhas): mensagem ativa para uma lista por etiqueta — quem disparou, pausou ou cancelou.
+  "campanha.criada",
+  "campanha.pausada",
+  "campanha.retomada",
+  "campanha.cancelada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -69,6 +69,10 @@ export interface FollowupJobRequest {
     purpose: "send_message" | "classify" | "plan_timing";
     /** action (mode 'ai_message') — Task 5.1: repassado ao turno pra virar o bloco de orientação. */
     prompt_hint?: string;
+    /** action (mode 'ai_message') de campanha — número de saída fixo, validado na org pelo turno. */
+    channel_session_id?: string;
+    /** action (mode 'ai_message') de campanha — abre como 1ª mensagem ativa, não como retomada. */
+    abertura?: "campanha";
     /** action (mode 'text') — corpo pronto; o turno envia sem chamar o modelo. */
     fixed_body?: string;
     /** action (mode 'template') — id em `message_templates`; o turno carrega o corpo e envia sem modelo. */
@@ -221,7 +225,11 @@ function turnPayloadExtras(
   events: EnrollmentEventRef[] = [],
 ): Partial<FollowupJobRequest["payload"]> {
   if (node.type === "action" && node.config.mode === "ai_message") {
-    return { prompt_hint: interpolarVolta(node.config.prompt_hint, events) };
+    return {
+      prompt_hint: interpolarVolta(node.config.prompt_hint, events),
+      ...(node.config.canal_id !== undefined ? { channel_session_id: node.config.canal_id } : {}),
+      ...(node.config.abertura !== undefined ? { abertura: node.config.abertura } : {}),
+    };
   }
   if (node.type === "action" && node.config.mode === "text") {
     return { fixed_body: interpolarVolta(node.config.body, events) };

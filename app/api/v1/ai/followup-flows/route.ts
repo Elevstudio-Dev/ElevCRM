@@ -25,11 +25,18 @@ export async function GET(_req?: NextRequest): Promise<Response> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("followup_flow_pointers")
-    .select(LIST_COLUMNS)
+    .select(`${LIST_COLUMNS}, trigger_config`)
     .eq("organization_id", activeOrg.orgId)
     .order("updated_at", { ascending: false });
   if (error) return fail("internal_error", error.message, 500, { requestId });
-  return ok(data ?? [], { requestId });
+  // Campanha mora na tela de Campanhas: o editor de fluxo não sabe editá-la, e
+  // republicá-la por lá trocaria o grafo de quem ainda está na fila. Filtrado
+  // aqui, e não com `neq` no banco: `neq` em `trigger_config->>kind` também
+  // descartaria em silêncio a linha antiga sem `kind`.
+  const fluxos = (data ?? [])
+    .filter((p) => (p.trigger_config as { kind?: string } | null)?.kind !== "campanha")
+    .map(({ trigger_config: _tc, ...resto }) => resto);
+  return ok(fluxos, { requestId });
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
