@@ -8,6 +8,12 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.6] — 2026-11-26
+
+### Adicionado
+
+- **Campanhas: imagem antes da mensagem da IA** A tela de nova campanha ganhou o campo "Imagem (opcional)". A arte (JPG, PNG ou WEBP) é preparada no servidor: WEBP vira JPG, a imagem é reduzida a no máximo 1600 px e perde os metadados. Ela fica guardada uma vez na pasta de campanhas da organização, no armazenamento privado. Na vez de cada pessoa, a imagem é enviada primeiro, sem legenda, e em seguida a mensagem escrita pela IA, que sabe que a arte já foi. A imagem é copiada para a pasta da conversa de quem recebe, porque o envio só aceita arquivo da própria conversa. Uma nova tentativa não manda a imagem duas vezes. Quem está com atendimento humano ou pediu para sair não recebe a imagem. O detalhe da campanha mostra a arte.
+
 ## [1.34.5] — 2026-11-26
 
 ### Adicionado
@@ -3323,7 +3329,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.5...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.6...HEAD
+[1.34.6]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.5...v1.34.6
 [1.34.5]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.4...v1.34.5
 [1.34.4]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.3...v1.34.4
 [1.34.3]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.2...v1.34.3
