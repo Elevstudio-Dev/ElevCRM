@@ -8,6 +8,12 @@ Se você roda o Elev CRM numa VPS, **leia a seção da versão para a qual está
 
 ## [Não lançado]
 
+## [1.34.7] — 2026-11-27
+
+### Adicionado
+
+- **Inbox: selo roxo \"Aguardando equipe\" quando a IA passa um pedido para a equipe** Quando o agente abre um caso para a equipe (`open_human_case`, por exemplo para agendar), a conversa mostra o selo roxo "Aguardando equipe" na lista do inbox e no cabeçalho da conversa. Passando o mouse, aparece desde quando o caso espera. O selo some quando uma pessoa da equipe manda mensagem naquela conversa: o caso é resolvido ali mesmo, com o registro de quem respondeu, igual ao que a tela de Casos grava. Mensagem da IA, de automação ou de campanha não fecha o caso. Nada muda para quem não liga os casos no agente. O inbox também ganhou a aba "Aguardando equipe", no menu de visões, que junta essas conversas, inclusive as que a IA continua atendendo e que por isso não aparecem na Fila.
+
 ## [1.34.6] — 2026-11-26
 
 ### Adicionado
@@ -3329,7 +3335,8 @@ Primeira versão marcada do Elev CRM. O projeto vinha sendo desenvolvido publica
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.6...HEAD
+[Não lançado]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.7...HEAD
+[1.34.7]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.6...v1.34.7
 [1.34.6]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.5...v1.34.6
 [1.34.5]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.4...v1.34.5
 [1.34.4]: https://github.com/Elevstudio-Dev/ElevCRM/compare/v1.34.3...v1.34.4
