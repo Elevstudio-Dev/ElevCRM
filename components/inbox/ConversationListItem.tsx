@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
 import { SeloForaDoFunil } from "@/components/contacts/SeloForaDoFunil";
+import { SeloAguardandoEquipe } from "@/components/inbox/SeloAguardandoEquipe";
 import { ICONE_DA_MIDIA } from "@/components/inbox/CitacaoResumo";
 import { comandoDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { horaDaLinha, previaDaLinha, type Tique, tiqueDaUltima } from "@/lib/inbox/linha-da-conversa";
@@ -269,6 +270,7 @@ export function ConversationListItem({
               {displayName}
             </span>
             <SeloForaDoFunil foraDoFunilEm={c?.fora_do_funil_em} tipoId={c?.fora_do_funil_tipo_id} className="h-4 px-1.5 text-[10px]" />
+            <SeloAguardandoEquipe desde={conversation.aguardando_equipe_desde} compacto />
           </span>
           {/* Verde e em negrito quando há não lida: é como o WhatsApp avisa, de longe, que a
               conversa pede o olho — a hora vira o sinal, sem precisar ler o contador. */}

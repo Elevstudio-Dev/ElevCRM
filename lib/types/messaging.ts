@@ -59,6 +59,12 @@ export interface Conversation {
    * resposta de uma versão anterior, ainda em cache do react-query, não o tem.
    */
   comando_da_conversa?: string | null;
+  /**
+   * Desde quando a IA passou um pedido para a equipe e ninguém respondeu (caso
+   * `awaiting_human`). Calculado pela rota (`lib/inbox/aguardando-equipe.ts`), não
+   * é coluna. Opcional: resposta antiga em cache não o tem.
+   */
+  aguardando_equipe_desde?: string | null;
   last_handoff_at: string | null;
   created_at: string;
   updated_at: string;

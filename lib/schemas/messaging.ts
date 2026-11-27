@@ -329,6 +329,8 @@ export const listConversationsQuerySchema = z.object({
    * significar "meu trabalho" para virar "tudo que já toquei".
    */
   exclude_finished: z.boolean().optional(),
+  /** Só as conversas em que a IA passou um pedido para a equipe e ninguém respondeu (aba "Aguardando equipe"). */
+  aguardando_equipe: z.boolean().optional(),
   assigned_to: z.union([z.string().uuid(), z.literal("me"), z.literal("unassigned")]).optional(),
   channel_session_id: z.string().uuid().optional(),
   tag: conversationTagSchema.optional(),

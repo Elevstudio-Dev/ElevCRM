@@ -32,7 +32,7 @@ import type { Role, VisibilityMode } from "@/lib/auth/types";
 
 import { CabecalhoDaLista } from "./CabecalhoDaLista";
 
-export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "ai" | "grupos";
+export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "ai" | "grupos" | "equipe";
 
 const INBOX_TABS: { value: InboxTab; label: string }[] = [
   { value: "unassigned", label: "Fila" },
@@ -50,6 +50,9 @@ const INBOX_TABS: { value: InboxTab; label: string }[] = [
   // passou a perguntar a régua do motor), então o rótulo velho descreveria outra
   // coisa.
   { value: "ai", label: "Automático" },
+  // A IA passou um pedido (ex.: agendar) e a equipe ainda não respondeu — o selo roxo.
+  // Inclui conversas que o automático segue atendendo, que não aparecem na Fila.
+  { value: "equipe", label: "Aguardando equipe" },
 ];
 
 /**

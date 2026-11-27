@@ -14,6 +14,7 @@ import type {
   PatchConversationInput,
 } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
+import { anexarAguardandoEquipe, conversasAguardandoEquipe } from "@/lib/inbox/aguardando-equipe";
 
 type SB = SupabaseClient;
 
@@ -121,6 +122,13 @@ export async function listConversationsHandler(
   // Depois do `status` de propósito: pedir um status terminal E `exclude_finished`
   // é contradição, e a resposta certa para uma contradição é lista vazia — não
   // um dos dois lados escolhido em silêncio.
+  // Aba "Aguardando equipe": o critério é o do selo (caso esperando a equipe).
+  // Vai no banco como lista de ids para a paginação continuar valendo.
+  if (q.aguardando_equipe) {
+    const ids = await conversasAguardandoEquipe(supabase, ctx.organization_id);
+    if (ids.length === 0) return { conversations: [], cursor: null, has_more: false };
+    query = query.in("id", ids);
+  }
   if (q.exclude_finished) {
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
@@ -227,7 +235,7 @@ export async function listConversationsHandler(
 
   const rows = (data ?? []) as unknown as Conversation[];
   const hasMore = rows.length > q.limit;
-  const page = hasMore ? rows.slice(0, q.limit) : rows;
+  const page = await anexarAguardandoEquipe(supabase, ctx.organization_id, hasMore ? rows.slice(0, q.limit) : rows);
   const last = page[page.length - 1];
   const cursor =
     hasMore && last
@@ -259,7 +267,8 @@ export async function getConversationHandler(
   if (!data) {
     throw new ApiError(404, "not_found", undefined, ctx.requestId, "Conversa não encontrada.");
   }
-  return data as unknown as Conversation;
+  const [comSelo] = await anexarAguardandoEquipe(supabase, ctx.organization_id, [data as unknown as Conversation]);
+  return comSelo!;
 }
 
 // ---------------------------------------------------------------------------

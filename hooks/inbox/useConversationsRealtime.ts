@@ -82,6 +82,8 @@ export interface ConversationsFilters {
   status?: StatusDeConversa | readonly StatusDeConversa[];
   /** Esconde fechadas/arquivadas — ver `exclude_finished` no schema da rota. */
   exclude_finished?: boolean;
+  /** Aba "Aguardando equipe": só conversas com caso esperando a equipe. */
+  aguardando_equipe?: boolean;
   assigned_to?: "me" | "unassigned" | string;
   /**
    * QUEM MANDA na conversa — o filtro que as abas Fila e Automático passaram a
@@ -152,6 +154,7 @@ export function useConversationsRealtime(
         qs.set("comando", filters.comando.join(","));
       }
       if (filters.exclude_finished) qs.set("exclude_finished", "true");
+      if (filters.aguardando_equipe) qs.set("aguardando_equipe", "true");
       if (filters.assigned_to) qs.set("assigned_to", filters.assigned_to);
       if (filters.search) qs.set("search", filters.search);
       if (filters.channel_session_id) qs.set("channel_session_id", filters.channel_session_id);
