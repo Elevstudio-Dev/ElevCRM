@@ -46,6 +46,23 @@ export async function aguardandoEquipePorConversa(
   return mapa;
 }
 
+/**
+ * Ids das conversas com caso esperando a equipe (aba "Aguardando equipe").
+ * Teto de 500: a lista viaja na URL do PostgREST; uma clínica com mais de 500
+ * pedidos sem resposta tem outro problema, e a aba mostra os mais antigos.
+ */
+export async function conversasAguardandoEquipe(db: SupabaseClient, organizationId: string): Promise<string[]> {
+  const { data, error } = await db
+    .from("agent_cases")
+    .select("conversation_id")
+    .eq("organization_id", organizationId)
+    .eq("status", "awaiting_human")
+    .order("opened_at", { ascending: true })
+    .limit(500);
+  if (error) throw new Error(error.message);
+  return [...new Set(((data ?? []) as { conversation_id: string }[]).map((r) => r.conversation_id))];
+}
+
 /** Acrescenta `aguardando_equipe_desde` (ou `null`) em cada conversa. */
 export async function anexarAguardandoEquipe<T extends { id: string }>(
   db: SupabaseClient,

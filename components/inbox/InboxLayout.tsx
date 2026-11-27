@@ -86,6 +86,10 @@ export function tabToFilter(
       return { assigned_to: "me", exclude_finished: true, is_group: false };
     case "closed":
       return { status: "closed", is_group: false };
+    case "equipe":
+      // A IA segue atendendo essas conversas (não estão na Fila): a aba junta as
+      // que têm caso esperando a equipe, o mesmo critério do selo roxo.
+      return { aguardando_equipe: true, exclude_finished: true, is_group: false };
     case "ai":
       // `ai_handling` é escrito por UM caminho só em produção (a volta pelo botão
       // "Devolver ao automático"), então a aba vivia mostrando 2 enquanto o robô
@@ -97,7 +101,7 @@ export function tabToFilter(
   }
 }
 
-const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "ai", "grupos"];
+const FILTER_TABS: InboxTab[] = ["unassigned", "mine", "all", "closed", "ai", "grupos", "equipe"];
 
 /**
  * Lê ?filter= (G4-02, deep-link). ?filter=all é HONRADO mesmo para agent — a

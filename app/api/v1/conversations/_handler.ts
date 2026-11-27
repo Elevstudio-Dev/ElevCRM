@@ -14,7 +14,7 @@ import type {
   PatchConversationInput,
 } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
-import { anexarAguardandoEquipe } from "@/lib/inbox/aguardando-equipe";
+import { anexarAguardandoEquipe, conversasAguardandoEquipe } from "@/lib/inbox/aguardando-equipe";
 
 type SB = SupabaseClient;
 
@@ -122,6 +122,13 @@ export async function listConversationsHandler(
   // Depois do `status` de propósito: pedir um status terminal E `exclude_finished`
   // é contradição, e a resposta certa para uma contradição é lista vazia — não
   // um dos dois lados escolhido em silêncio.
+  // Aba "Aguardando equipe": o critério é o do selo (caso esperando a equipe).
+  // Vai no banco como lista de ids para a paginação continuar valendo.
+  if (q.aguardando_equipe) {
+    const ids = await conversasAguardandoEquipe(supabase, ctx.organization_id);
+    if (ids.length === 0) return { conversations: [], cursor: null, has_more: false };
+    query = query.in("id", ids);
+  }
   if (q.exclude_finished) {
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
