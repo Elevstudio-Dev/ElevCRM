@@ -14,6 +14,7 @@ import type {
   PatchConversationInput,
 } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
+import { anexarAguardandoEquipe } from "@/lib/inbox/aguardando-equipe";
 
 type SB = SupabaseClient;
 
@@ -227,7 +228,7 @@ export async function listConversationsHandler(
 
   const rows = (data ?? []) as unknown as Conversation[];
   const hasMore = rows.length > q.limit;
-  const page = hasMore ? rows.slice(0, q.limit) : rows;
+  const page = await anexarAguardandoEquipe(supabase, ctx.organization_id, hasMore ? rows.slice(0, q.limit) : rows);
   const last = page[page.length - 1];
   const cursor =
     hasMore && last
@@ -259,7 +260,8 @@ export async function getConversationHandler(
   if (!data) {
     throw new ApiError(404, "not_found", undefined, ctx.requestId, "Conversa não encontrada.");
   }
-  return data as unknown as Conversation;
+  const [comSelo] = await anexarAguardandoEquipe(supabase, ctx.organization_id, [data as unknown as Conversation]);
+  return comSelo!;
 }
 
 // ---------------------------------------------------------------------------

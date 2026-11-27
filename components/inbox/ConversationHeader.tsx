@@ -31,6 +31,7 @@ import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conv
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import { ForaDoFunilDialog } from "@/components/contacts/ForaDoFunilDialog";
 import { SeloForaDoFunil } from "@/components/contacts/SeloForaDoFunil";
+import { SeloAguardandoEquipe } from "@/components/inbox/SeloAguardandoEquipe";
 import { ChipDeSetor } from "@/components/setores/ChipDeSetor";
 import { TransferirParaSetorDialog } from "@/components/setores/TransferirParaSetorDialog";
 import { useSetores } from "@/hooks/setores/useSetores";
@@ -225,6 +226,7 @@ export function ConversationHeader({ conversation }: Props) {
           />
           <h2 className="truncate text-sm font-semibold">{displayName}</h2>
           <SeloForaDoFunil foraDoFunilEm={c?.fora_do_funil_em} tipoId={c?.fora_do_funil_tipo_id} className="h-4 px-1.5 text-[10px]" />
+          <SeloAguardandoEquipe desde={conversation.aguardando_equipe_desde} compacto />
           {/* Veio de anuncio: o selo e so o aviso; titulo e link ficam no painel ao lado. */}
           {c?.source === "meta_ads" || c?.source === "google_ads" ? (
             <Badge variant="secondary" className="h-4 shrink-0 gap-1 px-1.5 text-[10px]" data-testid="selo-anuncio">

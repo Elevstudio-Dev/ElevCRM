@@ -7287,6 +7287,8 @@ export const DICIONARIO: Traducoes = {
     es: "La imagen va antes del mensaje de la IA, para cada persona. JPG, PNG o WEBP, hasta 20 MB.",
   },
   "Imagem da campanha": { es: "Imagen de la campaña" },
+  "Aguardando equipe": { es: "Esperando al equipo" },
+  "A IA passou para a equipe": { es: "La IA pasó al equipo" },
 };
 
 /**

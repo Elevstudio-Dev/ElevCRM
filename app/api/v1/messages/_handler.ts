@@ -31,6 +31,7 @@ import {
 import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fecharCasosAoResponder } from "@/lib/inbox/aguardando-equipe";
 import type { Message } from "@/lib/types/messaging";
 
 type SB = SupabaseClient;
@@ -825,6 +826,19 @@ export async function sendMessageHandler(
   }
 
   await supabase.from("conversations").update(conversationUpdate).eq("id", c.id);
+
+  // A equipe respondeu: o pedido que a IA passou para ela (selo roxo "Aguardando
+  // equipe") está atendido. Só PESSOA fecha — mensagem da IA, de automação ou de
+  // campanha não é a resposta que a equipe devia. Cliente admin com a organização
+  // explícita: quem respondeu pode ser atendente, e a RLS de `agent_cases` é de gestor.
+  if (ctx.actor.type === "user" && message.status !== "failed") {
+    try {
+      await fecharCasosAoResponder(createAdminClient(), c.organization_id, c.id, ctx.actor.id);
+    } catch (err) {
+      // A mensagem já saiu: falha aqui (ex.: admin client sem env) nunca vira erro de envio.
+      console.error("[messages.send] fechar caso aguardando equipe falhou", err instanceof Error ? err.message : err);
+    }
+  }
 
   // Envio pelo CRM não passa por `fn_mark_conversation_message` — carimba o
   // contato aqui para /app/contacts refletir a resposta (migration 0162).
